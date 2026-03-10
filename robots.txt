@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://oelor.github.io/training-partner/sitemap.xml

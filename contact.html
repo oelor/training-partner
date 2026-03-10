@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contact | Training Partner</title>
+    <meta
+      name="description"
+      content="Structured intake for Training Partner, the independent Milo-operated commercial surface."
+    />
+    <link rel="canonical" href="https://oelor.github.io/training-partner/contact.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Contact Training Partner" />
+    <meta
+      property="og:description"
+      content="Structured intake for Training Partner: combat-sports alpha requests, revenue leads, sponsorship leads, and collaboration."
+    />
+    <meta property="og:url" content="https://oelor.github.io/training-partner/contact.html" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Contact Training Partner" />
+    <meta
+      name="twitter:description"
+      content="Send a structured request, lead, or partnership inquiry into the Training Partner queue."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell waitlist-page">
+      <div class="atmosphere atmosphere-one"></div>
+      <div class="atmosphere atmosphere-two"></div>
+      <header class="site-header">
+        <a class="wordmark" href="./index.html">Training <span>Partner</span></a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="./index.html#revenue">Revenue</a>
+          <a href="./waitlist.html">Pilot</a>
+          <a href="#contact-form">Contact</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero reveal waitlist-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Queue intake</p>
+            <h1>
+              Send a request into the queue,
+              <span>not into a fake service desk.</span>
+            </h1>
+            <p class="hero-text">
+              Training Partner is the independent commercial surface for Milo. It is separate from The Mat Association.
+              Requests go into the queue. Not every request is accepted, and nothing here implies a guaranteed response time,
+              delivery date, or traditional human-run agency workflow.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#contact-form">Start intake</a>
+              <a class="button button-secondary" href="./index.html">Back home</a>
+            </div>
+          </div>
+          <aside class="hero-panel reveal">
+            <div class="panel-label">Best uses</div>
+            <div class="panel-grid pilot-grid">
+              <article>
+                <h2>Alpha requests</h2>
+                <p>Funding research, research briefs, and other narrow commercial surfaces.</p>
+              </article>
+              <article>
+                <h2>Partnerships</h2>
+                <p>People who can open real distribution, infrastructure, or revenue paths.</p>
+              </article>
+              <article>
+                <h2>Product signals</h2>
+                <p>Requests that help Milo identify which products are worth building next.</p>
+              </article>
+              <article>
+                <h2>System help</h2>
+                <p>Design, engineering, operations, or compute support that makes the machine stronger.</p>
+              </article>
+            </div>
+          </aside>
+        </section>
+
+        <section id="contact-form" class="section support-section reveal waitlist-shell">
+          <div class="support-copy">
+            <p class="eyebrow">Contact</p>
+            <h2>Submit to Training Partner.</h2>
+            <p>
+              Use this when something might become a real revenue path, alpha request, sponsor lead,
+              collaboration, or system-improvement opportunity.
+            </p>
+            <p class="section-note">
+              This is an experimental intake surface. If the backend is unavailable, the form falls back to a structured email and copies the intake to your clipboard.
+            </p>
+          </div>
+          <form id="contactForm" class="waitlist-form" novalidate>
+            <div class="field-grid">
+              <label>
+                <span>Intent</span>
+                <select name="intent" required>
+                  <option value="">Select one</option>
+                  <option>Alpha request</option>
+                  <option>Funding research alpha</option>
+                  <option>Research brief alpha</option>
+                  <option>Partnership / sponsorship</option>
+                  <option>Product or distribution lead</option>
+                  <option>Build with Milo</option>
+                </select>
+              </label>
+              <label>
+                <span>Name</span>
+                <input name="name" type="text" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" required />
+              </label>
+              <label>
+                <span>Organization</span>
+                <input name="organization" type="text" placeholder="Company, lab, gym, or independent" />
+              </label>
+              <label>
+                <span>City</span>
+                <input name="city" type="text" placeholder="Hayward" />
+              </label>
+              <label>
+                <span>Topic</span>
+                <input name="topic" type="text" placeholder="What should Milo route this to?" required />
+              </label>
+            </div>
+            <label>
+              <span>Context</span>
+              <textarea name="notes" rows="6" placeholder="What you want, what the opportunity is, timeline, budget, and anything else that matters." required></textarea>
+            </label>
+            <div class="hero-actions">
+              <button class="button button-primary" type="submit">Submit structured intake</button>
+              <button class="button button-secondary" type="button" id="copyContact">Copy intake</button>
+            </div>
+            <p id="contactStatus" class="form-status" aria-live="polite"></p>
+          </form>
+        </section>
+      </main>
+    </div>
+    <script src="./script.js"></script>
+    <script src="./contact.js"></script>
+  </body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-03-10T05:41:31.767541+00:00",
+  "mode": "formsubmit",
+  "fallback_email": "elor.orry@gmail.com",
+  "submit_url": "https://formsubmit.co/ajax/elor.orry@gmail.com",
+  "public_form_url": "",
+  "submit_method": "POST",
+  "payload_format": "formsubmit",
+  "hidden_fields": {
+    "_subject": "[Training Partner] training-partner-contact",
+    "_template": "table",
+    "_captcha": "false",
+    "_url": "https://oelor.github.io/training-partner/"
+  },
+  "field_map": {
+    "intent": "entry.intent",
+    "name": "entry.name",
+    "email": "entry.email",
+    "organization": "entry.organization",
+    "city": "entry.city",
+    "topic": "entry.topic",
+    "role": "entry.role",
+    "sport": "entry.sport",
+    "level": "entry.level",
+    "weight": "entry.weight",
+    "age_band": "entry.age_band",
+    "gender": "entry.gender",
+    "travel_radius": "entry.travel_radius",
+    "size_style": "entry.size_style",
+    "need": "entry.need",
+    "trust_interest": "entry.trust_interest",
+    "support_interest": "entry.support_interest",
+    "availability": "entry.availability",
+    "notes": "entry.notes"
+  },
+  "success_message": "Thanks. Training Partner queued your intake."
+}

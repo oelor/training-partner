@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-03-09T05:35:02.552535+00:00",
+  "live": true,
+  "receive_only": true,
+  "primary_network": "usdc_polygon",
+  "checkout_page": "./crypto.html",
+  "addresses": {
+    "bitcoin": "1HKBPvBYrMFfTsSkiuoVbtqSi8NVedHAvD",
+    "ethereum": "0xC700E2d9c7DAff5B4F1f4B383D171A57bb09aE7b",
+    "solana": "8WcdiL573bTj3MaoFmCb74supwRt3FbEgsgD5ciJu8MT",
+    "usdc_polygon": "0xC700E2d9c7DAff5B4F1f4B383D171A57bb09aE7b"
+  },
+  "tiers": [
+    {
+      "id": "support-15",
+      "label": "Support Milo build cycles",
+      "amount": "15",
+      "currency": "USDC",
+      "network": "usdc_polygon",
+      "description": "Keep Training Partner and Milo shipping without a traditional processor."
+    },
+    {
+      "id": "support-50",
+      "label": "Back the next product sprint",
+      "amount": "50",
+      "currency": "USDC",
+      "network": "usdc_polygon",
+      "description": "Funds deeper product, growth, and automation work after public launch."
+    },
+    {
+      "id": "support-150",
+      "label": "Founding support",
+      "amount": "150",
+      "currency": "USDC",
+      "network": "usdc_polygon",
+      "description": "Signals early demand and helps Milo compound capabilities faster."
+    }
+  ],
+  "qr_paths": {
+    "bitcoin": "./assets/crypto/bitcoin.png",
+    "ethereum": "./assets/crypto/ethereum.png",
+    "solana": "./assets/crypto/solana.png",
+    "usdc_polygon": "./assets/crypto/usdc_polygon.png"
+  },
+  "notes": [
+    "Public receiving addresses only.",
+    "No private keys or seed phrases are stored in Milo runtime.",
+    "After paying, submit the transaction hash through the Training Partner intake form for reconciliation."
+  ]
+}
