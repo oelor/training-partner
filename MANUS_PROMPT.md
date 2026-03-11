@@ -2,11 +2,48 @@
 
 ## Project Overview
 
-You are working on **Training Partner** — a two-sided marketplace web application that connects combat sports athletes (wrestling, MMA, BJJ, boxing, kickboxing, judo, etc.) with compatible training partners and partner gyms offering open mat hours. The app is live at the GitHub repo `oelor/training-partner`.
+You are working on **Training Partner** — a two-sided marketplace web application that connects combat sports athletes (wrestling, MMA, BJJ, boxing, kickboxing, judo, etc.) with compatible training partners and partner gyms offering open mat hours. The app is at the GitHub repo `oelor/training-partner`.
 
-**Tech Stack:** Next.js 14 (App Router), React 18, TypeScript, TailwindCSS, Lucide React icons, clsx.
+**There are TWO codebases that need to be unified:**
 
-**Current State:** The app is a fully functional frontend prototype with hardcoded demo data and localStorage-based auth. There is NO backend, NO database, NO real authentication, and NO payment processing. Your job is to transform this into a production-ready application.
+### Codebase 1: Next.js Frontend (`/training-partner/` — this repo)
+- **Stack:** Next.js 14 (App Router), React 18, TypeScript, TailwindCSS, Lucide React icons, clsx
+- **State:** Frontend prototype with hardcoded demo data and localStorage-based auth
+- **Pages:** Landing, sign up, sign in, dashboard, profile editor, partner matching, gym listings, settings, terms, privacy
+- **GitHub:** `oelor/training-partner` (main branch)
+
+### Codebase 2: Cloudflare Worker Backend (exists separately, needs integration)
+- **Stack:** Cloudflare Workers + D1 (SQLite) database + static assets
+- **Worker name:** `training-partner-app`
+- **D1 Database ID:** `30d075cd-2994-4d08-8aef-7ed1a415d9bb` (database name: `training-partner`)
+- **Cloudflare Account ID:** `8dcf6c4b57fae561e106304c7e8d36b0`
+- **Current API Routes:**
+  - `GET /api/health` — health check with DB status
+  - `GET /api/meta` — product metadata
+  - `GET /api/open-mats` — list active open mats from D1
+  - `POST /api/founding/apply` — founding beta application (name, email, role required)
+  - `POST /api/waitlist` — waitlist signup (email required)
+- **Current D1 Tables:** `founding_applications`, `waitlist_signups`, `open_mats`
+- **Legacy Python backend** (reference only, not deployed): Has user auth, match profiles, waitlist, open mats via SQLite — use as a reference for the data model but rewrite in JS for Cloudflare Workers
+- **wrangler.toml:**
+```toml
+name = "training-partner-app"
+main = "worker/index.js"
+compatibility_date = "2026-03-09"
+workers_dev = true
+
+[assets]
+directory = "./web"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "training-partner"
+database_id = "30d075cd-2994-4d08-8aef-7ed1a415d9bb"
+migrations_dir = "./migrations"
+```
+
+**Your job:** Merge these into a single, production-ready application. The Next.js frontend should call the Cloudflare Worker API for all data operations. The Cloudflare Worker backend should be expanded with all necessary API routes. The D1 database schema should be expanded to support the full feature set.
 
 **Design System:**
 - Primary: `#FF4D00` (Fierce Orange)
@@ -16,264 +53,251 @@ You are working on **Training Partner** — a two-sided marketplace web applicat
 - Fonts: Bebas Neue (headings), DM Sans (body), JetBrains Mono (mono)
 - Dark theme throughout — this is a combat sports app, keep it aggressive and bold
 
-**Budget Constraint:** The owner is a student/nonprofit operator. All services must use free tiers or minimal-cost options. Prefer Supabase (free tier), Vercel (free tier), Lemon Squeezy (no upfront cost), and free-tier APIs.
+**Budget Constraint:** The owner is a student/nonprofit operator. All services must use free tiers. Use Cloudflare Workers free tier (100K requests/day), D1 free tier (5M rows read/day, 100K rows written/day), Lemon Squeezy (no upfront cost), and free-tier APIs.
 
 ---
 
 ## Improvement Areas
 
-### 1. BACKEND & DATABASE (Critical Priority)
+### 1. BACKEND & DATABASE — Expand Cloudflare Worker + D1 (Critical Priority)
 
-**Current:** All data is in localStorage with hardcoded demo arrays. No persistence, no multi-user support.
+**Current:** Cloudflare Worker has 5 basic API routes. D1 has 3 tables (founding_applications, waitlist_signups, open_mats). The legacy Python backend has auth/matching logic that hasn't been ported to the Worker yet.
+
+**Required — Expand the D1 schema with these tables:**
+- `users` (id, email, password_hash, display_name, avatar_url, city, created_at, updated_at, token)
+- `user_profiles` (id, user_id FK, sports TEXT/JSON, skill_level, weight_class, training_goals TEXT/JSON, experience_years, bio, availability TEXT/JSON)
+- `gyms` (id, name, address, city, state, lat, lng, phone, email, description, sports TEXT/JSON, amenities TEXT/JSON, verified INTEGER, premium INTEGER, rating REAL, price, owner_id FK)
+- `gym_sessions` (id, gym_id FK, day_of_week, start_time, end_time, max_slots, current_slots)
+- `bookings` (id, user_id FK, session_id FK, status, created_at)
+- `matches` (id, user_a FK, user_b FK, score REAL, status, created_at)
+- `messages` (id, sender_id FK, receiver_id FK, content, read INTEGER, created_at)
+- `subscriptions` (id, user_id FK, plan, status, lemon_squeezy_id, expires_at)
+- Keep existing tables: `founding_applications`, `waitlist_signups`, `open_mats`
+
+**Required — Add these API routes to the Worker:**
+- `POST /api/auth/register` — create user with hashed password (use Web Crypto API's PBKDF2, NOT sha256)
+- `POST /api/auth/login` — authenticate, return JWT token
+- `GET /api/auth/me` — get current user from Bearer token
+- `PUT /api/profile` — update user profile (sports, skill, goals, availability)
+- `GET /api/profile/:id` — get public profile
+- `GET /api/partners` — list matched partners with filters (sport, skill, location)
+- `GET /api/partners/:id` — get partner detail
+- `GET /api/gyms` — list gyms with filters
+- `GET /api/gyms/:id` — get gym detail
+- `POST /api/bookings` — book a gym session
+- `GET /api/bookings` — list user's bookings
+- `GET /api/messages` — list conversations
+- `GET /api/messages/:userId` — get messages with a specific user
+- `POST /api/messages/:userId` — send a message
+- `POST /api/subscriptions/webhook` — Lemon Squeezy webhook handler
+- `GET /api/subscriptions/status` — check user's subscription
+
+**Use D1 migrations** in `./migrations/` directory. Create `0002_full_schema.sql` for the expanded tables.
+
+### 2. AUTHENTICATION (Critical Priority)
+
+**Current:** Fake auth — signup creates a localStorage entry, signin checks it. No password hashing, no session management.
 
 **Required:**
-- Set up Supabase project with PostgreSQL database
-- Design and implement database schema:
-  - `users` table (id, email, name, age, location, bio, avatar_url, created_at, updated_at)
-  - `user_profiles` table (user_id FK, sports[], skill_level, weight_class, training_goals[], experience_years, availability JSONB)
-  - `gyms` table (id, name, address, city, state, lat, lng, phone, email, description, sports[], amenities[], verified, premium, rating, price, owner_id FK)
-  - `gym_sessions` table (id, gym_id FK, day_of_week, start_time, end_time, max_slots, current_slots)
-  - `bookings` table (id, user_id FK, session_id FK, status, created_at)
-  - `matches` table (id, user_a FK, user_b FK, score, status, created_at)
-  - `messages` table (id, sender_id FK, receiver_id FK, content, read, created_at)
-  - `subscriptions` table (id, user_id FK, plan, status, lemon_squeezy_id, expires_at)
-- Set up Row Level Security (RLS) policies for all tables
-- Create database indexes for common queries (location-based, sport filtering)
-- Replace all localStorage calls with Supabase client queries
-- Add real-time subscriptions for messages and match notifications
-
-### 2. AUTHENTICATION & USER MANAGEMENT (Critical Priority)
-
-**Current:** Fake auth — signup creates a localStorage entry, signin checks it. No email verification, no password hashing, no session management.
-
-**Required:**
-- Integrate Supabase Auth (email/password + Google OAuth + Apple Sign-In)
-- Email verification flow
+- Implement real auth in the Cloudflare Worker using Web Crypto API
+- Password hashing with PBKDF2 (NOT sha256 — the legacy Python backend used sha256, upgrade this)
+- JWT token issuance and verification (use `jose` library or Web Crypto API directly)
+- Email verification flow (use Cloudflare Email Workers or Resend free tier)
 - Password reset flow
-- Protected route middleware (redirect unauthenticated users)
-- Session persistence with Supabase Auth tokens
-- User avatar upload (Supabase Storage)
-- Account deletion flow (GDPR-compliant data removal)
-- Rate limiting on auth endpoints
+- Update the Next.js frontend to:
+  - Call Worker API for signup/signin instead of localStorage
+  - Store JWT token in httpOnly cookie or secure localStorage
+  - Add auth middleware to protected routes
+  - Redirect unauthenticated users
+- Rate limiting on auth endpoints (use Cloudflare's built-in rate limiting or a D1-backed counter)
 
-### 3. PARTNER MATCHING ALGORITHM (High Priority)
+### 3. CONNECT FRONTEND TO BACKEND (Critical Priority)
 
-**Current:** Hardcoded match percentages in demo data. No real algorithm.
+**Current:** All data is hardcoded in React components. Partners list has 8 fake entries. Gyms list has 5 fake entries.
 
 **Required:**
-- Implement a real matching algorithm considering:
-  - Sport overlap (weighted heavily)
-  - Skill level compatibility (same level or one level apart scores higher)
-  - Weight class proximity
-  - Geographic distance (use PostGIS or Haversine formula)
-  - Training goal alignment
-  - Availability overlap (compare weekly schedules)
-  - Experience level compatibility
-- Store match scores in database, update when profiles change
-- Add "match explanation" — show users WHY they matched (e.g., "Both train BJJ, similar weight class, 3 overlapping time slots")
-- Implement swipe/like/pass interaction for partner discovery
-- Mutual match notification system
+- Create an API client utility (`lib/api.ts`) that:
+  - Sets base URL to the Cloudflare Worker URL
+  - Adds Bearer token header from stored JWT
+  - Handles errors consistently
+  - Returns typed responses
+- Replace all hardcoded data in components with API calls:
+  - `partners/page.tsx` → `GET /api/partners`
+  - `gyms/page.tsx` → `GET /api/gyms`
+  - `profile/page.tsx` → `GET/PUT /api/profile`
+  - `app/page.tsx` (dashboard) → `GET /api/partners?limit=3` + `GET /api/gyms?limit=2`
+  - `settings/page.tsx` → `GET/PUT /api/auth/me` + `GET /api/subscriptions/status`
+- Remove all localStorage data operations (keep JWT storage only)
+- Add loading states (skeleton loaders) for all data-fetching pages
+- Add error states with retry buttons
 
-### 4. MESSAGING SYSTEM (High Priority)
+### 4. PARTNER MATCHING ALGORITHM (High Priority)
+
+**Current:** Hardcoded match percentages. The legacy Python backend has basic same-sport matching only.
+
+**Required — implement in the Cloudflare Worker:**
+- Real matching algorithm considering:
+  - Sport overlap (weighted 30%) — multi-sport users get partial credit
+  - Skill level compatibility (weighted 20%) — same or ±1 level scores high
+  - Weight class proximity (weighted 15%)
+  - City/location match (weighted 15%)
+  - Training goal alignment (weighted 10%)
+  - Availability overlap (weighted 10%) — compare weekly schedules
+- Store computed match scores in the `matches` table
+- Recompute when a user updates their profile
+- API: `GET /api/partners?sort=match_score&sport=BJJ&skill=Advanced`
+- Add "match explanation" to API response — why they matched
+
+### 5. MESSAGING SYSTEM (High Priority)
 
 **Current:** "Send Message" button exists but does nothing.
 
 **Required:**
-- Real-time messaging using Supabase Realtime
-- Conversation threads between matched partners
-- Message read receipts
-- Typing indicators
-- Image sharing in messages
-- Message notifications (in-app + email digest)
+- API routes for messaging (listed in section 1)
+- Frontend: conversation list page, message thread page
+- Polling-based updates (Cloudflare Workers don't support WebSockets on free tier — poll every 10 seconds)
+- Message read receipts (mark as read when viewed)
+- Unread message count badge in sidebar nav
 - Block/report user functionality
-- Conversation list with last message preview and unread count
+- Conversation list with last message preview
 
-### 5. PAYMENT PROCESSING (High Priority)
+### 6. PAYMENT PROCESSING (High Priority)
 
 **Current:** Pricing UI shows Free and $20/mo Premium tiers. No payment integration.
 
 **Required:**
 - Integrate Lemon Squeezy for subscription management
-- Implement two tiers:
-  - **Free:** Basic partner matching (limited to 5 matches/day), no gym access
+- Two tiers:
+  - **Free:** Basic partner matching (5 matches/day), no gym access
   - **Premium ($20/month):** Unlimited matches, full gym directory, priority messaging, verified badge
-- Webhook handling for subscription events (created, renewed, cancelled, failed)
-- Subscription status check middleware (gate premium features)
-- Billing history page with invoice downloads
-- Trial period option (7-day free trial of Premium)
-- Cancellation flow with feedback survey
-- Proration handling for plan changes
+- Lemon Squeezy webhook handler in the Worker (`POST /api/subscriptions/webhook`)
+- Subscription status check middleware — gate premium features in both Worker and frontend
+- Billing history from Lemon Squeezy API
+- Trial period option (7-day free trial)
+- Update `settings/page.tsx` subscription tab with real data
+- Update `gyms/page.tsx` premium locking to check real subscription status
 
-### 6. UI/UX IMPROVEMENTS (High Priority)
+### 7. UI/UX IMPROVEMENTS (High Priority)
 
-**Current:** Functional but basic. Some rough edges, no loading states, no animations beyond CSS.
+**Current:** Functional but basic. No loading states, no animations beyond CSS.
 
 **Required:**
-- **Loading States:** Add skeleton loaders for all data-fetching pages (partners list, gyms list, dashboard)
-- **Empty States:** Design meaningful empty states for no matches, no messages, empty profile
-- **Error Handling:** User-friendly error boundaries, toast notifications for actions (saved, error, etc.)
-- **Responsive Polish:** Test and fix all pages at mobile (375px), tablet (768px), and desktop (1280px+)
-- **Accessibility:** Add ARIA labels, keyboard navigation, focus management, screen reader support
-- **Animations:** Add Framer Motion for page transitions, modal animations, card hover effects
-- **Image Optimization:** Use Next.js Image component for all images, add blur placeholders
-- **Dark/Light Mode:** Add theme toggle (dark is default, but some users prefer light)
-- **Onboarding Flow:** Multi-step guided profile setup for new users (sport → skill → goals → availability → bio)
-- **Profile Completeness Indicator:** Show percentage and prompt users to fill missing sections
-- **Search UX:** Add debounced search, search history, suggested searches
-- **Infinite Scroll:** Replace static lists with infinite scroll for partners and gyms
-- **Pull to Refresh:** Mobile gesture support
+- **Loading States:** Skeleton loaders for all data-fetching pages
+- **Empty States:** Meaningful designs for no matches, no messages, empty profile
+- **Error Handling:** Toast notifications for actions (saved, error, etc.) — use `sonner` or similar
+- **Responsive Polish:** Test all pages at 375px, 768px, 1280px+
+- **Accessibility:** ARIA labels, keyboard navigation, focus management
+- **Animations:** Framer Motion for page transitions, modal animations, card hover effects
+- **Onboarding Flow:** Multi-step guided profile setup for new users
+- **Profile Completeness Indicator:** Show % and prompt to fill missing sections
+- **Search UX:** Debounced search, search history
+- **Infinite Scroll:** For partners and gyms lists
 - **Micro-interactions:** Button press effects, toggle animations, success checkmarks
 
-### 7. GYM FEATURES (Medium Priority)
+### 8. GYM FEATURES (Medium Priority)
 
-**Current:** Static gym cards with hardcoded data. Booking button is non-functional.
+**Current:** Static gym cards with hardcoded data. Booking button non-functional.
 
 **Required:**
-- Real gym data from database
-- Gym owner dashboard (separate role/portal):
+- Real gym data from D1 database
+- Gym owner portal (separate role):
   - Add/edit gym profile
   - Manage open mat sessions (CRUD)
-  - View bookings and attendance
-  - Revenue analytics
-- User-facing features:
-  - Map view with gym locations (use Mapbox or Google Maps free tier)
-  - Gym search with filters (sport, distance, price, rating, availability)
-  - Real booking flow with slot management
-  - Booking confirmation emails
-  - Check-in/check-out system
+  - View bookings
+- User features:
+  - Map view with gym locations (Mapbox GL JS free tier — 50K loads/month)
+  - Gym search with filters (sport, distance, price, rating)
+  - Real booking flow: select session → confirm → receive confirmation
   - Gym reviews and ratings
-  - Favorite gyms list
+  - Favorite gyms
 
-### 8. INFORMATION SECURITY (Medium Priority)
+### 9. INFORMATION SECURITY (Medium Priority)
 
-**Current:** No security measures whatsoever. Plain text everything.
+**Current:** No security measures. Plain text passwords in localStorage.
 
 **Required:**
-- Input sanitization on all forms (prevent XSS)
-- CSRF protection
-- Rate limiting on API routes
+- PBKDF2 password hashing in the Worker (Web Crypto API)
+- JWT tokens with expiration
+- Input sanitization on all API routes
+- CORS configuration on the Worker (allow only your frontend domain)
 - Content Security Policy headers
-- Secure cookie configuration
-- SQL injection prevention (Supabase handles this, but verify)
-- File upload validation (type, size limits for avatars)
-- Environment variable management (.env.local for secrets)
-- HTTPS enforcement
-- Data encryption at rest (Supabase default)
-- Privacy-first design:
-  - Don't expose exact location (show distance only)
-  - Allow hiding profile from search
-  - Allow blocking users
-  - Data export functionality
-  - Account deletion with full data purge
+- Rate limiting on auth and form submission endpoints
+- File upload validation for avatars (type, size limits)
+- Environment variable management (Cloudflare Worker secrets for API keys)
+- Don't expose exact user location — show city only
 
-### 9. SOCIAL MEDIA INTEGRATION (Medium Priority)
+### 10. SOCIAL MEDIA INTEGRATION (Medium Priority)
 
 **Current:** No social features.
 
 **Required:**
-- Share profile link (generate public profile URL)
-- Social login (Google, Apple — via Supabase Auth)
-- Invite friends via link/SMS/email
-- Social proof: "X athletes in your area" on landing page
-- Instagram integration: link Instagram profile, show recent posts on profile
-- Share match achievements ("Found my new training partner on Training Partner!")
+- Share profile link (public profile URL)
+- Invite friends via link
 - Open Graph meta tags for link previews when sharing
 - Referral program: invite a friend, both get 1 week free Premium
+- Social proof on landing page ("X athletes signed up this week")
 
-### 10. SEO & MARKETING (Medium Priority)
+### 11. SEO & MARKETING (Medium Priority)
 
-**Current:** Basic meta tags in layout.tsx. No structured data, no sitemap.
+**Current:** Basic meta tags in layout.tsx. No structured data.
 
 **Required:**
-- Dynamic meta tags per page (title, description, OG image)
-- Structured data (JSON-LD) for:
-  - Organization
-  - SportsActivityLocation (for gyms)
-  - WebApplication
+- Dynamic meta tags per page
+- JSON-LD structured data (Organization, SportsActivityLocation for gyms, WebApplication)
 - XML sitemap generation
 - robots.txt
-- Blog/content section for SEO (training tips, gym spotlights)
-- Landing page A/B testing capability
-- Analytics integration (Plausible or Umami — privacy-friendly, free tier)
+- Analytics (Plausible or Umami free tier — privacy-friendly)
 - Conversion tracking for signups
 
-### 11. PERFORMANCE OPTIMIZATION (Low Priority)
-
-**Current:** Static build, decent performance. No optimization.
+### 12. PERFORMANCE OPTIMIZATION (Low Priority)
 
 **Required:**
-- Implement ISR (Incremental Static Regeneration) for gym pages
 - Dynamic imports for heavy components (modals, maps)
-- Image optimization with next/image and WebP/AVIF
-- Bundle analysis and tree shaking
+- Image optimization with next/image
 - Service worker for offline support
-- Cache API responses appropriately
-- Lazy load below-fold content
+- Bundle analysis
 - Core Web Vitals optimization (target all green)
 
-### 12. TESTING (Low Priority)
-
-**Current:** No tests.
+### 13. TESTING (Low Priority)
 
 **Required:**
-- Unit tests for matching algorithm (Jest)
-- Component tests for key UI components (React Testing Library)
-- Integration tests for auth flows
-- E2E tests for critical user journeys (Playwright):
-  - Sign up → Complete profile → Find partner → Send message
-  - Sign up → Subscribe → Access premium gyms → Book session
-- API route tests
-- Accessibility tests (axe-core)
+- Unit tests for matching algorithm
+- API route tests (use `vitest` for Worker testing with `miniflare`)
+- Component tests for key UI components
+- E2E tests for critical flows (Playwright)
 
-### 13. NOTIFICATIONS SYSTEM (Low Priority)
+### 14. NOTIFICATIONS SYSTEM (Low Priority)
 
-**Current:** Notification toggle switches in settings but no notification system.
+**Current:** Notification toggle switches in settings but no system.
 
 **Required:**
 - In-app notification center (bell icon with badge)
-- Notification types:
-  - New match found
-  - Message received
-  - Booking confirmed
-  - Gym session reminder
-  - Subscription renewal reminder
-- Email notifications (via Resend or Supabase email)
-- Push notifications (web push API)
+- Types: new match, message received, booking confirmed, session reminder
+- Email notifications (Resend free tier — 100 emails/day)
 - Notification preferences that actually control delivery
 
-### 14. ADMIN DASHBOARD (Low Priority)
+---
 
-**Current:** No admin functionality.
+## Architecture Decision: Deployment Strategy
 
-**Required:**
-- Admin role with separate dashboard
-- User management (view, suspend, delete)
-- Gym verification workflow (review applications)
-- Content moderation (reported users/messages)
-- Analytics dashboard (signups, active users, revenue, popular sports)
-- System health monitoring
+**Option A (Recommended): Monorepo with Cloudflare Pages + Workers**
+- Deploy the Next.js frontend via Cloudflare Pages (uses `@cloudflare/next-on-pages`)
+- The Worker API runs alongside via Cloudflare Workers
+- D1 database for all data
+- Single deployment pipeline via `wrangler pages deploy`
+- Add `wrangler.toml` to this repo with the existing D1 binding
+
+**Option B: Split deployment**
+- Next.js frontend on Vercel (free tier)
+- Cloudflare Worker API at `api.trainingpartner.app` or `training-partner-app.workers.dev`
+- CORS configured to allow Vercel domain
+- Two separate deploy pipelines
+
+Pick Option A if Cloudflare Pages supports Next.js 14 App Router well enough. Pick Option B if there are compatibility issues. Both are free tier.
 
 ---
 
-## Implementation Priority Order
-
-1. **Supabase setup** (database + auth) — everything depends on this
-2. **Authentication** — real signup/signin/session management
-3. **Database migration** — move all hardcoded data to Supabase
-4. **Partner matching algorithm** — core value proposition
-5. **Messaging system** — enables user engagement
-6. **Payment processing** — enables revenue
-7. **UI/UX polish** — improves retention
-8. **Security hardening** — protects users
-9. **Gym features** — expands platform value
-10. **Social & SEO** — grows user base
-11. **Notifications** — improves engagement
-12. **Performance & Testing** — ensures reliability
-13. **Admin dashboard** — enables operations
-
----
-
-## File Structure (Current)
+## File Structure (Current Frontend)
 
 ```
 training-partner/
@@ -282,54 +306,85 @@ training-partner/
 │   ├── layout.tsx            # Root layout with metadata
 │   ├── globals.css           # Global styles, animations
 │   ├── auth/
-│   │   ├── signup/page.tsx   # Sign up (localStorage)
-│   │   └── signin/page.tsx   # Sign in (localStorage)
+│   │   ├── signup/page.tsx   # Sign up (localStorage — replace with API)
+│   │   └── signin/page.tsx   # Sign in (localStorage — replace with API)
 │   ├── app/
-│   │   ├── layout.tsx        # App shell with sidebar
-│   │   ├── page.tsx          # Dashboard with demo data
-│   │   ├── profile/page.tsx  # Profile editor
-│   │   ├── partners/page.tsx # Partner matching (8 hardcoded partners)
-│   │   ├── gyms/page.tsx     # Gym listings (5 hardcoded gyms)
-│   │   └── settings/page.tsx # Settings (6 tabs, non-functional)
-│   ├── terms/page.tsx        # Terms of Service
-│   └── privacy/page.tsx      # Privacy Policy
-├── package.json              # Next.js 14, React 18, Tailwind, Lucide
-├── tailwind.config.ts        # Custom colors, fonts, animations
-├── next.config.js            # Image domains config
-├── SPEC.md                   # Product specification
-├── SETUP.md                  # Deployment guide
-└── README.md                 # Overview
+│   │   ├── layout.tsx        # App shell with sidebar + auth check
+│   │   ├── page.tsx          # Dashboard with hardcoded demo data
+│   │   ├── profile/page.tsx  # Profile editor (localStorage — replace with API)
+│   │   ├── partners/page.tsx # Partner matching (8 hardcoded partners — replace)
+│   │   ├── gyms/page.tsx     # Gym listings (5 hardcoded gyms — replace)
+│   │   └── settings/page.tsx # Settings (6 tabs, mostly non-functional)
+│   ├── terms/page.tsx        # Terms of Service (keep — has liability waiver)
+│   └── privacy/page.tsx      # Privacy Policy (keep)
+├── package.json
+├── tailwind.config.ts        # Custom colors, fonts — extend, don't replace
+├── next.config.js
+├── SPEC.md                   # Product specification (reference)
+└── SETUP.md                  # Deployment guide (update after changes)
 ```
 
-## Key Technical Notes
+## Existing Worker Code Reference
 
-- All demo data is hardcoded in component files (partners in partners/page.tsx, gyms in gyms/page.tsx)
-- Auth check in app/layout.tsx reads `trainingPartnerUser` from localStorage
-- Profile saves to localStorage with key `trainingPartnerUser`
-- The `isPremium` flag is hardcoded to `false` in gyms/page.tsx
-- No API routes exist — all logic is client-side
-- Tailwind config has custom theme extending default — don't replace, extend
-- The app uses App Router (not Pages Router) — all routes are in `src/app/`
-- Currently builds and deploys successfully as a static Next.js app
+The Cloudflare Worker at `worker/index.js` currently handles 5 routes. Here's the existing pattern to follow when adding new routes:
+
+```javascript
+// Helper functions already exist: json(), readJson(), normalizeText(), isoNow()
+// ensureSchema() auto-creates tables if D1 is bound
+// env.DB is the D1 binding, env.ASSETS serves static files
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    // Route matching pattern:
+    if (url.pathname === '/api/endpoint' && request.method === 'GET') {
+      return handleEndpoint(request, env);
+    }
+    // Fallback to static assets
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return new Response('Not found', { status: 404 });
+  }
+};
+```
+
+## Legacy Python Backend Reference (data model only — rewrite in JS)
+
+The Python `tp_storage.py` has these tables already designed:
+- `users` (id, email, password_hash, display_name, city, token)
+- `match_profiles` (id, user_id, sport, skill_level, weight_class, partner_pool, travel_radius_miles, city)
+- `waitlist` (id, display_name, email, city, sport, level, weight_class)
+- `open_mats` (id, user_id, gym_name, city, sport, schedule_text, notes)
+
+The Python `app.py` has these API routes:
+- `POST /api/v1/auth/register` — create user
+- `POST /api/v1/auth/login` — authenticate
+- `POST /api/v1/match-profiles` — upsert profile
+- `GET /api/v1/matches` — get matches (basic same-sport filter)
+- `POST /api/v1/waitlist` — join waitlist
+- `POST /api/v1/open-mats` — create open mat
+- `GET /api/v1/open-mats` — list open mats
+
+Port these to the Cloudflare Worker, but improve the matching algorithm (section 4) and use proper password hashing (PBKDF2, not sha256).
 
 ## Constraints
 
-- **Budget:** $0. Use only free tiers (Supabase Free, Vercel Free, Lemon Squeezy, free map APIs)
+- **Budget:** $0. Use only free tiers (Cloudflare Workers Free, D1 Free, Lemon Squeezy, free map APIs)
 - **No breaking the existing UI:** Improve it, don't redesign from scratch. Keep the dark theme and color scheme.
 - **Mobile-first:** Most users will be on phones at the gym
-- **Combat sports culture:** The branding should feel tough, aggressive, athletic — not corporate or soft
-- **Legal:** Terms of Service includes a liability waiver for combat sports injuries — this is important, don't remove it
+- **Combat sports culture:** The branding should feel tough, aggressive, athletic — not corporate
+- **Legal:** Terms of Service includes a liability waiver for combat sports injuries — don't remove it
+- **Cloudflare-first:** Use Cloudflare Workers + D1 as the backend. Do NOT introduce Supabase, Firebase, or other external databases.
 
 ## Success Criteria
 
 After your improvements, the app should:
-1. Allow real users to sign up, verify email, and create persistent profiles
-2. Match users with compatible training partners using a real algorithm
-3. Enable real-time messaging between matched partners
-4. Show real gym data with functional booking
+1. Allow real users to sign up, verify email, and create persistent profiles stored in Cloudflare D1
+2. Match users with compatible training partners using a real weighted algorithm
+3. Enable messaging between matched partners
+4. Show real gym data with functional booking via the Worker API
 5. Process $20/month Premium subscriptions via Lemon Squeezy
-6. Be secure enough for production use
+6. Be secure (PBKDF2 passwords, JWT auth, input sanitization, CORS)
 7. Score 90+ on all Lighthouse metrics
 8. Work flawlessly on mobile devices
 9. Have proper SEO for organic discovery
-10. Be deployable to Vercel with zero configuration
+10. Deploy to Cloudflare (Pages + Workers + D1) with zero external dependencies
