@@ -1,35 +1,36 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { User, MapPin, Target, Clock, Save, Check } from 'lucide-react'
+import { User, MapPin, Target, Clock, Save, Check, Loader2 } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
+import api from '@/lib/api'
+import { useToast } from '@/components/toast'
+import { ProfileSkeleton } from '@/components/skeleton'
 
 const sportsList = [
-  'Wrestling', 'MMA', 'Brazilian Jiu-Jitsu', 'Boxing', 
-  'Kickboxing', 'Judo', 'Taekwondo', 'Karate', 'Sambo', 'Muay Thai'
+  'Wrestling', 'MMA', 'BJJ', 'Boxing',
+  'Kickboxing', 'Judo', 'Muay Thai', 'Karate', 'Sambo'
 ]
-
 const skillLevels = ['Beginner', 'Intermediate', 'Advanced', 'Pro']
-
 const weightClasses = [
   'Flyweight (126 lbs)', 'Bantamweight (126-132 lbs)', 'Featherweight (132-145 lbs)',
   'Lightweight (145-155 lbs)', 'Welterweight (155-170 lbs)', 'Middleweight (170-185 lbs)',
   'Light Heavyweight (185-205 lbs)', 'Heavyweight (205-265 lbs)', 'Super Heavyweight (265+ lbs)'
 ]
-
 const trainingGoals = ['Competition', 'Fitness', 'Self-defense', 'Technique', 'Sparring']
-
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const times = ['Morning (6am-12pm)', 'Afternoon (12pm-5pm)', 'Evening (5pm-10pm)']
 
-export default function ProfilePage() {
+function ProfileForm() {
   const searchParams = useSearchParams()
   const isNew = searchParams.get('new') === 'true'
-  
-  const [saved, setSaved] = useState(false)
+  const { user, profile: authProfile, refreshUser } = useAuth()
+  const toast = useToast()
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState({
     name: '',
-    email: '',
     age: '',
     location: '',
     sports: [] as string[],
@@ -42,31 +43,54 @@ export default function ProfilePage() {
   })
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('trainingPartnerUser')
-    if (storedUser) {
-      const userData = JSON.parse(storedUser)
+    if (user) {
       setProfile(prev => ({
         ...prev,
-        name: userData.name || '',
-        email: userData.email || '',
-        sport: userData.sport || []
+        name: user.display_name || '',
+        location: user.city || '',
       }))
     }
-  }, [])
+    if (authProfile) {
+      setProfile(prev => ({
+        ...prev,
+        sports: authProfile.sports || [],
+        skillLevel: authProfile.skill_level || '',
+        weightClass: authProfile.weight_class || '',
+        trainingGoals: authProfile.training_goals || [],
+        experienceYears: authProfile.experience_years ? String(authProfile.experience_years) : '',
+        bio: authProfile.bio || '',
+        age: authProfile.age ? String(authProfile.age) : '',
+        location: authProfile.location || user?.city || '',
+        availability: authProfile.availability || [],
+      }))
+    }
+    setLoading(false)
+  }, [user, authProfile])
 
-  const handleSave = () => {
-    localStorage.setItem('trainingPartnerUser', JSON.stringify({
-      ...profile,
-      sports: profile.sports,
-      trainingGoals: profile.trainingGoals,
-      skillLevel: profile.skillLevel,
-      weightClass: profile.weightClass,
-      location: profile.location,
-      experienceYears: profile.experienceYears,
-      availability: profile.availability
-    }))
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await api.updateProfile({
+        display_name: profile.name,
+        city: profile.location,
+        sports: profile.sports,
+        skill_level: profile.skillLevel,
+        weight_class: profile.weightClass,
+        training_goals: profile.trainingGoals,
+        experience_years: profile.experienceYears ? parseInt(profile.experienceYears) : 0,
+        bio: profile.bio,
+        age: profile.age ? parseInt(profile.age) : 0,
+        location: profile.location,
+        availability: profile.availability,
+      })
+      await refreshUser()
+      toast.success('Profile saved successfully!')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save profile'
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const toggleSport = (sport: string) => {
@@ -91,39 +115,29 @@ export default function ProfilePage() {
     setProfile(prev => {
       const exists = prev.availability.some(a => a.day === day && a.time === time)
       if (exists) {
-        return {
-          ...prev,
-          availability: prev.availability.filter(a => !(a.day === day && a.time === time))
-        }
+        return { ...prev, availability: prev.availability.filter(a => !(a.day === day && a.time === time)) }
       }
-      return {
-        ...prev,
-        availability: [...prev.availability, { day, time }]
-      }
+      return { ...prev, availability: [...prev.availability, { day, time }] }
     })
   }
 
+  if (loading) return <ProfileSkeleton />
+
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="font-heading text-3xl lg:text-4xl text-white mb-2">YOUR PROFILE</h1>
-          <p className="text-text-secondary">
-            Complete your profile to get better matches
-          </p>
+          <p className="text-text-secondary">Complete your profile to get better matches</p>
         </div>
-        
+
         <button
           onClick={handleSave}
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-            saved 
-              ? 'bg-accent text-background' 
-              : 'bg-primary text-white hover:bg-primary/90'
-          }`}
+          disabled={saving}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
         >
-          {saved ? <Check className="w-5 h-5" /> : <Save className="w-5 h-5" />}
-          {saved ? 'Saved!' : 'Save Profile'}
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          {saving ? 'Saving...' : 'Save Profile'}
         </button>
       </div>
 
@@ -139,7 +153,7 @@ export default function ProfilePage() {
           <User className="w-5 h-5 text-primary" />
           BASIC INFO
         </h2>
-        
+
         <div className="grid md:grid-cols-2 gap-6">
           <div>
             <label className="block text-text-secondary text-sm mb-2">Full Name</label>
@@ -151,18 +165,17 @@ export default function ProfilePage() {
               className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
             />
           </div>
-          
+
           <div>
             <label className="block text-text-secondary text-sm mb-2">Email</label>
             <input
               type="email"
-              value={profile.email}
-              onChange={(e) => setProfile({...profile, email: e.target.value})}
-              placeholder="you@example.com"
-              className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
+              value={user?.email || ''}
+              disabled
+              className="w-full bg-background border border-border rounded-lg py-3 px-4 text-text-secondary cursor-not-allowed"
             />
           </div>
-          
+
           <div>
             <label className="block text-text-secondary text-sm mb-2">Age</label>
             <input
@@ -173,7 +186,7 @@ export default function ProfilePage() {
               className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
             />
           </div>
-          
+
           <div>
             <label className="block text-text-secondary text-sm mb-2">Location</label>
             <div className="relative">
@@ -193,7 +206,6 @@ export default function ProfilePage() {
       {/* Sports */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <h2 className="font-heading text-xl text-white mb-6">COMBAT SPORTS</h2>
-        
         <div className="flex flex-wrap gap-3">
           {sportsList.map(sport => (
             <button
@@ -217,7 +229,7 @@ export default function ProfilePage() {
           <Target className="w-5 h-5 text-primary" />
           SKILL DETAILS
         </h2>
-        
+
         <div className="grid md:grid-cols-2 gap-6">
           <div>
             <label className="block text-text-secondary text-sm mb-2">Skill Level</label>
@@ -232,7 +244,7 @@ export default function ProfilePage() {
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-text-secondary text-sm mb-2">Weight Class</label>
             <select
@@ -246,7 +258,7 @@ export default function ProfilePage() {
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-text-secondary text-sm mb-2">Years of Experience</label>
             <input
@@ -263,7 +275,6 @@ export default function ProfilePage() {
       {/* Training Goals */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <h2 className="font-heading text-xl text-white mb-6">TRAINING GOALS</h2>
-        
         <div className="flex flex-wrap gap-3">
           {trainingGoals.map(goal => (
             <button
@@ -287,7 +298,7 @@ export default function ProfilePage() {
           <Clock className="w-5 h-5 text-primary" />
           AVAILABILITY
         </h2>
-        
+
         <div className="space-y-3">
           {days.map(day => (
             <div key={day} className="flex flex-wrap items-center gap-3">
@@ -305,7 +316,7 @@ export default function ProfilePage() {
                           : 'bg-background border border-border text-text-secondary hover:border-primary'
                       }`}
                     >
-                      {time.replace(' (', '\n(').replace(')', '')}
+                      {time.split(' ')[0]}
                     </button>
                   )
                 })}
@@ -318,7 +329,6 @@ export default function ProfilePage() {
       {/* Bio */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <h2 className="font-heading text-xl text-white mb-6">ABOUT YOU</h2>
-        
         <textarea
           value={profile.bio}
           onChange={(e) => setProfile({...profile, bio: e.target.value})}
@@ -327,6 +337,26 @@ export default function ProfilePage() {
           className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
         />
       </div>
+
+      {/* Save Button (bottom) */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-8 py-3 rounded-lg font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+          {saving ? 'Saving...' : 'Save Profile'}
+        </button>
+      </div>
     </div>
+  )
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<ProfileSkeleton />}>
+      <ProfileForm />
+    </Suspense>
   )
 }

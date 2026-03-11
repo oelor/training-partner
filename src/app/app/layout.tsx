@@ -3,56 +3,65 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
-import { 
-  Users, 
-  Home, 
-  User, 
-  MapPin, 
-  Settings, 
-  LogOut,
-  Menu,
-  X,
-  ChevronLeft
+import {
+  Users, Home, User, MapPin, Settings, LogOut, Menu, X,
+  MessageCircle, Crown, UserSearch, Bell, Calendar
 } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
+import api from '@/lib/api'
 
 const navItems = [
   { href: '/app', label: 'Dashboard', icon: Home },
-  { href: '/app/profile', label: 'Profile', icon: User },
-  { href: '/app/partners', label: 'Find Partners', icon: Users },
+  { href: '/app/partners', label: 'Find Partners', icon: UserSearch },
   { href: '/app/gyms', label: 'Partner Gyms', icon: MapPin },
+  { href: '/app/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/app/bookings', label: 'Bookings', icon: Calendar },
+  { href: '/app/profile', label: 'Profile', icon: User },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ]
 
-export default function AppLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const { user, loading, logout, subscription } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [user, setUser] = useState<any>(null)
+  const [unreadMessages, setUnreadMessages] = useState(0)
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('trainingPartnerUser')
-    if (!storedUser && pathname !== '/auth/signup') {
+    if (!loading && !user) {
       router.push('/auth/signin')
-    } else if (storedUser) {
-      setUser(JSON.parse(storedUser))
     }
-  }, [pathname, router])
+  }, [user, loading, router])
 
-  const handleLogout = () => {
-    localStorage.removeItem('trainingPartnerUser')
-    router.push('/')
-  }
+  useEffect(() => {
+    if (user) {
+      const fetchUnread = () => {
+        api.getUnreadCount().then(data => setUnreadMessages(data.unread)).catch(() => {})
+      }
+      fetchUnread()
+      const interval = setInterval(fetchUnread, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
 
-  if (!user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center animate-pulse">
+            <Users className="w-7 h-7 text-white" />
+          </div>
+          <p className="text-text-secondary">Loading...</p>
+        </div>
       </div>
     )
+  }
+
+  if (!user) return null
+
+  const handleLogout = () => {
+    logout()
+    router.push('/')
   }
 
   return (
@@ -68,12 +77,19 @@ export default function AppLayout({
           </div>
           <span className="font-heading text-lg text-white">TRAINING PARTNER</span>
         </div>
-        <div className="w-10"></div>
+        <Link href="/app/messages" className="relative text-text-secondary hover:text-white">
+          <Bell className="w-5 h-5" />
+          {unreadMessages > 0 && (
+            <span className="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+              {unreadMessages > 9 ? '9+' : unreadMessages}
+            </span>
+          )}
+        </Link>
       </div>
 
       {/* Sidebar Overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="lg:hidden fixed inset-0 bg-black/50 z-50"
           onClick={() => setSidebarOpen(false)}
         />
@@ -81,64 +97,82 @@ export default function AppLayout({
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 left-0 h-full w-64 bg-surface border-r border-border z-50 
+        fixed top-0 left-0 h-full w-64 bg-surface border-r border-border z-50
         transform transition-transform duration-300 lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-full">
-          {/* Logo */}
           <div className="p-6 border-b border-border">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <Link href="/app" className="flex items-center gap-2">
                 <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                   <Users className="w-6 h-6 text-white" />
                 </div>
                 <span className="font-heading text-xl text-white">TRAINING PARTNER</span>
-              </div>
+              </Link>
               <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-text-secondary">
                 <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* User Info */}
           <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-primary" />
+              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold">
+                {user.display_name?.charAt(0)?.toUpperCase() || '?'}
               </div>
-              <div>
-                <div className="text-white font-medium">{user.name}</div>
-                <div className="text-text-secondary text-sm">{user.sport || 'No sport selected'}</div>
+              <div className="min-w-0">
+                <div className="text-white font-medium truncate">{user.display_name}</div>
+                <div className="text-text-secondary text-sm truncate">{user.email}</div>
               </div>
             </div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
+          <nav className="flex-1 p-4 space-y-1">
             {navItems.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = pathname === item.href || (item.href !== '/app' && pathname.startsWith(item.href))
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
-                    ${isActive 
-                      ? 'bg-primary text-white' 
+                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors relative
+                    ${isActive
+                      ? 'bg-primary/10 text-primary'
                       : 'text-text-secondary hover:text-white hover:bg-background'
                     }
                   `}
                 >
                   <item.icon className="w-5 h-5" />
-                  {item.label}
+                  <span className="text-sm font-medium">{item.label}</span>
+                  {item.label === 'Messages' && unreadMessages > 0 && (
+                    <span className="absolute right-3 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadMessages > 9 ? '9+' : unreadMessages}
+                    </span>
+                  )}
                 </Link>
               )
             })}
           </nav>
 
-          {/* Logout */}
+          {/* Subscription badge */}
+          {subscription?.plan === 'premium' ? (
+            <div className="mx-4 mb-3 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+              <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                <Crown className="w-4 h-4" />
+                Premium Active
+              </div>
+            </div>
+          ) : (
+            <Link href="/app/settings" className="mx-4 mb-3 p-3 bg-background border border-border rounded-lg hover:border-primary/50 transition-colors block">
+              <div className="flex items-center gap-2 text-text-secondary text-sm">
+                <Crown className="w-4 h-4" />
+                Upgrade to Premium
+              </div>
+            </Link>
+          )}
+
           <div className="p-4 border-t border-border">
             <button
               onClick={handleLogout}
@@ -153,7 +187,7 @@ export default function AppLayout({
 
       {/* Main Content */}
       <main className="lg:pl-64 pt-16 lg:pt-0">
-        <div className="p-6 lg:p-8">
+        <div className="p-6 lg:p-8 max-w-6xl mx-auto">
           {children}
         </div>
       </main>

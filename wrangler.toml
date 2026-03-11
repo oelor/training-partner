@@ -1,0 +1,15 @@
+name = "training-partner-app"
+main = "worker/index.js"
+compatibility_date = "2026-03-09"
+workers_dev = true
+
+[vars]
+JWT_SECRET = "tp-jwt-secret-change-in-production"
+FRONTEND_URL = "https://training-partner.vercel.app"
+LEMON_SQUEEZY_WEBHOOK_SECRET = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "training-partner"
+database_id = "30d075cd-2994-4d08-8aef-7ed1a415d9bb"
+migrations_dir = "./migrations"

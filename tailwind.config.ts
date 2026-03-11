@@ -9,7 +9,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: '#FF4D00',
+        primary: {
+          DEFAULT: '#FF4D00',
+          hover: '#E64400',
+        },
         secondary: '#1A1A1A',
         accent: '#00FF88',
         background: '#0D0D0D',
@@ -26,7 +29,9 @@ const config: Config = {
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',
         'slide-up': 'slideUp 0.5s ease-out',
+        'slide-in': 'slideIn 0.3s ease-out',
         'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
+        'bounce-in': 'bounceIn 0.4s ease-out',
       },
       keyframes: {
         fadeIn: {
@@ -37,9 +42,18 @@ const config: Config = {
           '0%': { opacity: '0', transform: 'translateY(20px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        slideIn: {
+          '0%': { opacity: '0', transform: 'translateX(100%)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
         pulseGlow: {
           '0%, 100%': { boxShadow: '0 0 20px rgba(255, 77, 0, 0.3)' },
           '50%': { boxShadow: '0 0 40px rgba(255, 77, 0, 0.6)' },
+        },
+        bounceIn: {
+          '0%': { opacity: '0', transform: 'scale(0.95)' },
+          '60%': { opacity: '1', transform: 'scale(1.02)' },
+          '100%': { transform: 'scale(1)' },
         },
       },
     },

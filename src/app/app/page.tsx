@@ -2,111 +2,122 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Users, MapPin, Clock, TrendingUp, ArrowRight, Sparkles } from 'lucide-react'
-
-// Demo data for the dashboard
-const demoPartners = [
-  { id: '1', name: 'Mike T.', sport: 'Wrestling', skill: 'Advanced', match: 95, distance: '2.3 mi' },
-  { id: '2', name: 'Sarah J.', sport: 'MMA', skill: 'Intermediate', match: 88, distance: '4.1 mi' },
-  { id: '3', name: 'Carlos R.', sport: 'BJJ', skill: 'Advanced', match: 82, distance: '1.8 mi' },
-]
-
-const demoGyms = [
-  { id: '1', name: 'Iron Temple MMA', openMat: 'Sat 10am-2pm', distance: '1.2 mi', verified: true },
-  { id: '2', name: 'Grappling Factory', openMat: 'Sun 9am-12pm', distance: '3.5 mi', verified: true },
-]
+import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
+import api, { Partner, Gym, Booking } from '@/lib/api'
+import { CardSkeleton } from '@/components/skeleton'
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null)
-  const [profileComplete, setProfileComplete] = useState(false)
+  const { user, profile, subscription } = useAuth()
+  const [partners, setPartners] = useState<Partner[]>([])
+  const [gyms, setGyms] = useState<Gym[]>([])
+  const [bookings, setBookings] = useState<Booking[]>([])
+  const [unread, setUnread] = useState(0)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('trainingPartnerUser')
-    if (storedUser) {
-      const userData = JSON.parse(storedUser)
-      setUser(userData)
-      // Check if profile is complete
-      setProfileComplete(!!(userData.sport && userData.skillLevel && userData.location))
+    async function load() {
+      try {
+        const [pData, gData, bData, mData] = await Promise.all([
+          api.getPartners({ limit: 3 }).catch(() => ({ partners: [], total: 0 })),
+          api.getGyms().catch(() => ({ gyms: [], total: 0 })),
+          api.getBookings().catch(() => ({ bookings: [] })),
+          api.getUnreadCount().catch(() => ({ unread: 0 })),
+        ])
+        setPartners(pData.partners || [])
+        setGyms(gData.gyms?.slice(0, 3) || [])
+        setBookings(bData.bookings || [])
+        setUnread(mData.unread || 0)
+      } catch {
+        // Silently handle
+      } finally {
+        setLoading(false)
+      }
     }
+    load()
   }, [])
+
+  const profileComplete = profile?.profile_complete || 0
+  const isProfileIncomplete = !profile || profileComplete < 50
 
   return (
     <div className="space-y-8">
       {/* Welcome Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-3xl lg:text-4xl text-white mb-2">
-            WELCOME BACK, {user?.name?.split(' ')[0] || 'ATHLETE'}!
-          </h1>
-          <p className="text-text-secondary">
-            Ready to find your next training partner?
-          </p>
-        </div>
-        
-        {!profileComplete && (
-          <Link 
-            href="/app/profile" 
-            className="flex items-center gap-2 bg-accent/20 text-accent px-4 py-2 rounded-lg hover:bg-accent/30 transition-colors"
-          >
-            <Sparkles className="w-4 h-4" />
-            Complete Your Profile
-          </Link>
-        )}
+      <div>
+        <h1 className="font-heading text-3xl text-white mb-2">
+          WELCOME BACK, {user?.display_name?.split(' ')[0]?.toUpperCase() || 'ATHLETE'}!
+        </h1>
+        <p className="text-text-secondary">Here&apos;s what&apos;s happening in your training network</p>
       </div>
+
+      {/* Profile Completion Banner */}
+      {isProfileIncomplete && (
+        <Link href="/app/profile?new=true" className="block bg-primary/10 border border-primary/30 rounded-xl p-6 hover:bg-primary/15 transition-colors">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-white font-heading text-lg mb-1">Complete Your Profile</h3>
+              <p className="text-text-secondary text-sm">Add your sports, skill level, and training goals to get matched with partners</p>
+              <div className="mt-3 w-full max-w-xs bg-background rounded-full h-2">
+                <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${profileComplete}%` }} />
+              </div>
+              <p className="text-primary text-xs mt-1">{profileComplete}% complete</p>
+            </div>
+            <ArrowRight className="w-6 h-6 text-primary flex-shrink-0" />
+          </div>
+        </Link>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-primary" />
+              <UserSearch className="w-5 h-5 text-primary" />
             </div>
             <span className="text-text-secondary text-sm">Matches</span>
           </div>
-          <div className="font-heading text-2xl text-white">12</div>
-          <div className="text-accent text-sm flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> +3 this week
-          </div>
+          <div className="font-heading text-2xl text-white">{partners.length}</div>
+          <div className="text-text-secondary text-sm">Partners found</div>
         </div>
 
         <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-accent/20 rounded-lg flex items-center justify-center">
-              <MapPin className="w-5 h-5 text-accent" />
+            <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+              <MessageCircle className="w-5 h-5 text-blue-400" />
             </div>
-            <span className="text-text-secondary text-sm">Nearby</span>
+            <span className="text-text-secondary text-sm">Messages</span>
           </div>
-          <div className="font-heading text-2xl text-white">8</div>
-          <div className="text-text-secondary text-sm">Partners</div>
+          <div className="font-heading text-2xl text-white">{unread}</div>
+          <div className="text-text-secondary text-sm">Unread</div>
         </div>
 
         <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
-              <Clock className="w-5 h-5 text-primary" />
+            <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-green-400" />
             </div>
-            <span className="text-text-secondary text-sm">Open Mat</span>
+            <span className="text-text-secondary text-sm">Sessions</span>
           </div>
-          <div className="font-heading text-2xl text-white">5</div>
-          <div className="text-text-secondary text-sm">This week</div>
+          <div className="font-heading text-2xl text-white">{bookings.length}</div>
+          <div className="text-text-secondary text-sm">Upcoming</div>
         </div>
 
         <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-accent/20 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-accent" />
+            <div className="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+              <MapPin className="w-5 h-5 text-yellow-400" />
             </div>
-            <span className="text-text-secondary text-sm">Profile</span>
+            <span className="text-text-secondary text-sm">Gyms</span>
           </div>
-          <div className="font-heading text-2xl text-white">{profileComplete ? '100%' : '40%'}</div>
-          <div className="text-text-secondary text-sm">{profileComplete ? 'Complete' : 'Incomplete'}</div>
+          <div className="font-heading text-2xl text-white">{gyms.length}</div>
+          <div className="text-text-secondary text-sm">Partner gyms</div>
         </div>
       </div>
 
       {/* Quick Actions */}
       <div className="grid md:grid-cols-2 gap-4">
-        <Link 
-          href="/app/partners" 
+        <Link
+          href="/app/partners"
           className="bg-gradient-to-r from-primary/20 to-surface border border-primary/50 rounded-xl p-6 hover:border-primary transition-colors group"
         >
           <div className="flex items-center justify-between">
@@ -118,8 +129,8 @@ export default function DashboardPage() {
           </div>
         </Link>
 
-        <Link 
-          href="/app/gyms" 
+        <Link
+          href="/app/gyms"
           className="bg-gradient-to-r from-accent/20 to-surface border border-accent/50 rounded-xl p-6 hover:border-accent transition-colors group"
         >
           <div className="flex items-center justify-between">
@@ -132,91 +143,135 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Recent Matches */}
+      {/* Top Partners */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-heading text-2xl text-white">TOP MATCHES</h2>
-          <Link href="/app/partners" className="text-primary text-sm hover:underline">
-            View All
+          <Link href="/app/partners" className="text-primary text-sm hover:underline flex items-center gap-1">
+            View All <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
-        
-        <div className="grid md:grid-cols-3 gap-4">
-          {demoPartners.map((partner) => (
-            <div key={partner.id} className="bg-surface border border-border rounded-xl p-4 card-hover">
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                  <Users className="w-6 h-6 text-primary" />
+
+        {loading ? (
+          <div className="grid md:grid-cols-3 gap-4">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : partners.length === 0 ? (
+          <div className="bg-surface border border-border rounded-xl p-8 text-center">
+            <Users className="w-12 h-12 text-text-secondary mx-auto mb-3" />
+            <p className="text-white font-medium mb-1">No partners found yet</p>
+            <p className="text-text-secondary text-sm mb-4">Complete your profile to get matched with training partners</p>
+            <Link href="/app/profile?new=true" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
+              Complete Profile <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-4">
+            {partners.map((partner) => (
+              <Link key={partner.id} href={`/app/partners/${partner.id}`} className="bg-surface border border-border rounded-xl p-4 card-hover group">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold">
+                    {partner.name?.charAt(0)?.toUpperCase() || '?'}
+                  </div>
+                  {partner.match > 0 && (
+                    <div className="text-right">
+                      <div className="text-accent font-mono text-lg font-bold">{Math.round(partner.match * 100)}%</div>
+                      <div className="text-text-secondary text-xs">match</div>
+                    </div>
+                  )}
                 </div>
-                <div className="text-right">
-                  <div className="text-accent font-mono text-lg font-bold">{partner.match}%</div>
-                  <div className="text-text-secondary text-xs">match</div>
-                </div>
-              </div>
-              <h3 className="font-heading text-lg text-white mb-1">{partner.name}</h3>
-              <p className="text-text-secondary text-sm mb-2">{partner.sport} • {partner.skill}</p>
-              <div className="flex items-center gap-1 text-text-secondary text-xs">
-                <MapPin className="w-3 h-3" />
-                {partner.distance} away
-              </div>
-            </div>
-          ))}
-        </div>
+                <h3 className="font-heading text-lg text-white mb-1 group-hover:text-primary transition-colors">{partner.name}</h3>
+                <p className="text-text-secondary text-sm mb-2">
+                  {partner.sport || partner.sports?.[0] || 'Combat Sports'} {partner.skill ? `• ${partner.skill}` : ''}
+                </p>
+                {partner.city && (
+                  <div className="flex items-center gap-1 text-text-secondary text-xs">
+                    <MapPin className="w-3 h-3" />
+                    {partner.city}
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Nearby Gyms */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-heading text-2xl text-white">NEARBY GYMS</h2>
-          <Link href="/app/gyms" className="text-primary text-sm hover:underline">
-            View All
+          <Link href="/app/gyms" className="text-primary text-sm hover:underline flex items-center gap-1">
+            View All <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
-        
-        <div className="grid md:grid-cols-2 gap-4">
-          {demoGyms.map((gym) => (
-            <div key={gym.id} className="bg-surface border border-border rounded-xl p-4 card-hover">
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center">
-                  <MapPin className="w-6 h-6 text-accent" />
+
+        {loading ? (
+          <div className="grid md:grid-cols-3 gap-4">
+            <CardSkeleton />
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        ) : gyms.length === 0 ? (
+          <div className="bg-surface border border-border rounded-xl p-8 text-center">
+            <MapPin className="w-12 h-12 text-text-secondary mx-auto mb-3" />
+            <p className="text-white font-medium">No gyms available yet</p>
+            <p className="text-text-secondary text-sm">Check back soon for partner gym listings</p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-4">
+            {gyms.map((gym) => (
+              <Link key={gym.id} href={`/app/gyms/${gym.id}`} className="bg-surface border border-border rounded-xl overflow-hidden card-hover group">
+                <div className="h-28 bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                  <MapPin className="w-10 h-10 text-primary/50" />
                 </div>
-                {gym.verified && (
-                  <span className="bg-accent/20 text-accent text-xs px-2 py-1 rounded">
-                    Verified
-                  </span>
-                )}
-              </div>
-              <h3 className="font-heading text-lg text-white mb-1">{gym.name}</h3>
-              <div className="flex items-center gap-1 text-text-secondary text-sm mb-2">
-                <Clock className="w-4 h-4" />
-                {gym.openMat}
-              </div>
-              <div className="flex items-center gap-1 text-text-secondary text-xs">
-                <MapPin className="w-3 h-3" />
-                {gym.distance} away
-              </div>
-            </div>
-          ))}
-        </div>
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-heading text-lg text-white truncate group-hover:text-primary transition-colors">{gym.name}</h3>
+                    {gym.verified && (
+                      <span className="bg-primary/20 text-primary text-xs px-1.5 py-0.5 rounded flex-shrink-0">Verified</span>
+                    )}
+                  </div>
+                  <p className="text-text-secondary text-sm mb-2">{gym.city}, {gym.state}</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 text-yellow-400">
+                      <Star className="w-3.5 h-3.5 fill-current" />
+                      <span className="text-sm">{gym.rating}</span>
+                    </div>
+                    <span className="text-text-secondary text-xs">({gym.review_count} reviews)</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Premium CTA */}
-      <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-xl p-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h3 className="font-heading text-xl text-white mb-2">UNLOCK PREMIUM</h3>
-            <p className="text-text-secondary text-sm">
-              Get access to exclusive open mat hours at 150+ partner gyms
-            </p>
+      {subscription?.plan !== 'premium' && (
+        <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-xl p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-primary/30 rounded-lg flex items-center justify-center">
+                <Crown className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-heading text-xl text-white mb-1">UNLOCK PREMIUM</h3>
+                <p className="text-text-secondary text-sm">
+                  Get access to exclusive open mat hours at 150+ partner gyms
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/app/settings"
+              className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors whitespace-nowrap text-center"
+            >
+              Upgrade - $20/mo
+            </Link>
           </div>
-          <Link 
-            href="/app/settings" 
-            className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors whitespace-nowrap"
-          >
-            Upgrade - $20/mo
-          </Link>
         </div>
-      </div>
+      )}
     </div>
   )
 }
