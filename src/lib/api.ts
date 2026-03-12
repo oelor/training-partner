@@ -1,6 +1,10 @@
 // API Client for Training Partner Cloudflare Worker
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://training-partner-app.oelor.workers.dev';
 
+// Retry configuration
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
 class ApiClient {
   private baseUrl: string;
 
@@ -23,22 +27,63 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers,
-    });
+    let lastError: Error | undefined;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(`${this.baseUrl}${path}`, {
+          ...options,
+          headers,
+        });
 
-    const data = await res.json();
+        let data: Record<string, unknown>;
+        try {
+          data = await res.json();
+        } catch {
+          throw new ApiError('Server returned an invalid response', res.status, {});
+        }
 
-    if (!res.ok) {
-      throw new ApiError(data.error || 'Request failed', res.status, data);
+        if (!res.ok) {
+          const errorMessage = this.formatErrorMessage(data, res.status);
+          throw new ApiError(errorMessage, res.status, data);
+        }
+
+        return data as T;
+      } catch (error) {
+        const fetchError = error as Error;
+        // Retry on network errors only
+        if (fetchError.message.includes('network') && attempt < MAX_RETRIES - 1) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (attempt + 1)));
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
     }
+    throw lastError || new ApiError('Request failed after multiple attempts', 0);
+  }
 
-    return data as T;
+  private formatErrorMessage(data: Record<string, unknown>, status: number): string {
+    const errorData = data?.error as string || data?.message as string || 'Request failed';
+    switch (status) {
+      case 401:
+        return 'Authentication required. Please log in again.';
+      case 403:
+        return 'Access denied. You do not have permission to perform this action.';
+      case 404:
+        return 'The requested resource was not found.';
+      case 422:
+        return errorData;
+      case 429:
+        return 'Too many requests. Please wait a moment and try again.';
+      case 500:
+        return 'Server error. Please try again shortly.';
+      default:
+        return errorData;
+    }
   }
 
   // Auth
-  async register(data: { name: string; email: string; password: string; sport?: string }) {
+  async register(data: { name: string; email: string; password: string; sport?: string; turnstile_token?: string }) {
     const res = await this.request<{ ok: boolean; token: string; user: User }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -56,6 +101,15 @@ class ApiClient {
     return res;
   }
 
+  async googleAuth(credential: string) {
+    const res = await this.request<{ ok: boolean; token: string; user: User; isNewUser: boolean }>('/api/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    });
+    if (res.token) localStorage.setItem('tp_token', res.token);
+    return res;
+  }
+
   async getMe() {
     return this.request<{ ok: boolean; user: User; profile: UserProfile | null; subscription: Subscription }>('/api/auth/me');
   }
@@ -66,6 +120,54 @@ class ApiClient {
 
   isLoggedIn(): boolean {
     return !!this.getToken();
+  }
+
+  // Password Reset
+  async requestPasswordReset(email: string) {
+    return this.request<{ ok: boolean }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    })
+  }
+
+  async resetPassword(token: string, password: string) {
+    return this.request<{ ok: boolean }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    })
+  }
+
+  // Email Verification
+  async verifyEmail(token: string) {
+    return this.request<{ ok: boolean; message: string }>(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)
+  }
+
+  async resendVerification() {
+    return this.request<{ ok: boolean }>('/api/auth/resend-verification', { method: 'POST' })
+  }
+
+  // Account Deletion
+  async deleteAccount(confirmation: string) {
+    return this.request<{ ok: boolean; message: string }>('/api/account/delete', {
+      method: 'POST',
+      body: JSON.stringify({ confirmation }),
+    })
+  }
+
+  // Report / Flag
+  async reportUser(userId: number, reason: string, details?: string) {
+    return this.request<{ ok: boolean }>('/api/report', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, reason, details }),
+    })
+  }
+
+  // Avatar Upload
+  async uploadAvatar(base64DataUrl: string) {
+    return this.request<{ ok: boolean; avatar_url: string }>('/api/upload-avatar', {
+      method: 'POST',
+      body: JSON.stringify({ avatar: base64DataUrl }),
+    })
   }
 
   // Profile
@@ -147,9 +249,81 @@ class ApiClient {
     return this.request<{ ok: boolean; unread: number }>('/api/messages/unread');
   }
 
-  // Subscriptions
+  // Subscriptions & Checkout
   async getSubscriptionStatus() {
     return this.request<{ ok: boolean; subscription: Subscription }>('/api/subscriptions/status');
+  }
+
+  async updateInstagram(username: string) {
+    return this.request<{ ok: boolean }>('/api/profile/instagram', {
+      method: 'PUT',
+      body: JSON.stringify({ instagram_username: username }),
+    });
+  }
+
+  async createCheckout(plan: 'premium_athlete' | 'premium_gym') {
+    return this.request<{ ok: boolean; url: string; session_id: string }>('/api/checkout/create', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    });
+  }
+
+  // Community Posts
+  async getPosts(params?: { type?: string; sport?: string; limit?: number; offset?: number }) {
+    const query = new URLSearchParams();
+    if (params?.type) query.set('type', params.type);
+    if (params?.sport) query.set('sport', params.sport);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; posts: Post[]; total: number }>(`/api/posts${qs ? '?' + qs : ''}`);
+  }
+
+  async createPost(data: { title: string; body: string; type: string; sport?: string; media_url?: string }) {
+    return this.request<{ ok: boolean; post_id: number }>('/api/posts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPost(postId: number) {
+    return this.request<{ ok: boolean; post: Post }>(`/api/posts/${postId}`);
+  }
+
+  async deletePost(postId: number) {
+    return this.request<{ ok: boolean }>(`/api/posts/${postId}`, { method: 'DELETE' });
+  }
+
+  async toggleLike(postId: number) {
+    return this.request<{ ok: boolean; liked: boolean; likes_count?: number }>(`/api/posts/${postId}/like`, { method: 'POST' });
+  }
+
+  // Gym Documents
+  async getGymDocuments(gymId: number) {
+    return this.request<{ ok: boolean; documents: GymDocument[] }>(`/api/gyms/${gymId}/documents`);
+  }
+
+  async uploadGymDocument(gymId: number, data: { type: string; name: string; file_data: string }) {
+    return this.request<{ ok: boolean; document_id: number }>(`/api/gyms/${gymId}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteGymDocument(gymId: number, docId: number) {
+    return this.request<{ ok: boolean }>(`/api/gyms/${gymId}/documents/${docId}`, { method: 'DELETE' });
+  }
+
+  // Private Lessons
+  async getPrivateLessons(gymId: number) {
+    return this.request<{ ok: boolean; lessons: PrivateLesson[] }>(`/api/gyms/${gymId}/lessons`);
+  }
+
+  async createPrivateLesson(gymId: number, data: { sport: string; title: string; description?: string; price_cents: number; duration_minutes: number; coach_user_id?: number }) {
+    return this.request<{ ok: boolean; lesson_id: number }>(`/api/gyms/${gymId}/lessons`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   // Notifications
@@ -175,6 +349,32 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ user_id: userId }),
     });
+  }
+
+  // Admin
+  async getAdminStats() {
+    return this.request<{ ok: boolean; stats: AdminStats }>('/api/admin/stats')
+  }
+
+  async getAdminUsers(params?: { search?: string; limit?: number; offset?: number }) {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; users: AdminUser[]; total: number }>(`/api/admin/users${qs ? '?' + qs : ''}`)
+  }
+
+  async getAdminReports(status?: string) {
+    const qs = status ? `?status=${status}` : '';
+    return this.request<{ ok: boolean; reports: AdminReport[] }>(`/api/admin/reports${qs}`)
+  }
+
+  async resolveReport(reportId: number, status: string) {
+    return this.request<{ ok: boolean }>(`/api/admin/reports/${reportId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    })
   }
 
   // Legacy
@@ -212,6 +412,8 @@ export interface User {
   city: string;
   avatar_url: string;
   email_verified?: number;
+  google_id?: string;
+  instagram_username?: string;
   created_at?: string;
 }
 
@@ -243,6 +445,7 @@ export interface Partner {
   location: string;
   match: number;
   explanation: Record<string, unknown>;
+  instagram_username?: string;
 }
 
 export interface PartnerDetail extends Partner {
@@ -348,6 +551,45 @@ export interface Subscription {
   trial_ends_at?: string;
 }
 
+export interface Post {
+  id: number;
+  user_id: number;
+  author_name: string;
+  author_avatar: string;
+  title: string;
+  body: string;
+  type: string;
+  sport: string;
+  media_url: string;
+  likes_count: number;
+  liked: boolean;
+  created_at: string;
+}
+
+export interface GymDocument {
+  id: number;
+  gym_id: number;
+  type: string;
+  name: string;
+  verified: number;
+  uploaded_at: string;
+}
+
+export interface PrivateLesson {
+  id: number;
+  gym_id: number;
+  coach_user_id: number;
+  coach_name: string;
+  coach_avatar: string;
+  sport: string;
+  title: string;
+  description: string;
+  price_cents: number;
+  duration_minutes: number;
+  available: number;
+  created_at: string;
+}
+
 export interface Notification {
   id: number;
   type: string;
@@ -355,6 +597,40 @@ export interface Notification {
   body: string;
   data: Record<string, unknown>;
   read: boolean;
+  created_at: string;
+}
+
+export interface AdminStats {
+  total_users: number;
+  complete_profiles: number;
+  total_gyms: number;
+  total_messages: number;
+  pending_reports: number;
+  active_bookings: number;
+  recent_signups: number;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  display_name: string;
+  role: string;
+  city: string;
+  email_verified: number;
+  created_at: string;
+}
+
+export interface AdminReport {
+  id: number;
+  reporter_id: number;
+  reported_id: number;
+  reporter_name: string;
+  reporter_email: string;
+  reported_name: string;
+  reported_email: string;
+  reason: string;
+  details: string;
+  status: string;
   created_at: string;
 }
 
