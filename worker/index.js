@@ -162,6 +162,8 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS founding_applications (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, role TEXT NOT NULL, city TEXT, sport TEXT, goal TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'new')`,
       `CREATE TABLE IF NOT EXISTS waitlist_signups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, name TEXT, email TEXT NOT NULL, role TEXT, city TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'new')`,
       `CREATE TABLE IF NOT EXISTS open_mats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, city TEXT NOT NULL, sport TEXT NOT NULL, venue TEXT, day_of_week TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1)`,
+      `CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT DEFAULT '', body TEXT NOT NULL, type TEXT DEFAULT 'general', sport TEXT DEFAULT '', created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS post_likes (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -172,6 +174,8 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)',
       'CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)',
       'CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_post_likes_pair ON post_likes(post_id, user_id)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
@@ -1198,6 +1202,172 @@ async function handleCreateReview(request, env) {
   return corsJson({ ok: true }, { status: 201 }, request, env);
 }
 
+// ─── Community Posts Routes ─────────────────────────────────────────────────
+
+async function handleGetPosts(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type');
+  const sport = url.searchParams.get('sport');
+  const sort = url.searchParams.get('sort') || 'recent';
+  const limit = parseInt(url.searchParams.get('limit')) || 20;
+  const offset = parseInt(url.searchParams.get('offset')) || 0;
+
+  let query = `
+    SELECT p.*, u.display_name, u.avatar_url,
+           (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as like_count,
+           (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
+    FROM posts p
+    JOIN users u ON p.user_id = u.id
+    WHERE 1=1
+  `;
+  const params = [user.id];
+
+  if (type) { query += ' AND p.type = ?'; params.push(type); }
+  if (sport) { query += ' AND p.sport = ?'; params.push(sport); }
+
+  if (sort === 'popular') {
+    query += ' ORDER BY like_count DESC, p.created_at DESC';
+  } else {
+    query += ' ORDER BY p.created_at DESC';
+  }
+  query += ' LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const results = await env.DB.prepare(query).bind(...params).all();
+
+  return corsJson({
+    ok: true,
+    posts: (results.results || []).map(p => ({
+      id: p.id,
+      user_id: p.user_id,
+      display_name: p.display_name,
+      avatar_url: p.avatar_url,
+      title: p.title,
+      body: p.body,
+      type: p.type,
+      sport: p.sport,
+      like_count: p.like_count || 0,
+      is_liked: (p.is_liked || 0) > 0,
+      created_at: p.created_at,
+    }))
+  }, {}, request, env);
+}
+
+async function handleCreatePost(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.body) {
+    return corsJson({ ok: false, error: 'Post body is required' }, { status: 400 }, request, env);
+  }
+
+  const now = isoNow();
+  const title = sanitize(body.title || '');
+  const postBody = sanitize(body.body);
+  const type = sanitize(body.type || 'general');
+  const sport = sanitize(body.sport || '');
+
+  const result = await env.DB.prepare(
+    'INSERT INTO posts (user_id, title, body, type, sport, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, title, postBody, type, sport, now).run();
+
+  return corsJson({
+    ok: true,
+    post: { id: result.meta.last_row_id, user_id: user.id, title, body: postBody, type, sport, created_at: now, like_count: 0, is_liked: false }
+  }, { status: 201 }, request, env);
+}
+
+async function handleLikePost(request, env, postId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const existing = await env.DB.prepare(
+    'SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?'
+  ).bind(postId, user.id).first();
+
+  if (existing) {
+    await env.DB.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').bind(postId, user.id).run();
+    return corsJson({ ok: true, liked: false }, {}, request, env);
+  } else {
+    await env.DB.prepare(
+      'INSERT INTO post_likes (post_id, user_id, created_at) VALUES (?, ?, ?)'
+    ).bind(postId, user.id, isoNow()).run();
+    return corsJson({ ok: true, liked: true }, {}, request, env);
+  }
+}
+
+// ─── Report Route ─────────────────────────────────────────────────────────────
+
+async function handleReport(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.reported_id || !body.reason) {
+    return corsJson({ ok: false, error: 'reported_id and reason are required' }, { status: 400 }, request, env);
+  }
+
+  // Store report in notifications table (admin type)
+  const now = isoNow();
+  await env.DB.prepare(
+    'INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(1, 'user_report', 'New User Report', `User ${user.id} reported user ${body.reported_id}`, JSON.stringify({ reporter_id: user.id, reported_id: body.reported_id, reason: body.reason, details: body.details || '' }), now).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Upload Avatar Route ──────────────────────────────────────────────────────
+
+async function handleUploadAvatar(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.avatar_data) {
+    return corsJson({ ok: false, error: 'avatar_data is required' }, { status: 400 }, request, env);
+  }
+
+  // For now, store base64 data URL directly (in production, upload to R2)
+  const avatarUrl = body.avatar_data;
+  const now = isoNow();
+  await env.DB.prepare('UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?').bind(avatarUrl, now, user.id).run();
+
+  return corsJson({ ok: true, avatar_url: avatarUrl }, {}, request, env);
+}
+
+// ─── Delete Account Route ─────────────────────────────────────────────────────
+
+async function handleDeleteAccount(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || body.confirmation !== 'DELETE') {
+    return corsJson({ ok: false, error: 'Must confirm with "DELETE"' }, { status: 400 }, request, env);
+  }
+
+  await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run();
+  return corsJson({ ok: true, message: 'Account deleted' }, {}, request, env);
+}
+
+// ─── Checkout Route ───────────────────────────────────────────────────────────
+
+async function handleCreateCheckout(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Placeholder checkout — returns a Lemon Squeezy checkout URL
+  // In production, create a real checkout session via Lemon Squeezy API
+  return corsJson({
+    ok: true,
+    checkout_url: `https://trainingpartner.lemonsqueezy.com/checkout/buy/premium?email=${encodeURIComponent(user.email)}`
+  }, {}, request, env);
+}
+
 // ─── Block User Route ────────────────────────────────────────────────────────
 
 async function handleBlockUser(request, env) {
@@ -1363,6 +1533,26 @@ export default {
 
       // Block
       if (path === '/api/block' && method === 'POST') return handleBlockUser(request, env);
+
+      // Community Posts
+      if (path === '/api/posts' && method === 'GET') return handleGetPosts(request, env);
+      if (path === '/api/posts' && method === 'POST') return handleCreatePost(request, env);
+      if (path.match(/^\/api\/posts\/(\d+)\/like$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleLikePost(request, env, id);
+      }
+
+      // Report
+      if (path === '/api/report' && method === 'POST') return handleReport(request, env);
+
+      // Upload Avatar
+      if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
+
+      // Delete Account
+      if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
+
+      // Checkout
+      if (path === '/api/checkout/create' && method === 'POST') return handleCreateCheckout(request, env);
 
       // Legacy routes
       if (path === '/api/open-mats' && method === 'GET') {

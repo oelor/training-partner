@@ -1,0 +1,40 @@
+{
+  "name": "training-partner-mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~52.0.46",
+    "expo-router": "~4.0.20",
+    "expo-secure-store": "~14.0.1",
+    "expo-image-picker": "~16.0.6",
+    "expo-font": "~13.0.4",
+    "expo-notifications": "~0.29.14",
+    "expo-status-bar": "~2.0.1",
+    "expo-splash-screen": "~0.29.22",
+    "expo-constants": "~17.0.8",
+    "expo-linking": "~7.0.5",
+    "react": "18.2.0",
+    "react-native": "0.76.9",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-screens": "~4.4.0",
+    "react-native-gesture-handler": "~2.20.2",
+    "react-native-reanimated": "~3.16.7",
+    "@react-navigation/native": "^7.0.14",
+    "@expo-google-fonts/bebas-neue": "^0.2.3",
+    "@expo-google-fonts/dm-sans": "^0.2.3",
+    "@react-native-community/netinfo": "11.4.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~18.2.79",
+    "@types/react-native": "~0.73.0",
+    "typescript": "^5.3.3"
+  }
+}
