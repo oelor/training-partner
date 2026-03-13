@@ -13,7 +13,6 @@ import {
   Target,
   Clock,
   Heart,
-  Star,
   CheckCircle,
   ArrowRight,
   Crown
@@ -131,19 +130,19 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* Stats */}
+            {/* Value Props */}
             <div className="grid grid-cols-3 gap-8 mt-20 max-w-lg mx-auto animate-slide-up delay-300">
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">2,500+</div>
-                <div className="text-text-secondary text-sm">Active Athletes</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">FREE</div>
+                <div className="text-text-secondary text-sm">To Get Started</div>
               </div>
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">150+</div>
-                <div className="text-text-secondary text-sm">Partner Gyms</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">BJJ</div>
+                <div className="text-text-secondary text-sm">Wrestling · MMA</div>
               </div>
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">50</div>
-                <div className="text-text-secondary text-sm">Cities</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">24/7</div>
+                <div className="text-text-secondary text-sm">Find Partners</div>
               </div>
             </div>
 
@@ -151,17 +150,17 @@ export default function LandingPage() {
             <div className="mt-16 animate-slide-up delay-400 relative max-w-3xl mx-auto">
               <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
               <div className="bg-surface border border-border rounded-2xl p-6 shadow-2xl shadow-primary/10">
-                {/* Fake app header */}
+                {/* App preview header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                       <Users className="w-4 h-4 text-white" />
                     </div>
-                    <span className="font-heading text-sm text-white">TOP MATCHES</span>
+                    <span className="font-heading text-sm text-white">YOUR MATCHES</span>
                   </div>
-                  <span className="text-text-secondary text-xs">San Francisco, CA</span>
+                  <span className="text-text-secondary text-xs">Preview</span>
                 </div>
-                {/* Fake match cards */}
+                {/* Example match cards */}
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { name: 'Alex R.', sport: 'BJJ', match: 94, skill: 'Purple Belt' },
@@ -448,52 +447,40 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* Why Training Partner */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
-              ATHLETES <span className="gradient-text">LOVE IT</span>
+              BUILT FOR <span className="gradient-text">ATHLETES</span>
             </h2>
+            <p className="text-text-secondary text-lg max-w-2xl mx-auto">
+              We&apos;re building the platform we wish existed — by combat sports athletes, for combat sports athletes.
+            </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
             {[
               {
-                name: 'Marcus T.',
-                sport: 'BJJ Purple Belt',
-                text: 'Found three training partners in my first week. The skill-level matching is spot on — every roll is productive.',
-                stars: 5,
+                icon: '🤼',
+                title: 'Skill-Based Matching',
+                text: 'Get matched with training partners at your level. Filter by sport, weight class, skill, and location.',
               },
               {
-                name: 'Sarah K.',
-                sport: 'MMA Fighter',
-                text: 'The open mat access alone is worth premium. I train at gyms across the city without paying drop-in fees.',
-                stars: 5,
+                icon: '🏟️',
+                title: 'Discover Local Gyms',
+                text: 'Find gyms near you with schedules, class info, and open mat times — all in one place.',
               },
               {
-                name: 'David L.',
-                sport: 'Wrestler',
-                text: 'As an adult wrestler, finding drilling partners was impossible. Training Partner changed that completely.',
-                stars: 5,
+                icon: '📱',
+                title: 'Coordinate Training',
+                text: 'Message partners, plan sessions, and build your training network effortlessly.',
               },
             ].map((t) => (
-              <div key={t.name} className="bg-surface border border-border rounded-xl p-6 card-hover">
-                <div className="flex items-center gap-1 mb-4">
-                  {[...Array(t.stars)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                  ))}
-                </div>
-                <p className="text-text-secondary mb-4 leading-relaxed">&ldquo;{t.text}&rdquo;</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold text-sm">
-                    {t.name.charAt(0)}
-                  </div>
-                  <div>
-                    <div className="text-white text-sm font-medium">{t.name}</div>
-                    <div className="text-text-secondary text-xs">{t.sport}</div>
-                  </div>
-                </div>
+              <div key={t.title} className="bg-surface border border-border rounded-xl p-6 card-hover">
+                <div className="text-4xl mb-4">{t.icon}</div>
+                <h3 className="text-white font-heading text-lg mb-2">{t.title}</h3>
+                <p className="text-text-secondary leading-relaxed">{t.text}</p>
               </div>
             ))}
           </div>
@@ -507,7 +494,7 @@ export default function LandingPage() {
             READY TO FIND YOUR <span className="gradient-text">TRAINING PARTNER</span>?
           </h2>
           <p className="text-text-secondary text-lg mb-10">
-            Join thousands of athletes training smarter, not harder
+            Sign up free and start finding training partners today
           </p>
           <Link 
             href="/auth/signup" 

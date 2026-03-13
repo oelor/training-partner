@@ -71,7 +71,7 @@ export default function SignUpPage() {
 
         <div className="mb-8">
           <h1 className="font-heading text-4xl text-white mb-2">CREATE ACCOUNT</h1>
-          <p className="text-text-secondary">Join thousands of athletes training together</p>
+          <p className="text-text-secondary">Create your free account and find training partners</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
