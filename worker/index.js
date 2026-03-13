@@ -243,6 +243,12 @@ async function getUser(request, env) {
   return user || null;
 }
 
+async function requireAuth(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return null;
+  return user;
+}
+
 // ─── Runtime Schema Initialization ───────────────────────────────────────────
 
 let schemaInitialized = false;

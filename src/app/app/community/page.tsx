@@ -72,7 +72,7 @@ export default function CommunityPage() {
       }
       setTotal(res.total)
     } catch (e) {
-      console.error('Failed to load posts:', e)
+      if (process.env.NODE_ENV !== 'production') console.error('Failed to load posts:', e)
       toast.error('Failed to load posts. Please check your connection and try again.')
     } finally {
       setLoading(false)
@@ -96,7 +96,7 @@ export default function CommunityPage() {
           : p
       ))
     } catch (e) {
-      console.error('Like failed:', e)
+      if (process.env.NODE_ENV !== 'production') console.error('Like failed:', e)
     } finally {
       likingRef.current.delete(postId)
     }
@@ -109,7 +109,7 @@ export default function CommunityPage() {
       setPosts(prev => prev.filter(p => p.id !== postId))
       setTotal(prev => prev - 1)
     } catch (e) {
-      console.error('Delete failed:', e)
+      if (process.env.NODE_ENV !== 'production') console.error('Delete failed:', e)
     }
   }
 
