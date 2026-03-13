@@ -48,27 +48,29 @@ export const viewport: Viewport = {
   themeColor: '#0D0D0D',
 }
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'
+
 const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
     {
       '@type': 'Organization',
-      '@id': 'https://trainingpartner.app/#org',
+      '@id': `${SITE_URL}/#org`,
       name: 'Training Partner',
-      url: 'https://trainingpartner.app',
-      logo: 'https://trainingpartner.app/icon.svg',
+      url: SITE_URL,
+      logo: `${SITE_URL}/icon.svg`,
       description: 'Connect with compatible training partners in your area for combat sports.',
       sameAs: [],
     },
     {
       '@type': 'WebSite',
-      '@id': 'https://trainingpartner.app/#website',
-      url: 'https://trainingpartner.app',
+      '@id': `${SITE_URL}/#website`,
+      url: SITE_URL,
       name: 'Training Partner',
-      publisher: { '@id': 'https://trainingpartner.app/#org' },
+      publisher: { '@id': `${SITE_URL}/#org` },
       potentialAction: {
         '@type': 'SearchAction',
-        target: 'https://trainingpartner.app/partners?q={search_term_string}',
+        target: `${SITE_URL}/partners?q={search_term_string}`,
         'query-input': 'required name=search_term_string',
       },
     },

@@ -90,8 +90,8 @@ export default async function SportPage({ params }: { params: Promise<{ sport: s
     '@type': 'WebPage',
     name: `Find ${info.name} Training Partners`,
     description: info.description,
-    url: `https://trainingpartner.app/partners/${sport}`,
-    isPartOf: { '@id': 'https://trainingpartner.app/#website' },
+    url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'}/partners/${sport}`,
+    isPartOf: { '@id': `${process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'}/#website` },
     about: {
       '@type': 'SportsOrganization',
       name: `${info.name} Training Partners`,
