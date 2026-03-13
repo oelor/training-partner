@@ -40,3 +40,7 @@ next-env.d.ts
 
 # Wrangler local state
 .wrangler/
+
+# Manus build instructions (not app code)
+MANUS_INSTANCE_*.md
+MANUS_PROMPT.md
