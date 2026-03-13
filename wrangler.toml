@@ -4,6 +4,7 @@ compatibility_date = "2026-03-09"
 workers_dev = true
 
 [vars]
+ENVIRONMENT = "production"
 FRONTEND_URL = "https://training-partner.vercel.app"
 # Stripe keys — set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET via `wrangler secret put`
 # Create price IDs in Stripe Dashboard → Products → Add product
@@ -17,6 +18,7 @@ GOOGLE_CLIENT_ID = ""
 
 [env.dev.vars]
 JWT_SECRET = "tp-dev-secret-local-only"
+ENVIRONMENT = "development"
 
 [[d1_databases]]
 binding = "DB"

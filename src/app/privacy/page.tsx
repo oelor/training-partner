@@ -1,7 +1,11 @@
-'use client'
-
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Users } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: 'Privacy Policy | Training Partner',
+  description: 'How Training Partner collects, uses, and protects your personal information.',
+}
 
 export default function PrivacyPage() {
   return (

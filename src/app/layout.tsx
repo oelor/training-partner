@@ -4,7 +4,10 @@ import { Providers } from './providers'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'),
-  title: 'Training Partner - Find Your Perfect Sparring Partner',
+  title: {
+    default: 'Training Partner - Find Your Perfect Sparring Partner',
+    template: '%s | Training Partner',
+  },
   description: 'Connect with compatible training partners in your area. Match by skill level, weight class, and training goals. Plus access exclusive open mat hours at partner gyms.',
   keywords: 'wrestling, MMA, BJJ, boxing, training partner, sparring, combat sports, gym, open mat',
   icons: {
