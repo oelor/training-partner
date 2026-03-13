@@ -1438,21 +1438,6 @@ async function handleStripeWebhook(request, env) {
   const now = isoNow();
 
   switch (event.type) {
-    case 'checkout.session.completed': {
-      const session = event.data.object;
-      const customerId = session.customer;
-      const subscriptionId = session.subscription;
-      const userId = session.metadata?.user_id;
-      const plan = session.metadata?.plan || 'premium';
-
-      if (userId) {
-        await env.DB.prepare(`
-          UPDATE subscriptions SET plan = ?, status = 'active', stripe_customer_id = ?, stripe_subscription_id = ?, updated_at = ?
-          WHERE user_id = ?
-        `).bind(plan, customerId || '', subscriptionId || '', now, parseInt(userId)).run();
-      }
-      break;
-    }
     case 'customer.subscription.updated': {
       const sub = event.data.object;
       const stripeSubId = sub.id;
@@ -1472,6 +1457,30 @@ async function handleStripeWebhook(request, env) {
         UPDATE subscriptions SET plan = 'free', status = 'cancelled', updated_at = ?
         WHERE stripe_subscription_id = ?
       `).bind(now, sub.id).run();
+      break;
+    }
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      // Handle donation checkout completions (mode === 'payment')
+      if (session.mode === 'payment' && session.metadata?.donation_id) {
+        await env.DB.prepare(`
+          UPDATE support_donations SET status = 'completed', stripe_session_id = ?
+          WHERE id = ?
+        `).bind(session.id, parseInt(session.metadata.donation_id)).run().catch(() => {});
+      }
+      // Handle subscription checkout completions (mode === 'subscription')
+      if (session.mode === 'subscription') {
+        const customerId = session.customer;
+        const subscriptionId = session.subscription;
+        const userId = session.metadata?.user_id;
+        const plan = session.metadata?.plan || 'premium';
+        if (userId) {
+          await env.DB.prepare(`
+            UPDATE subscriptions SET plan = ?, status = 'active', stripe_customer_id = ?, stripe_subscription_id = ?, updated_at = ?
+            WHERE user_id = ?
+          `).bind(plan, customerId || '', subscriptionId || '', now, parseInt(userId)).run();
+        }
+      }
       break;
     }
   }
@@ -1847,9 +1856,16 @@ async function handleUploadAvatar(request, env) {
   }
 
   // Accept base64 data URL (data:image/...) up to ~50KB
+  // TODO: Post-launch — migrate to Cloudflare R2 for image storage
   const avatar = body.avatar;
   if (!avatar.startsWith('data:image/')) {
     return corsJson({ ok: false, error: 'Invalid image format. Must be a data URL.' }, { status: 400 }, request, env);
+  }
+
+  // Validate MIME type — only allow common image formats
+  const mimeMatch = avatar.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,/);
+  if (!mimeMatch) {
+    return corsJson({ ok: false, error: 'Unsupported image type. Use JPEG, PNG, GIF, or WebP.' }, { status: 400 }, request, env);
   }
 
   // Rough size check (~50KB base64 = ~68000 chars)
@@ -2475,9 +2491,53 @@ async function handleCreateSupportDonation(request, env) {
     sanitize(body.cause || 'tma'),
     now
   ).run();
-  // TODO: Create Stripe checkout session for donation and return URL
-  // For now, return the donation record as pending
-  return corsJson({ ok: true, donation_id: result.meta.last_row_id, status: 'pending' }, { status: 201 }, request, env);
+  const donationId = result.meta.last_row_id;
+
+  // Create Stripe checkout session for one-time donation
+  if (!env.STRIPE_SECRET_KEY) {
+    // No Stripe configured — return pending donation without checkout URL
+    return corsJson({ ok: true, donation_id: donationId, status: 'pending' }, { status: 201 }, request, env);
+  }
+
+  const frontendUrl = env.FRONTEND_URL || FRONTEND_URL;
+  try {
+    const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'mode': 'payment',
+        'line_items[0][price_data][currency]': 'usd',
+        'line_items[0][price_data][unit_amount]': String(body.amount_cents),
+        'line_items[0][price_data][product_data][name]': 'Donation to The Mat Association',
+        'line_items[0][price_data][product_data][description]': 'Support youth wrestling and combat sports programs',
+        'line_items[0][quantity]': '1',
+        'success_url': `${frontendUrl}/app/support?donation=success`,
+        'cancel_url': `${frontendUrl}/app/support?donation=cancelled`,
+        ...(user?.email ? { 'customer_email': user.email } : {}),
+        'metadata[donation_id]': String(donationId),
+        'metadata[cause]': sanitize(body.cause || 'tma'),
+        ...(user?.id ? { 'metadata[user_id]': String(user.id) } : {}),
+      }),
+    });
+
+    const session = await res.json();
+    if (!res.ok) {
+      // Stripe error — still return donation as pending (user can retry)
+      return corsJson({ ok: true, donation_id: donationId, status: 'pending', error: session.error?.message }, { status: 201 }, request, env);
+    }
+
+    // Update donation with Stripe session ID for tracking
+    await env.DB.prepare('UPDATE support_donations SET stripe_session_id = ? WHERE id = ?')
+      .bind(session.id, donationId).run().catch(() => {});
+
+    return corsJson({ ok: true, donation_id: donationId, url: session.url, session_id: session.id }, { status: 201 }, request, env);
+  } catch (err) {
+    // Network error to Stripe — return pending donation
+    return corsJson({ ok: true, donation_id: donationId, status: 'pending' }, { status: 201 }, request, env);
+  }
 }
 
 async function handleGetSupportStats(request, env) {
@@ -2625,8 +2685,29 @@ async function handleCancelSubscription(request, env) {
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
   const sub = await env.DB.prepare('SELECT * FROM subscriptions WHERE user_id = ?').bind(user.id).first();
   if (!sub || sub.plan === 'free') return corsJson({ ok: false, error: 'No active subscription' }, { status: 400 }, request, env);
-  // TODO: Call Stripe API to cancel subscription
-  // For now, mark as cancelled in DB
+  // Cancel subscription via Stripe API if we have a Stripe subscription ID
+  if (sub.stripe_subscription_id && env.STRIPE_SECRET_KEY) {
+    try {
+      const res = await fetch(`https://api.stripe.com/v1/subscriptions/${sub.stripe_subscription_id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        // If subscription already cancelled in Stripe, continue with DB update
+        if (err.error?.code !== 'resource_missing') {
+          return corsJson({ ok: false, error: err.error?.message || 'Failed to cancel with Stripe' }, { status: 400 }, request, env);
+        }
+      }
+    } catch (err) {
+      return corsJson({ ok: false, error: 'Failed to reach Stripe' }, { status: 503 }, request, env);
+    }
+  }
+
+  // Mark as cancelled in DB
   await env.DB.prepare(`UPDATE subscriptions SET status = 'cancelled', plan = 'free', updated_at = ? WHERE user_id = ?`).bind(isoNow(), user.id).run();
   return corsJson({ ok: true, message: 'Subscription cancelled' }, {}, request, env);
 }
