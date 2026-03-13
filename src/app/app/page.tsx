@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown } from 'lucide-react'
+import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api, { Partner, Gym, Booking } from '@/lib/api'
 import { CardSkeleton } from '@/components/skeleton'
+import { toast, Toaster } from 'sonner'
 
 export default function DashboardPage() {
   const { user, profile, subscription } = useAuth()
@@ -15,6 +16,7 @@ export default function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -29,8 +31,8 @@ export default function DashboardPage() {
         setGyms(gData.gyms?.slice(0, 3) || [])
         setBookings(bData.bookings || [])
         setUnread(mData.unread || 0)
-      } catch {
-        // Silently handle
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
       } finally {
         setLoading(false)
       }
@@ -41,8 +43,37 @@ export default function DashboardPage() {
   const profileComplete = profile?.profile_complete || 0
   const isProfileIncomplete = !profile || profileComplete < 50
 
+  const errorBanner = error ? (
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start gap-3 flex-1">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+        </div>
+        <button onClick={() => setError(null)} className="inline-flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
+          <RefreshCw className="w-4 h-4" />
+          Retry
+        </button>
+      </div>
+    ) : undefined;
+
   return (
-    <div className="space-y-8">
+    <>
+      <Toaster position="top-right" richColors />
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-start gap-3 flex-1">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-400 font-medium text-sm">Couldn&apos;t load dashboard data</p>
+              <p className="text-text-secondary text-xs mt-1">{error}</p>
+            </div>
+          </div>
+          <button onClick={() => setError(null)} className="inline-flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
+            <RefreshCw className="w-4 h-4" />
+            Retry
+          </button>
+        </div>
+      )}
+      <div className="space-y-8">
       {/* Welcome Header */}
       <div>
         <h1 className="font-heading text-3xl text-white mb-2">
@@ -304,5 +335,6 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+    </>
   )
 }
