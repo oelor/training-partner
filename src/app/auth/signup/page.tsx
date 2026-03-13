@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
@@ -55,8 +56,19 @@ export default function SignUpPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Background image with overlay */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/hero-banner.png"
+          alt=""
+          fill
+          className="object-cover object-center opacity-10"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/95 to-background" />
+      </div>
+      <div className="w-full max-w-md relative z-10">
         <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back to Home

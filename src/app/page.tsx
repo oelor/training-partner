@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Users,
   MapPin,
@@ -98,8 +99,19 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Hero background image */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/images/hero-banner.png"
+            alt=""
+            fill
+            className="object-cover object-center opacity-20"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
+        </div>
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center">
             <div className="inline-flex items-center gap-2 bg-surface px-4 py-2 rounded-full border border-border mb-8 animate-fade-in">
               <Zap className="w-4 h-4 text-accent" />
@@ -233,6 +245,22 @@ export default function LandingPage() {
                 confidence knowing everyone is verified.
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Visual break - feature showcase */}
+      <section className="relative py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <div className="max-w-5xl mx-auto">
+          <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10">
+            <Image
+              src="/images/feature-cards.png"
+              alt="Training Partner app features - dynamic wrestling silhouettes with neon accents"
+              width={1920}
+              height={1080}
+              className="w-full h-auto"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/80" />
           </div>
         </div>
       </section>
@@ -447,7 +475,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Why Training Partner */}
+      {/* Why Training Partner — Visual showcase */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -457,6 +485,24 @@ export default function LandingPage() {
             <p className="text-text-secondary text-lg max-w-2xl mx-auto">
               We&apos;re building the platform we wish existed — by combat sports athletes, for combat sports athletes.
             </p>
+          </div>
+
+          {/* Gym showcase with overlay */}
+          <div className="relative rounded-2xl overflow-hidden mb-12 group">
+            <Image
+              src="/images/gym-interior.png"
+              alt="Modern combat sports gym with dramatic lighting"
+              width={1080}
+              height={600}
+              className="w-full h-[400px] object-cover transition-transform duration-700 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-8">
+              <h3 className="font-heading text-3xl text-white mb-2">TRAIN AT THE BEST GYMS</h3>
+              <p className="text-text-secondary max-w-lg">
+                Discover local gyms, check open mat schedules, and access exclusive training sessions — all in one place.
+              </p>
+            </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
@@ -487,21 +533,49 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="font-heading text-4xl sm:text-5xl text-white mb-6">
-            READY TO FIND YOUR <span className="gradient-text">TRAINING PARTNER</span>?
-          </h2>
-          <p className="text-text-secondary text-lg mb-10">
-            Sign up free and start finding training partners today
-          </p>
-          <Link 
-            href="/auth/signup" 
-            className="inline-block bg-primary text-white px-10 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105"
-          >
-            START TRAINING NOW
-          </Link>
+      {/* CTA Section with app mockup */}
+      <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* App mockup */}
+            <div className="relative mx-auto md:mx-0 max-w-[280px] md:max-w-[320px]">
+              <div className="relative rounded-[2rem] overflow-hidden shadow-2xl shadow-primary/20 border-2 border-border">
+                <Image
+                  src="/images/app-mockup.png"
+                  alt="Training Partner mobile app preview"
+                  width={320}
+                  height={568}
+                  className="w-full h-auto"
+                />
+              </div>
+              {/* Glow effect behind phone */}
+              <div className="absolute -inset-4 bg-primary/10 rounded-[3rem] blur-3xl -z-10" />
+            </div>
+
+            {/* CTA content */}
+            <div className="text-center md:text-left">
+              <h2 className="font-heading text-4xl sm:text-5xl text-white mb-6">
+                READY TO FIND YOUR <span className="gradient-text">TRAINING PARTNER</span>?
+              </h2>
+              <p className="text-text-secondary text-lg mb-10">
+                Sign up free and start finding training partners today. Available on web and mobile.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                <Link
+                  href="/auth/signup"
+                  className="inline-block bg-primary text-white px-10 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105 text-center"
+                >
+                  START TRAINING NOW
+                </Link>
+                <Link
+                  href="#features"
+                  className="inline-flex items-center justify-center gap-2 text-text-secondary hover:text-white transition-colors px-6 py-4"
+                >
+                  Learn More <ArrowRight className="w-5 h-5" />
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
