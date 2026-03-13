@@ -120,8 +120,8 @@ export default function FeedbackWidget() {
                   <>
                     {/* Type selector */}
                     <div>
-                      <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">Type</label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <label id="feedback-type-label" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">Type</label>
+                      <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="feedback-type-label">
                         {FEEDBACK_TYPES.map((ft) => (
                           <button
                             key={ft.value}
@@ -167,10 +167,11 @@ export default function FeedbackWidget() {
 
                     {/* Title */}
                     <div>
-                      <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
+                      <label htmlFor="feedback-title" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
                         Title <span className="text-text-secondary/50">(optional)</span>
                       </label>
                       <input
+                        id="feedback-title"
                         type="text"
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
@@ -181,10 +182,11 @@ export default function FeedbackWidget() {
 
                     {/* Body */}
                     <div>
-                      <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
+                      <label htmlFor="feedback-details" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
                         Details *
                       </label>
                       <textarea
+                        id="feedback-details"
                         value={body}
                         onChange={(e) => setBody(e.target.value)}
                         placeholder={

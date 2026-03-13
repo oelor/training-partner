@@ -58,6 +58,7 @@ export default function GymsPage() {
           placeholder="Search gyms by name, city, or sport..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search gyms by name, city, or sport"
           className="w-full bg-surface border border-border rounded-lg py-3 pl-11 pr-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
         />
       </div>

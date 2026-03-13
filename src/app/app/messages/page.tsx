@@ -211,6 +211,7 @@ function MessagesContent() {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type a message..."
+                    aria-label="Type a message"
                     rows={1}
                     className="flex-1 bg-background border border-border rounded-xl py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
                   />

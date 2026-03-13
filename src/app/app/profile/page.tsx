@@ -240,8 +240,9 @@ function ProfileForm() {
 
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Full Name</label>
+            <label htmlFor="displayName" className="block text-text-secondary text-sm mb-2">Full Name</label>
             <input
+              id="displayName"
               type="text"
               value={profile.name}
               onChange={(e) => setProfile({...profile, name: e.target.value})}
@@ -251,8 +252,9 @@ function ProfileForm() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Email</label>
+            <label htmlFor="email" className="block text-text-secondary text-sm mb-2">Email</label>
             <input
+              id="email"
               type="email"
               value={user?.email || ''}
               disabled
@@ -261,8 +263,9 @@ function ProfileForm() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Age</label>
+            <label htmlFor="age" className="block text-text-secondary text-sm mb-2">Age</label>
             <input
+              id="age"
               type="number"
               value={profile.age}
               onChange={(e) => setProfile({...profile, age: e.target.value})}
@@ -272,10 +275,11 @@ function ProfileForm() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Location</label>
+            <label htmlFor="location" className="block text-text-secondary text-sm mb-2">Location</label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="location"
                 type="text"
                 value={profile.location}
                 onChange={(e) => setProfile({...profile, location: e.target.value})}
@@ -316,8 +320,9 @@ function ProfileForm() {
 
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Skill Level</label>
+            <label htmlFor="skillLevel" className="block text-text-secondary text-sm mb-2">Skill Level</label>
             <select
+              id="skillLevel"
               value={profile.skillLevel}
               onChange={(e) => setProfile({...profile, skillLevel: e.target.value})}
               className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
@@ -330,8 +335,9 @@ function ProfileForm() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Weight Class</label>
+            <label htmlFor="weightClass" className="block text-text-secondary text-sm mb-2">Weight Class</label>
             <select
+              id="weightClass"
               value={profile.weightClass}
               onChange={(e) => setProfile({...profile, weightClass: e.target.value})}
               className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
@@ -344,8 +350,9 @@ function ProfileForm() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Years of Experience</label>
+            <label htmlFor="experience" className="block text-text-secondary text-sm mb-2">Years of Experience</label>
             <input
+              id="experience"
               type="number"
               value={profile.experienceYears}
               onChange={(e) => setProfile({...profile, experienceYears: e.target.value})}
@@ -413,7 +420,9 @@ function ProfileForm() {
       {/* Bio */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <h2 className="font-heading text-xl text-white mb-6">ABOUT YOU</h2>
+        <label htmlFor="bio" className="sr-only">About You</label>
         <textarea
+          id="bio"
           value={profile.bio}
           onChange={(e) => setProfile({...profile, bio: e.target.value})}
           placeholder="Tell potential partners about yourself, your style, what you're looking for in a training partner..."

@@ -88,10 +88,11 @@ export default function SignUpPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Full Name</label>
+            <label htmlFor="fullName" className="block text-text-secondary text-sm mb-2">Full Name</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="fullName"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value})}
@@ -103,10 +104,11 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Email Address</label>
+            <label htmlFor="email" className="block text-text-secondary text-sm mb-2">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -118,10 +120,11 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Password</label>
+            <label htmlFor="password" className="block text-text-secondary text-sm mb-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="password"
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({...formData, password: e.target.value})}
@@ -141,8 +144,9 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Primary Sport</label>
+            <label htmlFor="sport" className="block text-text-secondary text-sm mb-2">Primary Sport</label>
             <select
+              id="sport"
               value={formData.sport}
               onChange={(e) => setFormData({...formData, sport: e.target.value})}
               className="w-full bg-surface border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"

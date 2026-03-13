@@ -69,10 +69,11 @@ export default function SignInPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Email Address</label>
+            <label htmlFor="email" className="block text-text-secondary text-sm mb-2">Email Address</label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({...formData, email: e.target.value})}
@@ -84,10 +85,11 @@ export default function SignInPage() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Password</label>
+            <label htmlFor="password" className="block text-text-secondary text-sm mb-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="password"
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({...formData, password: e.target.value})}

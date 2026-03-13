@@ -100,8 +100,9 @@ export default function CreatePostPage() {
 
         {/* Sport */}
         <div>
-          <label className="block text-white text-sm font-medium mb-2">Sport (optional)</label>
+          <label htmlFor="sport" className="block text-white text-sm font-medium mb-2">Sport (optional)</label>
           <select
+            id="sport"
             value={sport}
             onChange={e => setSport(e.target.value)}
             className="w-full bg-surface border border-border text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary"
@@ -114,8 +115,9 @@ export default function CreatePostPage() {
 
         {/* Title */}
         <div>
-          <label className="block text-white text-sm font-medium mb-2">Title</label>
+          <label htmlFor="title" className="block text-white text-sm font-medium mb-2">Title</label>
           <input
+            id="title"
             type="text"
             value={title}
             onChange={e => setTitle(e.target.value)}
@@ -127,8 +129,9 @@ export default function CreatePostPage() {
 
         {/* Body */}
         <div>
-          <label className="block text-white text-sm font-medium mb-2">Content</label>
+          <label htmlFor="content" className="block text-white text-sm font-medium mb-2">Content</label>
           <textarea
+            id="content"
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="Share your thoughts, tips, questions, or event details..."

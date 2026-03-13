@@ -68,6 +68,7 @@ export default function PartnersPage() {
             placeholder="Search by name, sport, or city..."
             value={filters.search}
             onChange={(e) => setFilters({...filters, search: e.target.value})}
+            aria-label="Search by name, sport, or city"
             className="w-full bg-surface border border-border rounded-lg py-3 pl-11 pr-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
           />
         </div>
@@ -76,6 +77,7 @@ export default function PartnersPage() {
           <select
             value={filters.sport}
             onChange={(e) => setFilters({...filters, sport: e.target.value})}
+            aria-label="Filter by sport"
             className="bg-surface border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
           >
             {sportsList.map(sport => (
@@ -86,6 +88,7 @@ export default function PartnersPage() {
           <select
             value={filters.skill}
             onChange={(e) => setFilters({...filters, skill: e.target.value})}
+            aria-label="Filter by skill level"
             className="bg-surface border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
           >
             {skillLevels.map(level => (

@@ -174,7 +174,9 @@ export default function SettingsPage() {
                       </div>
                       {editingInstagram ? (
                         <div className="flex items-center gap-2">
+                          <label htmlFor="instagramUsername" className="sr-only">Instagram Username</label>
                           <input
+                            id="instagramUsername"
                             type="text"
                             value={instagramUsername}
                             onChange={e => setInstagramUsername(e.target.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, ''))}
@@ -345,7 +347,8 @@ export default function SettingsPage() {
                     <div className="text-white font-medium">Profile Visibility</div>
                     <div className="text-text-secondary text-sm">Who can see your profile</div>
                   </div>
-                  <select className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm">
+                  <label htmlFor="profileVisibility" className="sr-only">Profile Visibility</label>
+                  <select id="profileVisibility" className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm">
                     <option>All Members</option>
                     <option>Partners Only</option>
                   </select>
@@ -477,10 +480,11 @@ export default function SettingsPage() {
               <li>• Subscription and payment history</li>
             </ul>
 
-            <label className="block text-text-secondary text-sm mb-2">
+            <label htmlFor="deleteConfirmation" className="block text-text-secondary text-sm mb-2">
               Type <span className="text-red-400 font-mono font-bold">DELETE</span> to confirm
             </label>
             <input
+              id="deleteConfirmation"
               type="text"
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}

@@ -184,8 +184,9 @@ export default function OnboardingPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Full Name *</label>
+                <label htmlFor="fullName" className="block text-text-secondary text-sm mb-2">Full Name *</label>
                 <input
+                  id="fullName"
                   type="text"
                   value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
@@ -195,8 +196,9 @@ export default function OnboardingPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-text-secondary text-sm mb-2">Age</label>
+                  <label htmlFor="age" className="block text-text-secondary text-sm mb-2">Age</label>
                   <input
+                    id="age"
                     type="number"
                     value={profile.age}
                     onChange={(e) => setProfile({ ...profile, age: e.target.value })}
@@ -205,10 +207,11 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-text-secondary text-sm mb-2">Location *</label>
+                  <label htmlFor="location" className="block text-text-secondary text-sm mb-2">Location *</label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                     <input
+                      id="location"
                       type="text"
                       value={profile.location}
                       onChange={(e) => setProfile({ ...profile, location: e.target.value })}
@@ -219,8 +222,9 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Short Bio</label>
+                <label htmlFor="bio" className="block text-text-secondary text-sm mb-2">Short Bio</label>
                 <textarea
+                  id="bio"
                   value={profile.bio}
                   onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
                   placeholder="Tell partners about yourself and your training style..."
@@ -291,8 +295,9 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Weight Class</label>
+                <label htmlFor="weightClass" className="block text-text-secondary text-sm mb-2">Weight Class</label>
                 <select
+                  id="weightClass"
                   value={profile.weightClass}
                   onChange={(e) => setProfile({ ...profile, weightClass: e.target.value })}
                   className="w-full bg-surface border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
@@ -305,8 +310,9 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Years of Experience</label>
+                <label htmlFor="experience" className="block text-text-secondary text-sm mb-2">Years of Experience</label>
                 <input
+                  id="experience"
                   type="number"
                   value={profile.experienceYears}
                   onChange={(e) => setProfile({ ...profile, experienceYears: e.target.value })}

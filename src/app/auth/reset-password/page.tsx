@@ -108,10 +108,11 @@ function ResetPasswordContent() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-text-secondary text-sm mb-2">New Password</label>
+            <label htmlFor="newPassword" className="block text-text-secondary text-sm mb-2">New Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="newPassword"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -124,10 +125,11 @@ function ResetPasswordContent() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Confirm Password</label>
+            <label htmlFor="confirmPassword" className="block text-text-secondary text-sm mb-2">Confirm Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="confirmPassword"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
