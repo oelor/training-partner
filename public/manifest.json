@@ -1,0 +1,16 @@
+{
+  "name": "Training Partner",
+  "short_name": "TP",
+  "description": "Find your perfect sparring partner. Match by skill level, weight class, and training goals.",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#0D0D0D",
+  "theme_color": "#FF4D00",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

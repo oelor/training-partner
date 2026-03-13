@@ -2,14 +2,16 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
+import GoogleSignIn from '@/components/google-signin'
 
 export default function SignInPage() {
   const router = useRouter()
-  const { login } = useAuth()
+  const { login, googleLogin } = useAuth()
   const toast = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({ email: '', password: '' })
@@ -35,8 +37,19 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Background image with overlay */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/hero-banner.png"
+          alt=""
+          fill
+          className="object-cover object-center opacity-10"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/95 to-background" />
+      </div>
+      <div className="w-full max-w-md relative z-10">
         <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back to Home
@@ -92,6 +105,12 @@ export default function SignInPage() {
             </div>
           </div>
 
+          <div className="flex justify-end">
+            <Link href="/auth/forgot-password" className="text-sm text-text-secondary hover:text-primary transition-colors">
+              Forgot password?
+            </Link>
+          </div>
+
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -107,6 +126,31 @@ export default function SignInPage() {
             {loading ? 'Signing In...' : 'SIGN IN'}
           </button>
         </form>
+
+        <div className="flex items-center gap-4 my-6">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-text-secondary text-sm">or</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        <GoogleSignIn
+          onCredential={async (credential) => {
+            setLoading(true)
+            setError('')
+            try {
+              const result = await googleLogin(credential)
+              toast.success('Welcome!')
+              router.push(result.isNewUser ? '/app/onboarding' : '/app')
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Google sign-in failed'
+              setError(message)
+              toast.error(message)
+            } finally {
+              setLoading(false)
+            }
+          }}
+          disabled={loading}
+        />
 
         <p className="text-center text-text-secondary mt-8">
           Don&apos;t have an account?{' '}

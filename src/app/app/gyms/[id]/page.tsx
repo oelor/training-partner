@@ -1,0 +1,370 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  ArrowLeft, MapPin, Clock, Shield, Phone, Mail, Calendar, Star,
+  Lock, Loader2, CheckCircle, Dumbbell, Globe, ChevronDown, ChevronUp
+} from 'lucide-react'
+import api, { GymDetail, GymSession } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
+import { useToast } from '@/components/toast'
+
+export default function GymDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { subscription } = useAuth()
+  const toast = useToast()
+  const [gym, setGym] = useState<GymDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [bookingSession, setBookingSession] = useState<number | null>(null)
+  const [bookedSessions, setBookedSessions] = useState<Set<number>>(new Set())
+  const [showAllReviews, setShowAllReviews] = useState(false)
+  const [reviewForm, setReviewForm] = useState({ rating: 0, comment: '' })
+  const [submittingReview, setSubmittingReview] = useState(false)
+
+  const gymId = Number(params.id)
+  const isPremium = subscription?.plan === 'premium'
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await api.getGymDetail(gymId)
+        setGym(data.gym)
+      } catch {
+        toast.error('Failed to load gym details')
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (gymId) load()
+  }, [gymId, toast])
+
+  const handleBookSession = async (sessionId: number) => {
+    setBookingSession(sessionId)
+    try {
+      await api.createBooking(sessionId)
+      setBookedSessions(prev => new Set(prev).add(sessionId))
+      toast.success('Session booked! Check your bookings page for details.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Booking failed'
+      toast.error(message)
+    } finally {
+      setBookingSession(null)
+    }
+  }
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (reviewForm.rating === 0) {
+      toast.error('Please select a rating')
+      return
+    }
+    setSubmittingReview(true)
+    try {
+      await api.createReview(gymId, reviewForm.rating, reviewForm.comment || undefined)
+      toast.success('Review submitted!')
+      setReviewForm({ rating: 0, comment: '' })
+      // Refresh gym data to show new review
+      const data = await api.getGymDetail(gymId)
+      setGym(data.gym)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit review'
+      toast.error(message)
+    } finally {
+      setSubmittingReview(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center py-16">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    )
+  }
+
+  if (!gym) {
+    return (
+      <div className="text-center py-16">
+        <h2 className="font-heading text-2xl text-white mb-2">Gym not found</h2>
+        <p className="text-text-secondary mb-6">This gym may have been removed or doesn&apos;t exist.</p>
+        <Link href="/app/gyms" className="text-primary hover:underline">
+          ← Back to Gyms
+        </Link>
+      </div>
+    )
+  }
+
+  const visibleReviews = showAllReviews ? gym.reviews : gym.reviews?.slice(0, 3)
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Back link */}
+      <Link
+        href="/app/gyms"
+        className="inline-flex items-center gap-2 text-text-secondary hover:text-primary transition-colors"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Gyms
+      </Link>
+
+      {/* Hero card */}
+      <div className="bg-surface border border-border rounded-xl p-6 lg:p-8">
+        <div className="flex flex-col sm:flex-row items-start gap-6">
+          <div className="w-20 h-20 bg-accent/20 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Dumbbell className="w-10 h-10 text-accent" />
+          </div>
+
+          <div className="flex-1">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-2">
+              <div>
+                <h1 className="font-heading text-3xl text-white">{gym.name}</h1>
+                <p className="text-text-secondary">{gym.address}, {gym.city}, {gym.state}</p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {gym.verified && (
+                  <span className="bg-accent/20 text-accent text-xs px-3 py-1.5 rounded-lg flex items-center gap-1">
+                    <Shield className="w-3 h-3" /> Verified
+                  </span>
+                )}
+                {gym.premium && (
+                  <span className="bg-primary/20 text-primary text-xs px-3 py-1.5 rounded-lg">
+                    Premium
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Rating row */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center gap-1">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className={`w-5 h-5 ${i < Math.round(gym.rating) ? 'text-yellow-500 fill-yellow-500' : 'text-border'}`} />
+                ))}
+              </div>
+              <span className="text-white font-medium">{gym.rating}</span>
+              <span className="text-text-secondary">({gym.review_count} reviews)</span>
+            </div>
+
+            {/* Sports & amenities */}
+            <div className="flex flex-wrap gap-2">
+              {gym.sports?.map(sport => (
+                <span key={sport} className="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm">
+                  {sport}
+                </span>
+              ))}
+              {gym.amenities?.map(amenity => (
+                <span key={amenity} className="px-3 py-1 bg-background border border-border text-text-secondary rounded-full text-sm">
+                  {amenity}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Premium gate notice */}
+      {gym.premium && !isPremium && (
+        <div className="bg-accent/10 border border-accent/30 rounded-xl p-5 flex items-start gap-4">
+          <Lock className="w-6 h-6 text-accent flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-white font-medium mb-1">Premium Gym</h3>
+            <p className="text-text-secondary text-sm mb-3">Upgrade to Premium to book open mat sessions at this gym.</p>
+            <Link
+              href="/app/settings"
+              className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors"
+            >
+              Upgrade to Premium
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Info + Contact grid */}
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* About */}
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="text-text-secondary text-sm font-medium mb-3">ABOUT</h3>
+          <p className="text-white leading-relaxed">{gym.description || 'No description available.'}</p>
+          <div className="mt-4 pt-4 border-t border-border">
+            <div className="flex items-center justify-between">
+              <span className="text-text-secondary">Drop-in Rate</span>
+              <span className="text-white font-heading text-2xl">{gym.price || 'Contact gym'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Contact */}
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="text-text-secondary text-sm font-medium mb-3">CONTACT</h3>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <MapPin className="w-5 h-5 text-text-secondary flex-shrink-0" />
+              <span className="text-white text-sm">{gym.address}, {gym.city}, {gym.state}</span>
+            </div>
+            {gym.phone && (
+              <div className="flex items-center gap-3">
+                <Phone className="w-5 h-5 text-text-secondary flex-shrink-0" />
+                <a href={`tel:${gym.phone}`} className="text-primary text-sm hover:underline">{gym.phone}</a>
+              </div>
+            )}
+            {gym.email && (
+              <div className="flex items-center gap-3">
+                <Mail className="w-5 h-5 text-text-secondary flex-shrink-0" />
+                <a href={`mailto:${gym.email}`} className="text-primary text-sm hover:underline">{gym.email}</a>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Sessions */}
+      <div className="bg-surface border border-border rounded-xl p-5">
+        <h3 className="text-text-secondary text-sm font-medium mb-4 flex items-center gap-2">
+          <Calendar className="w-4 h-4" />
+          OPEN MAT SESSIONS
+        </h3>
+
+        {gym.sessions && gym.sessions.length > 0 ? (
+          <div className="space-y-2">
+            {gym.sessions.map((session) => {
+              const isBooked = bookedSessions.has(session.id)
+              const canBook = (!gym.premium || isPremium) && session.available > 0 && !isBooked
+
+              return (
+                <div key={session.id} className="flex items-center justify-between bg-background rounded-lg p-4">
+                  <div className="flex items-center gap-4">
+                    <Clock className="w-5 h-5 text-accent flex-shrink-0" />
+                    <div>
+                      <span className="text-white font-medium">{session.day}</span>
+                      <span className="text-text-secondary ml-2">{session.start_time} - {session.end_time}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className={`text-sm ${session.available <= 2 ? 'text-red-400' : 'text-text-secondary'}`}>
+                      {session.available} {session.available === 1 ? 'slot' : 'slots'} left
+                    </span>
+                    {isBooked ? (
+                      <span className="flex items-center gap-1 text-accent text-sm">
+                        <CheckCircle className="w-4 h-4" /> Booked
+                      </span>
+                    ) : canBook ? (
+                      <button
+                        onClick={() => handleBookSession(session.id)}
+                        disabled={bookingSession === session.id}
+                        className="bg-primary text-white text-sm px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {bookingSession === session.id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Booking...
+                          </>
+                        ) : (
+                          'Book Session'
+                        )}
+                      </button>
+                    ) : gym.premium && !isPremium ? (
+                      <Lock className="w-4 h-4 text-accent" />
+                    ) : (
+                      <span className="text-text-secondary text-sm">Full</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-text-secondary text-sm text-center py-6">No sessions currently scheduled</p>
+        )}
+      </div>
+
+      {/* Reviews */}
+      <div className="bg-surface border border-border rounded-xl p-5">
+        <h3 className="text-text-secondary text-sm font-medium mb-4 flex items-center gap-2">
+          <Star className="w-4 h-4" />
+          REVIEWS ({gym.review_count || 0})
+        </h3>
+
+        {visibleReviews && visibleReviews.length > 0 ? (
+          <div className="space-y-3 mb-4">
+            {visibleReviews.map(review => (
+              <div key={review.id} className="bg-background rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white font-medium">{review.user_name}</span>
+                  <div className="flex items-center gap-1">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className={`w-4 h-4 ${i < review.rating ? 'text-yellow-500 fill-yellow-500' : 'text-border'}`} />
+                    ))}
+                  </div>
+                </div>
+                {review.comment && (
+                  <p className="text-text-secondary text-sm">{review.comment}</p>
+                )}
+                <span className="text-text-secondary text-xs mt-2 block">
+                  {new Date(review.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+
+            {gym.reviews && gym.reviews.length > 3 && (
+              <button
+                onClick={() => setShowAllReviews(!showAllReviews)}
+                className="text-primary text-sm hover:underline flex items-center gap-1"
+              >
+                {showAllReviews ? (
+                  <>Show Less <ChevronUp className="w-4 h-4" /></>
+                ) : (
+                  <>Show All {gym.reviews.length} Reviews <ChevronDown className="w-4 h-4" /></>
+                )}
+              </button>
+            )}
+          </div>
+        ) : (
+          <p className="text-text-secondary text-sm text-center py-4 mb-4">No reviews yet. Be the first!</p>
+        )}
+
+        {/* Review form */}
+        <div className="border-t border-border pt-4">
+          <h4 className="text-white text-sm font-medium mb-3">Leave a Review</h4>
+          <form onSubmit={handleSubmitReview} className="space-y-3">
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                  className="p-1"
+                >
+                  <Star
+                    className={`w-6 h-6 transition-colors ${
+                      star <= reviewForm.rating
+                        ? 'text-yellow-500 fill-yellow-500'
+                        : 'text-border hover:text-yellow-500/50'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={reviewForm.comment}
+              onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
+              placeholder="Share your experience (optional)"
+              rows={3}
+              className="w-full bg-background border border-border rounded-lg p-3 text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
+            />
+            <button
+              type="submit"
+              disabled={submittingReview || reviewForm.rating === 0}
+              className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {submittingReview && <Loader2 className="w-4 h-4 animate-spin" />}
+              {submittingReview ? 'Submitting...' : 'Submit Review'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}

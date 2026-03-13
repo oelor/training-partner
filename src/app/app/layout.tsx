@@ -5,20 +5,26 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import {
   Users, Home, User, MapPin, Settings, LogOut, Menu, X,
-  MessageCircle, Crown, UserSearch, Bell, Calendar
+  MessageCircle, Crown, UserSearch, Bell, Calendar, AlertTriangle, Loader2,
+  Shield, Newspaper
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api from '@/lib/api'
+import ErrorBoundary from '@/components/error-boundary'
 
-const navItems = [
+const baseNavItems = [
   { href: '/app', label: 'Dashboard', icon: Home },
   { href: '/app/partners', label: 'Find Partners', icon: UserSearch },
   { href: '/app/gyms', label: 'Partner Gyms', icon: MapPin },
   { href: '/app/messages', label: 'Messages', icon: MessageCircle },
+  { href: '/app/community', label: 'Community', icon: Newspaper },
   { href: '/app/bookings', label: 'Bookings', icon: Calendar },
+  { href: '/app/notifications', label: 'Notifications', icon: Bell },
   { href: '/app/profile', label: 'Profile', icon: User },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ]
+
+const adminNavItem = { href: '/app/admin', label: 'Admin', icon: Shield }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -26,6 +32,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout, subscription } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [unreadMessages, setUnreadMessages] = useState(0)
+  const [resendingVerification, setResendingVerification] = useState(false)
+  const [verificationSent, setVerificationSent] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -64,11 +72,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push('/')
   }
 
+  const handleResendVerification = async () => {
+    setResendingVerification(true)
+    try {
+      await api.resendVerification()
+      setVerificationSent(true)
+    } catch {
+      // silently fail
+    } finally {
+      setResendingVerification(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
-        <button onClick={() => setSidebarOpen(true)} className="text-white">
+        <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu" className="text-white">
           <Menu className="w-6 h-6" />
         </button>
         <div className="flex items-center gap-2">
@@ -110,7 +130,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </div>
                 <span className="font-heading text-xl text-white">TRAINING PARTNER</span>
               </Link>
-              <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-text-secondary">
+              <button onClick={() => setSidebarOpen(false)} aria-label="Close navigation menu" className="lg:hidden text-text-secondary">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -129,7 +149,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex-1 p-4 space-y-1">
-            {navItems.map((item) => {
+            {[...baseNavItems, ...((user?.role === 'admin' || user?.role === 'gym_owner') ? [adminNavItem] : [])].map((item) => {
               const isActive = pathname === item.href || (item.href !== '/app' && pathname.startsWith(item.href))
               return (
                 <Link
@@ -187,8 +207,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="lg:pl-64 pt-16 lg:pt-0">
+        {/* Email Verification Banner */}
+        {user && !user.email_verified && (
+          <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-6 py-3">
+            <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Please verify your email to unlock all features.</span>
+              </div>
+              {verificationSent ? (
+                <span className="text-accent text-sm whitespace-nowrap">Verification email sent!</span>
+              ) : (
+                <button
+                  onClick={handleResendVerification}
+                  disabled={resendingVerification}
+                  className="text-yellow-400 hover:text-yellow-300 text-sm font-medium whitespace-nowrap flex items-center gap-1"
+                >
+                  {resendingVerification && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Resend Email
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </div>
       </main>
     </div>

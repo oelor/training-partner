@@ -9,24 +9,123 @@ function json(data, init = {}) {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
+// Allowed origins for CORS — restrict to known frontends
+const ALLOWED_ORIGINS = [
+  'https://training-partner.vercel.app',
+  'https://trainingpartner.app',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
+function isAllowedOrigin(origin, env) {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Allow custom frontend URL from env
+  if (env.FRONTEND_URL && origin === env.FRONTEND_URL) return true;
+  // Allow Vercel preview deployments
+  if (origin.match(/^https:\/\/training-partner-[\w-]+\.vercel\.app$/)) return true;
+  return false;
+}
+
 function corsHeaders(origin, env) {
+  const allowedOrigin = isAllowedOrigin(origin, env) ? origin : ALLOWED_ORIGINS[0];
   return {
-    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
 }
 
 function corsJson(data, init = {}, request, env) {
-  const origin = request.headers.get('Origin') || '*';
+  const origin = request.headers.get('Origin') || '';
   const headers = new Headers(init.headers || {});
   headers.set('Content-Type', 'application/json; charset=utf-8');
   const cors = corsHeaders(origin, env);
   for (const [k, v] of Object.entries(cors)) headers.set(k, v);
   return new Response(JSON.stringify(data), { ...init, headers });
 }
+
+// ─── Email Service ──────────────────────────────────────────────────────────
+
+const FRONTEND_URL = 'https://training-partner.vercel.app';
+
+async function sendEmail(env, { to, subject, html }) {
+  // If RESEND_API_KEY is set, use Resend (free tier: 100 emails/day)
+  if (env.RESEND_API_KEY) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM || 'Training Partner <noreply@trainingpartner.app>',
+          to,
+          subject,
+          html,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        console.error('Resend error:', err);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Resend send failed:', e);
+      return false;
+    }
+  }
+
+  // Fallback: log to console (development)
+  console.log(`[EMAIL] To: ${to} | Subject: ${subject}`);
+  console.log(`[EMAIL] Body: ${html}`);
+  return true;
+}
+
+function passwordResetEmailHtml(resetUrl) {
+  return `
+    <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #FF4D00; margin-bottom: 16px;">Reset Your Password</h2>
+      <p style="color: #333; line-height: 1.6;">
+        You requested a password reset for your Training Partner account. Click the button below to set a new password.
+      </p>
+      <a href="${resetUrl}" style="display: inline-block; background: #FF4D00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;">
+        Reset Password
+      </a>
+      <p style="color: #666; font-size: 14px; line-height: 1.5;">
+        This link expires in 1 hour. If you didn't request this, you can safely ignore this email.
+      </p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="color: #999; font-size: 12px;">Training Partner &mdash; Never Train Alone Again</p>
+    </div>
+  `;
+}
+
+function verificationEmailHtml(verifyUrl) {
+  return `
+    <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #FF4D00; margin-bottom: 16px;">Verify Your Email</h2>
+      <p style="color: #333; line-height: 1.6;">
+        Welcome to Training Partner! Please verify your email address to unlock all features.
+      </p>
+      <a href="${verifyUrl}" style="display: inline-block; background: #FF4D00; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;">
+        Verify Email
+      </a>
+      <p style="color: #666; font-size: 14px; line-height: 1.5;">
+        If you didn't create this account, you can safely ignore this email.
+      </p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="color: #999; font-size: 12px;">Training Partner &mdash; Never Train Alone Again</p>
+    </div>
+  `;
+}
+
+// ─── CORS ───────────────────────────────────────────────────────────────────
 
 function handleCors(request, env) {
   const origin = request.headers.get('Origin') || '*';
@@ -48,9 +147,10 @@ function isoNow() {
   return new Date().toISOString();
 }
 
-function sanitize(str) {
+function sanitize(str, maxLen = 5000) {
   if (typeof str !== 'string') return '';
-  return str.replace(/[<>]/g, '').trim().slice(0, 5000);
+  // Strip HTML-significant and script-injection characters
+  return str.replace(/[<>"'`]/g, '').replace(/javascript:/gi, '').trim().slice(0, maxLen);
 }
 
 // ─── Password Hashing (PBKDF2 via Web Crypto API) ───────────────────────────
@@ -130,8 +230,9 @@ async function verifyJWT(token, secret) {
 async function getUser(request, env) {
   const auth = request.headers.get('Authorization');
   if (!auth || !auth.startsWith('Bearer ')) return null;
+  if (!env.JWT_SECRET) return null; // Reject if secret not configured
   const token = auth.slice(7);
-  const payload = await verifyJWT(token, env.JWT_SECRET || 'tp-jwt-secret');
+  const payload = await verifyJWT(token, env.JWT_SECRET);
   if (!payload || !payload.userId) return null;
   const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(payload.userId).first();
   return user || null;
@@ -146,24 +247,28 @@ async function ensureFullSchema(env) {
   schemaInitialized = true;
   try {
     const tables = [
-      `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '', city TEXT DEFAULT '', role TEXT NOT NULL DEFAULT 'athlete', email_verified INTEGER NOT NULL DEFAULT 0, verification_token TEXT, reset_token TEXT, reset_token_expires TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, token TEXT)`,
+      `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '', city TEXT DEFAULT '', role TEXT NOT NULL DEFAULT 'athlete', email_verified INTEGER NOT NULL DEFAULT 0, verification_token TEXT, reset_token TEXT, reset_token_expires TEXT, google_id TEXT, instagram_username TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, token TEXT)`,
       `CREATE TABLE IF NOT EXISTS user_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, sports TEXT, skill_level TEXT, weight_class TEXT, training_goals TEXT, experience_years INTEGER DEFAULT 0, bio TEXT, availability TEXT, age INTEGER DEFAULT 0, location TEXT, profile_complete INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS gyms (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, address TEXT DEFAULT '', city TEXT DEFAULT '', state TEXT DEFAULT '', lat REAL DEFAULT 0, lng REAL DEFAULT 0, phone TEXT DEFAULT '', email TEXT DEFAULT '', description TEXT DEFAULT '', sports TEXT DEFAULT '[]', amenities TEXT DEFAULT '[]', verified INTEGER NOT NULL DEFAULT 0, premium INTEGER NOT NULL DEFAULT 0, rating REAL NOT NULL DEFAULT 0, review_count INTEGER NOT NULL DEFAULT 0, price TEXT DEFAULT '', owner_id INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS gym_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, day_of_week TEXT NOT NULL, start_time TEXT NOT NULL, end_time TEXT NOT NULL, max_slots INTEGER NOT NULL DEFAULT 20, current_slots INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, session_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'confirmed', created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS matches (id INTEGER PRIMARY KEY AUTOINCREMENT, user_a INTEGER NOT NULL, user_b INTEGER NOT NULL, score REAL NOT NULL DEFAULT 0, explanation TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id INTEGER NOT NULL, receiver_id INTEGER NOT NULL, content TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
-      `CREATE TABLE IF NOT EXISTS subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, plan TEXT NOT NULL DEFAULT 'free', status TEXT NOT NULL DEFAULT 'active', lemon_squeezy_id TEXT, lemon_squeezy_customer_id TEXT, current_period_start TEXT, current_period_end TEXT, trial_ends_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, plan TEXT NOT NULL DEFAULT 'free', status TEXT NOT NULL DEFAULT 'active', stripe_customer_id TEXT, stripe_subscription_id TEXT, current_period_start TEXT, current_period_end TEXT, trial_ends_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, body TEXT DEFAULT '', data TEXT DEFAULT '{}', read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS gym_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, user_id INTEGER NOT NULL, rating INTEGER NOT NULL, comment TEXT DEFAULT '', created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS favorite_gyms (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, gym_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS blocked_users (id INTEGER PRIMARY KEY AUTOINCREMENT, blocker_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS reports (id INTEGER PRIMARY KEY AUTOINCREMENT, reporter_id INTEGER NOT NULL, reported_id INTEGER NOT NULL, reason TEXT NOT NULL, details TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS rate_limits (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 1, window_start TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS founding_applications (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, role TEXT NOT NULL, city TEXT, sport TEXT, goal TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'new')`,
       `CREATE TABLE IF NOT EXISTS waitlist_signups (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, name TEXT, email TEXT NOT NULL, role TEXT, city TEXT, notes TEXT, status TEXT NOT NULL DEFAULT 'new')`,
       `CREATE TABLE IF NOT EXISTS open_mats (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, city TEXT NOT NULL, sport TEXT NOT NULL, venue TEXT, day_of_week TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1)`,
-      `CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT DEFAULT '', body TEXT NOT NULL, type TEXT DEFAULT 'general', sport TEXT DEFAULT '', created_at TEXT NOT NULL)`,
-      `CREATE TABLE IF NOT EXISTS post_likes (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'article', sport TEXT DEFAULT '', media_url TEXT DEFAULT '', likes_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS post_likes (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(post_id, user_id))`,
+      `CREATE TABLE IF NOT EXISTS donations (id INTEGER PRIMARY KEY AUTOINCREMENT, donor_id INTEGER NOT NULL, recipient_id INTEGER NOT NULL, amount_cents INTEGER NOT NULL, message TEXT DEFAULT '', stripe_payment_intent_id TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS gym_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, type TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', file_data TEXT DEFAULT '', verified INTEGER NOT NULL DEFAULT 0, uploaded_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS private_lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, coach_user_id INTEGER NOT NULL, sport TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', description TEXT DEFAULT '', price_cents INTEGER NOT NULL DEFAULT 0, duration_minutes INTEGER NOT NULL DEFAULT 60, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -174,11 +279,35 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)',
       'CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)',
       'CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_reports_reported ON reports(reported_id)',
+      'CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status)',
       'CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at DESC)',
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_post_likes_pair ON post_likes(post_id, user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_docs_gym ON gym_documents(gym_id)',
+      'CREATE INDEX IF NOT EXISTS idx_private_lessons_gym ON private_lessons(gym_id)',
+      'CREATE INDEX IF NOT EXISTS idx_users_google ON users(google_id)',
+      'CREATE INDEX IF NOT EXISTS idx_bookings_user ON bookings(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_bookings_session ON bookings(session_id, status)',
+      'CREATE INDEX IF NOT EXISTS idx_blocked_blocker ON blocked_users(blocker_id)',
+      'CREATE INDEX IF NOT EXISTS idx_blocked_blocked ON blocked_users(blocked_id)',
+      'CREATE INDEX IF NOT EXISTS idx_sub_stripe ON subscriptions(stripe_subscription_id)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_reviews_gym ON gym_reviews(gym_id)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_reviews_user_gym ON gym_reviews(user_id, gym_id)',
+      'CREATE INDEX IF NOT EXISTS idx_rate_limits_key ON rate_limits(key, window_start)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_sessions_gym ON gym_sessions(gym_id)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
+    }
+    // Safe column additions for existing databases
+    const safeAlters = [
+      'ALTER TABLE users ADD COLUMN google_id TEXT',
+      'ALTER TABLE users ADD COLUMN instagram_username TEXT',
+    ];
+    for (const sql of safeAlters) {
+      try { await env.DB.prepare(sql).run(); } catch {} // ignore "duplicate column" errors
     }
     // Seed gyms if empty
     const gymCount = await env.DB.prepare('SELECT COUNT(*) as cnt FROM gyms').first();
@@ -246,8 +375,8 @@ async function handleRegister(request, env) {
   if (!name || !email || !password) {
     return corsJson({ ok: false, error: 'Name, email, and password are required' }, { status: 400 }, request, env);
   }
-  if (password.length < 6) {
-    return corsJson({ ok: false, error: 'Password must be at least 6 characters' }, { status: 400 }, request, env);
+  if (password.length < 6 || password.length > 128) {
+    return corsJson({ ok: false, error: 'Password must be 6-128 characters' }, { status: 400 }, request, env);
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return corsJson({ ok: false, error: 'Invalid email address' }, { status: 400 }, request, env);
@@ -258,6 +387,27 @@ async function handleRegister(request, env) {
   const allowed = await checkRateLimit(env, `register:${ip}`, 5, 3600);
   if (!allowed) {
     return corsJson({ ok: false, error: 'Too many registration attempts. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // Verify Cloudflare Turnstile token (if configured)
+  const turnstileToken = body.turnstile_token || body.cf_turnstile_response;
+  if (env.TURNSTILE_SECRET_KEY) {
+    if (!turnstileToken) {
+      return corsJson({ ok: false, error: 'Please complete the verification challenge' }, { status: 400 }, request, env);
+    }
+    const turnstileRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        secret: env.TURNSTILE_SECRET_KEY,
+        response: turnstileToken,
+        remoteip: ip,
+      }),
+    });
+    const turnstileData = await turnstileRes.json();
+    if (!turnstileData.success) {
+      return corsJson({ ok: false, error: 'Verification failed. Please try again.' }, { status: 403 }, request, env);
+    }
   }
 
   // Check if email already exists
@@ -290,13 +440,125 @@ async function handleRegister(request, env) {
     VALUES (?, 'free', 'active', ?, ?)
   `).bind(userId, now, now).run();
 
+  // Send verification email
+  const verifyUrl = `${FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+  await sendEmail(env, {
+    to: email,
+    subject: 'Verify your Training Partner email',
+    html: verificationEmailHtml(verifyUrl),
+  });
+
   // Generate JWT
-  const token = await createJWT({ userId, email, role: 'athlete' }, env.JWT_SECRET || 'tp-jwt-secret');
+  const token = await createJWT({ userId, email, role: 'athlete' }, env.JWT_SECRET);
 
   return corsJson({
     ok: true,
     token,
-    user: { id: userId, email, display_name: name, role: 'athlete', city: '', avatar_url: '' }
+    user: { id: userId, email, display_name: name, role: 'athlete', city: '', avatar_url: '', email_verified: 0 }
+  }, { status: 201 }, request, env);
+}
+
+async function handleGoogleAuth(request, env) {
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const { credential, client_id } = body;
+  if (!credential) {
+    return corsJson({ ok: false, error: 'Google credential is required' }, { status: 400 }, request, env);
+  }
+
+  // Verify Google ID token via Google's tokeninfo endpoint (validates signature, iss, exp)
+  if (!env.GOOGLE_CLIENT_ID) {
+    return corsJson({ ok: false, error: 'Google Sign-In not configured' }, { status: 503 }, request, env);
+  }
+
+  let payload;
+  try {
+    const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    if (!verifyRes.ok) {
+      return corsJson({ ok: false, error: 'Invalid Google token' }, { status: 400 }, request, env);
+    }
+    payload = await verifyRes.json();
+  } catch {
+    return corsJson({ ok: false, error: 'Failed to verify Google token' }, { status: 500 }, request, env);
+  }
+
+  // Verify audience matches our client ID
+  if (payload.aud !== env.GOOGLE_CLIENT_ID) {
+    return corsJson({ ok: false, error: 'Invalid token audience' }, { status: 400 }, request, env);
+  }
+
+  const googleEmail = (payload.email || '').toLowerCase();
+  const googleName = payload.name || payload.given_name || '';
+  const googleId = payload.sub;
+  const googleAvatar = payload.picture || '';
+  const emailVerified = payload.email_verified !== false;
+
+  if (!googleEmail || !googleId) {
+    return corsJson({ ok: false, error: 'Google token missing email or ID' }, { status: 400 }, request, env);
+  }
+
+  const now = isoNow();
+
+  // Check if user exists by google_id or email
+  let user = await env.DB.prepare('SELECT * FROM users WHERE google_id = ?').bind(googleId).first();
+
+  if (!user) {
+    user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(googleEmail).first();
+  }
+
+  if (user) {
+    // Existing user — link google_id if not yet linked, update avatar if empty
+    if (!user.google_id) {
+      await env.DB.prepare('UPDATE users SET google_id = ?, updated_at = ? WHERE id = ?').bind(googleId, now, user.id).run();
+    }
+    if (!user.avatar_url && googleAvatar) {
+      await env.DB.prepare('UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?').bind(googleAvatar, now, user.id).run();
+    }
+    if (emailVerified && !user.email_verified) {
+      await env.DB.prepare('UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?').bind(now, user.id).run();
+    }
+
+    const token = await createJWT({ userId: user.id, email: user.email, role: user.role }, env.JWT_SECRET);
+    return corsJson({
+      ok: true,
+      token,
+      user: { id: user.id, email: user.email, display_name: user.display_name, role: user.role, city: user.city || '', avatar_url: user.avatar_url || googleAvatar, email_verified: emailVerified ? 1 : user.email_verified },
+      isNewUser: false,
+    }, {}, request, env);
+  }
+
+  // New user — create account
+  const salt = generateSalt();
+  const randomPass = crypto.randomUUID();
+  const passwordHash = await hashPassword(randomPass, salt);
+
+  const result = await env.DB.prepare(`
+    INSERT INTO users (email, password_hash, password_salt, display_name, avatar_url, city, role, email_verified, google_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, '', 'athlete', ?, ?, ?, ?)
+  `).bind(googleEmail, passwordHash, salt, googleName, googleAvatar, emailVerified ? 1 : 0, googleId, now, now).run();
+
+  const userId = result.meta.last_row_id;
+
+  // Create empty profile
+  await env.DB.prepare(`
+    INSERT INTO user_profiles (user_id, sports, skill_level, weight_class, training_goals, experience_years, bio, availability, created_at, updated_at)
+    VALUES (?, '[]', '', '', '[]', 0, '', '[]', ?, ?)
+  `).bind(userId, now, now).run();
+
+  // Create free subscription
+  await env.DB.prepare(`
+    INSERT INTO subscriptions (user_id, plan, status, created_at, updated_at)
+    VALUES (?, 'free', 'active', ?, ?)
+  `).bind(userId, now, now).run();
+
+  const token = await createJWT({ userId, email: googleEmail, role: 'athlete' }, env.JWT_SECRET);
+
+  return corsJson({
+    ok: true,
+    token,
+    user: { id: userId, email: googleEmail, display_name: googleName, role: 'athlete', city: '', avatar_url: googleAvatar, email_verified: emailVerified ? 1 : 0 },
+    isNewUser: true,
   }, { status: 201 }, request, env);
 }
 
@@ -328,7 +590,7 @@ async function handleLogin(request, env) {
     return corsJson({ ok: false, error: 'Invalid email or password' }, { status: 401 }, request, env);
   }
 
-  const token = await createJWT({ userId: user.id, email: user.email, role: user.role }, env.JWT_SECRET || 'tp-jwt-secret');
+  const token = await createJWT({ userId: user.id, email: user.email, role: user.role }, env.JWT_SECRET);
 
   return corsJson({
     ok: true,
@@ -361,6 +623,8 @@ async function handleGetMe(request, env) {
       city: user.city,
       avatar_url: user.avatar_url,
       email_verified: user.email_verified,
+      google_id: user.google_id || null,
+      instagram_username: user.instagram_username || null,
       created_at: user.created_at,
     },
     profile: profile ? {
@@ -380,6 +644,25 @@ async function handleGetMe(request, env) {
 }
 
 // ─── Profile Routes ──────────────────────────────────────────────────────────
+
+async function handleUpdateInstagram(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  let username = (body.instagram_username || '').replace(/^@/, '').trim().substring(0, 30);
+  // Validate Instagram username format: alphanumeric, periods, underscores only
+  if (username && !/^[a-zA-Z0-9_.]+$/.test(username)) {
+    return corsJson({ ok: false, error: 'Invalid Instagram username. Use only letters, numbers, periods, and underscores.' }, { status: 400 }, request, env);
+  }
+
+  await env.DB.prepare('UPDATE users SET instagram_username = ?, updated_at = ? WHERE id = ?')
+    .bind(username || null, isoNow(), user.id).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
 
 async function handleUpdateProfile(request, env) {
   const user = await getUser(request, env);
@@ -621,7 +904,7 @@ async function handleGetPartners(request, env) {
   const sport = url.searchParams.get('sport');
   const skill = url.searchParams.get('skill');
   const search = url.searchParams.get('search');
-  const limit = parseInt(url.searchParams.get('limit')) || 50;
+  const limit = Math.min(parseInt(url.searchParams.get('limit')) || 50, 100);
   const offset = parseInt(url.searchParams.get('offset')) || 0;
 
   // Get matches for this user
@@ -691,7 +974,7 @@ async function handleGetPartnerDetail(request, env, partnerId) {
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
   const partner = await env.DB.prepare(`
-    SELECT u.id, u.display_name, u.city, u.avatar_url, u.created_at,
+    SELECT u.id, u.display_name, u.city, u.avatar_url, u.instagram_username, u.created_at,
            p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.availability, p.location
     FROM users u
     LEFT JOIN user_profiles p ON u.id = p.user_id
@@ -722,6 +1005,7 @@ async function handleGetPartnerDetail(request, env, partnerId) {
       location: partner.location || partner.city,
       match: match ? match.score : 0,
       explanation: match ? JSON.parse(match.explanation || '{}') : {},
+      instagram_username: partner.instagram_username || null,
       created_at: partner.created_at,
     }
   }, {}, request, env);
@@ -734,7 +1018,7 @@ async function handleGetGyms(request, env) {
   const sport = url.searchParams.get('sport');
   const city = url.searchParams.get('city');
   const search = url.searchParams.get('search');
-  const limit = parseInt(url.searchParams.get('limit')) || 50;
+  const limit = Math.min(parseInt(url.searchParams.get('limit')) || 50, 100);
   const offset = parseInt(url.searchParams.get('offset')) || 0;
 
   let query = 'SELECT * FROM gyms WHERE 1=1';
@@ -863,8 +1147,17 @@ async function handleCreateBooking(request, env) {
   }
 
   const now = isoNow();
+
+  // Atomic slot increment: only succeeds if there's still capacity
+  const slotUpdate = await env.DB.prepare(
+    'UPDATE gym_sessions SET current_slots = current_slots + 1 WHERE id = ? AND current_slots < max_slots'
+  ).bind(body.session_id).run();
+
+  if (!slotUpdate.meta.changes || slotUpdate.meta.changes === 0) {
+    return corsJson({ ok: false, error: 'Session is full' }, { status: 400 }, request, env);
+  }
+
   await env.DB.prepare('INSERT INTO bookings (user_id, session_id, status, created_at) VALUES (?, ?, ?, ?)').bind(user.id, body.session_id, 'confirmed', now).run();
-  await env.DB.prepare('UPDATE gym_sessions SET current_slots = current_slots + 1 WHERE id = ?').bind(body.session_id).run();
 
   // Create notification
   await env.DB.prepare(
@@ -1014,6 +1307,12 @@ async function handleSendMessage(request, env, receiverId) {
     return corsJson({ ok: false, error: 'Cannot send message to this user' }, { status: 403 }, request, env);
   }
 
+  // Rate limit: 30 messages per user per 5 minutes
+  const msgAllowed = await checkRateLimit(env, `msg:${user.id}`, 30, 300);
+  if (!msgAllowed) {
+    return corsJson({ ok: false, error: 'You are sending messages too quickly. Please wait.' }, { status: 429 }, request, env);
+  }
+
   // Check receiver exists
   const receiver = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(receiverId).first();
   if (!receiver) return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
@@ -1075,52 +1374,145 @@ async function handleGetSubscriptionStatus(request, env) {
   }, {}, request, env);
 }
 
-async function handleSubscriptionWebhook(request, env) {
-  const body = await readJson(request);
-  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+// ─── Stripe Integration ───────────────────────────────────────────────────
 
-  // Verify webhook signature (Lemon Squeezy)
-  const signature = request.headers.get('X-Signature');
-  // In production, verify signature against LEMON_SQUEEZY_WEBHOOK_SECRET
+async function verifyStripeSignature(request, env) {
+  if (!env.STRIPE_WEBHOOK_SECRET) return null;
+  const sig = request.headers.get('stripe-signature');
+  if (!sig) return null;
 
-  const eventName = body.meta?.event_name;
-  const data = body.data?.attributes;
-
-  if (!eventName || !data) {
-    return corsJson({ ok: false, error: 'Invalid webhook payload' }, { status: 400 }, request, env);
+  const body = await request.text();
+  // Parse signature header
+  const parts = {};
+  for (const item of sig.split(',')) {
+    const [key, val] = item.split('=');
+    parts[key.trim()] = val;
   }
+  const timestamp = parts.t;
+  const v1Sig = parts.v1;
+  if (!timestamp || !v1Sig) return null;
 
-  const email = data.user_email;
-  const user = email ? await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email.toLowerCase()).first() : null;
+  // Reject events older than 5 minutes (replay protection)
+  const eventAge = Math.abs(Math.floor(Date.now() / 1000) - parseInt(timestamp));
+  if (eventAge > 300) return null;
 
-  if (!user) {
-    return corsJson({ ok: true, message: 'User not found, skipping' }, {}, request, env);
+  // Verify HMAC
+  const encoder = new TextEncoder();
+  const payload = `${timestamp}.${body}`;
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(env.STRIPE_WEBHOOK_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+  const expected = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
+  if (expected !== v1Sig) return null;
+
+  return JSON.parse(body);
+}
+
+async function handleStripeWebhook(request, env) {
+  let event;
+  if (!env.STRIPE_WEBHOOK_SECRET) {
+    return corsJson({ ok: false, error: 'Webhook secret not configured' }, { status: 503 }, request, env);
   }
+  event = await verifyStripeSignature(request.clone(), env);
+  if (!event) return corsJson({ ok: false, error: 'Invalid signature' }, { status: 400 }, request, env);
+  if (!event) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
 
   const now = isoNow();
 
-  switch (eventName) {
-    case 'subscription_created':
-    case 'subscription_updated':
-      await env.DB.prepare(`
-        INSERT INTO subscriptions (user_id, plan, status, lemon_squeezy_id, current_period_start, current_period_end, created_at, updated_at)
-        VALUES (?, 'premium', 'active', ?, ?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET plan = 'premium', status = 'active', lemon_squeezy_id = ?, current_period_start = ?, current_period_end = ?, updated_at = ?
-      `).bind(
-        user.id, data.subscription_id || '', data.current_period_start || now, data.current_period_end || '', now, now,
-        data.subscription_id || '', data.current_period_start || now, data.current_period_end || '', now
-      ).run();
-      break;
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object;
+      const customerId = session.customer;
+      const subscriptionId = session.subscription;
+      const userId = session.metadata?.user_id;
+      const plan = session.metadata?.plan || 'premium';
 
-    case 'subscription_cancelled':
-    case 'subscription_expired':
-      await env.DB.prepare(
-        'UPDATE subscriptions SET status = ?, updated_at = ? WHERE user_id = ?'
-      ).bind('cancelled', now, user.id).run();
+      if (userId) {
+        await env.DB.prepare(`
+          UPDATE subscriptions SET plan = ?, status = 'active', stripe_customer_id = ?, stripe_subscription_id = ?, updated_at = ?
+          WHERE user_id = ?
+        `).bind(plan, customerId || '', subscriptionId || '', now, parseInt(userId)).run();
+      }
       break;
+    }
+    case 'customer.subscription.updated': {
+      const sub = event.data.object;
+      const stripeSubId = sub.id;
+      const status = sub.status === 'active' ? 'active' : sub.status === 'trialing' ? 'active' : 'cancelled';
+      const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
+      const periodStart = sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null;
+
+      await env.DB.prepare(`
+        UPDATE subscriptions SET status = ?, current_period_start = ?, current_period_end = ?, updated_at = ?
+        WHERE stripe_subscription_id = ?
+      `).bind(status, periodStart, periodEnd, now, stripeSubId).run();
+      break;
+    }
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object;
+      await env.DB.prepare(`
+        UPDATE subscriptions SET plan = 'free', status = 'cancelled', updated_at = ?
+        WHERE stripe_subscription_id = ?
+      `).bind(now, sub.id).run();
+      break;
+    }
   }
 
   return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleCreateCheckout(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const body = await readJson(request);
+  const plan = body?.plan || 'premium_athlete';
+
+  const priceId = plan === 'premium_gym'
+    ? (env.STRIPE_PRICE_PREMIUM_GYM || '')
+    : (env.STRIPE_PRICE_PREMIUM_ATHLETE || '');
+
+  if (!priceId) {
+    return corsJson({ ok: false, error: 'Price not configured for this plan' }, { status: 400 }, request, env);
+  }
+
+  const frontendUrl = env.FRONTEND_URL || FRONTEND_URL;
+
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'mode': 'subscription',
+      'line_items[0][price]': priceId,
+      'line_items[0][quantity]': '1',
+      'success_url': `${frontendUrl}/app/settings?checkout=success`,
+      'cancel_url': `${frontendUrl}/app/settings?checkout=cancelled`,
+      'customer_email': user.email,
+      'metadata[user_id]': String(user.id),
+      'metadata[plan]': plan,
+    }),
+  });
+
+  const session = await res.json();
+  if (!res.ok) {
+    return corsJson({ ok: false, error: session.error?.message || 'Stripe error' }, { status: 400 }, request, env);
+  }
+
+  return corsJson({ ok: true, url: session.url, session_id: session.id }, {}, request, env);
+}
+
+async function handleSubscriptionWebhook(request, env) {
+  // Legacy webhook endpoint — redirect to Stripe handler
+  return handleStripeWebhook(request, env);
 }
 
 // ─── Notification Routes ─────────────────────────────────────────────────────
@@ -1202,170 +1594,264 @@ async function handleCreateReview(request, env) {
   return corsJson({ ok: true }, { status: 201 }, request, env);
 }
 
-// ─── Community Posts Routes ─────────────────────────────────────────────────
+// ─── Password Reset Routes ───────────────────────────────────────────────────
 
-async function handleGetPosts(request, env) {
-  const user = await getUser(request, env);
-  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
-
-  const url = new URL(request.url);
-  const type = url.searchParams.get('type');
-  const sport = url.searchParams.get('sport');
-  const sort = url.searchParams.get('sort') || 'recent';
-  const limit = parseInt(url.searchParams.get('limit')) || 20;
-  const offset = parseInt(url.searchParams.get('offset')) || 0;
-
-  let query = `
-    SELECT p.*, u.display_name, u.avatar_url,
-           (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as like_count,
-           (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
-    FROM posts p
-    JOIN users u ON p.user_id = u.id
-    WHERE 1=1
-  `;
-  const params = [user.id];
-
-  if (type) { query += ' AND p.type = ?'; params.push(type); }
-  if (sport) { query += ' AND p.sport = ?'; params.push(sport); }
-
-  if (sort === 'popular') {
-    query += ' ORDER BY like_count DESC, p.created_at DESC';
-  } else {
-    query += ' ORDER BY p.created_at DESC';
-  }
-  query += ' LIMIT ? OFFSET ?';
-  params.push(limit, offset);
-
-  const results = await env.DB.prepare(query).bind(...params).all();
-
-  return corsJson({
-    ok: true,
-    posts: (results.results || []).map(p => ({
-      id: p.id,
-      user_id: p.user_id,
-      display_name: p.display_name,
-      avatar_url: p.avatar_url,
-      title: p.title,
-      body: p.body,
-      type: p.type,
-      sport: p.sport,
-      like_count: p.like_count || 0,
-      is_liked: (p.is_liked || 0) > 0,
-      created_at: p.created_at,
-    }))
-  }, {}, request, env);
-}
-
-async function handleCreatePost(request, env) {
-  const user = await getUser(request, env);
-  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
-
+async function handleForgotPassword(request, env) {
   const body = await readJson(request);
-  if (!body || !body.body) {
-    return corsJson({ ok: false, error: 'Post body is required' }, { status: 400 }, request, env);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const email = sanitize(normalizeText(body.email)).toLowerCase();
+  if (!email) return corsJson({ ok: false, error: 'Email is required' }, { status: 400 }, request, env);
+
+  // Rate limit: 3 reset requests per email per hour
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const allowed = await checkRateLimit(env, `forgot:${ip}`, 3, 3600);
+  if (!allowed) {
+    // Always return success to prevent enumeration
+    return corsJson({ ok: true }, {}, request, env);
   }
 
-  const now = isoNow();
-  const title = sanitize(body.title || '');
-  const postBody = sanitize(body.body);
-  const type = sanitize(body.type || 'general');
-  const sport = sanitize(body.sport || '');
-
-  const result = await env.DB.prepare(
-    'INSERT INTO posts (user_id, title, body, type, sport, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(user.id, title, postBody, type, sport, now).run();
-
-  return corsJson({
-    ok: true,
-    post: { id: result.meta.last_row_id, user_id: user.id, title, body: postBody, type, sport, created_at: now, like_count: 0, is_liked: false }
-  }, { status: 201 }, request, env);
-}
-
-async function handleLikePost(request, env, postId) {
-  const user = await getUser(request, env);
-  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
-
-  const existing = await env.DB.prepare(
-    'SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?'
-  ).bind(postId, user.id).first();
-
-  if (existing) {
-    await env.DB.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?').bind(postId, user.id).run();
-    return corsJson({ ok: true, liked: false }, {}, request, env);
-  } else {
+  const user = await env.DB.prepare('SELECT id, email FROM users WHERE email = ?').bind(email).first();
+  if (user) {
+    // Generate reset token (UUID) and set 1-hour expiry
+    const resetToken = crypto.randomUUID();
+    const expires = new Date(Date.now() + 3600000).toISOString(); // 1 hour
     await env.DB.prepare(
-      'INSERT INTO post_likes (post_id, user_id, created_at) VALUES (?, ?, ?)'
-    ).bind(postId, user.id, isoNow()).run();
-    return corsJson({ ok: true, liked: true }, {}, request, env);
+      'UPDATE users SET reset_token = ?, reset_token_expires = ?, updated_at = ? WHERE id = ?'
+    ).bind(resetToken, expires, isoNow(), user.id).run();
+
+    const resetUrl = `${FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
+    await sendEmail(env, {
+      to: email,
+      subject: 'Reset your Training Partner password',
+      html: passwordResetEmailHtml(resetUrl),
+    });
   }
+
+  // Always return success to prevent email enumeration
+  return corsJson({ ok: true }, {}, request, env);
 }
 
-// ─── Report Route ─────────────────────────────────────────────────────────────
-
-async function handleReport(request, env) {
-  const user = await getUser(request, env);
-  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
-
+async function handleResetPassword(request, env) {
   const body = await readJson(request);
-  if (!body || !body.reported_id || !body.reason) {
-    return corsJson({ ok: false, error: 'reported_id and reason are required' }, { status: 400 }, request, env);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const token = normalizeText(body.token);
+  const password = body.password || '';
+
+  if (!token || !password) {
+    return corsJson({ ok: false, error: 'Token and new password are required' }, { status: 400 }, request, env);
+  }
+  if (password.length < 6 || password.length > 128) {
+    return corsJson({ ok: false, error: 'Password must be 6-128 characters' }, { status: 400 }, request, env);
   }
 
-  // Store report in notifications table (admin type)
+  // Rate limit: 5 reset attempts per IP per 15 minutes
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const allowed = await checkRateLimit(env, `reset:${ip}`, 5, 900);
+  if (!allowed) {
+    return corsJson({ ok: false, error: 'Too many attempts. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // Find user with valid, non-expired reset token
+  const user = await env.DB.prepare(
+    'SELECT id, email FROM users WHERE reset_token = ? AND reset_token_expires > ?'
+  ).bind(token, isoNow()).first();
+
+  if (!user) {
+    return corsJson({ ok: false, error: 'Invalid or expired reset token' }, { status: 400 }, request, env);
+  }
+
+  // Hash new password and clear reset token
+  const salt = generateSalt();
+  const passwordHash = await hashPassword(password, salt);
   const now = isoNow();
+
   await env.DB.prepare(
-    'INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(1, 'user_report', 'New User Report', `User ${user.id} reported user ${body.reported_id}`, JSON.stringify({ reporter_id: user.id, reported_id: body.reported_id, reason: body.reason, details: body.details || '' }), now).run();
+    'UPDATE users SET password_hash = ?, password_salt = ?, reset_token = NULL, reset_token_expires = NULL, updated_at = ? WHERE id = ?'
+  ).bind(passwordHash, salt, now, user.id).run();
 
   return corsJson({ ok: true }, {}, request, env);
 }
 
-// ─── Upload Avatar Route ──────────────────────────────────────────────────────
+// ─── Email Verification Route ────────────────────────────────────────────────
 
-async function handleUploadAvatar(request, env) {
+async function handleVerifyEmail(request, env) {
+  const url = new URL(request.url);
+  const token = url.searchParams.get('token');
+
+  if (!token) {
+    return corsJson({ ok: false, error: 'Verification token is required' }, { status: 400 }, request, env);
+  }
+
+  const user = await env.DB.prepare(
+    'SELECT id FROM users WHERE verification_token = ? AND email_verified = 0'
+  ).bind(token).first();
+
+  if (!user) {
+    return corsJson({ ok: false, error: 'Invalid or already used verification token' }, { status: 400 }, request, env);
+  }
+
+  await env.DB.prepare(
+    'UPDATE users SET email_verified = 1, verification_token = NULL, updated_at = ? WHERE id = ?'
+  ).bind(isoNow(), user.id).run();
+
+  return corsJson({ ok: true, message: 'Email verified successfully' }, {}, request, env);
+}
+
+async function handleResendVerification(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  if (user.email_verified) {
+    return corsJson({ ok: false, error: 'Email is already verified' }, { status: 400 }, request, env);
+  }
+
+  // Rate limit: 3 resends per user per hour
+  const allowed = await checkRateLimit(env, `verify-resend:${user.id}`, 3, 3600);
+  if (!allowed) {
+    return corsJson({ ok: false, error: 'Too many requests. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  const verificationToken = crypto.randomUUID();
+  await env.DB.prepare(
+    'UPDATE users SET verification_token = ?, updated_at = ? WHERE id = ?'
+  ).bind(verificationToken, isoNow(), user.id).run();
+
+  const verifyUrl = `${FRONTEND_URL}/auth/verify-email?token=${verificationToken}`;
+  await sendEmail(env, {
+    to: user.email,
+    subject: 'Verify your Training Partner email',
+    html: verificationEmailHtml(verifyUrl),
+  });
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Report User Route ──────────────────────────────────────────────────────
+
+async function handleReportUser(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
   const body = await readJson(request);
-  if (!body || !body.avatar_data) {
-    return corsJson({ ok: false, error: 'avatar_data is required' }, { status: 400 }, request, env);
+  if (!body || !body.user_id || !body.reason) {
+    return corsJson({ ok: false, error: 'User ID and reason are required' }, { status: 400 }, request, env);
   }
 
-  // For now, store base64 data URL directly (in production, upload to R2)
-  const avatarUrl = body.avatar_data;
-  const now = isoNow();
-  await env.DB.prepare('UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?').bind(avatarUrl, now, user.id).run();
+  const reportedId = parseInt(body.user_id);
+  if (reportedId === user.id) {
+    return corsJson({ ok: false, error: 'Cannot report yourself' }, { status: 400 }, request, env);
+  }
 
-  return corsJson({ ok: true, avatar_url: avatarUrl }, {}, request, env);
+  // Rate limit: 5 reports per user per day
+  const allowed = await checkRateLimit(env, `report:${user.id}`, 5, 86400);
+  if (!allowed) {
+    return corsJson({ ok: false, error: 'Too many reports. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // Check reported user exists
+  const reported = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(reportedId).first();
+  if (!reported) {
+    return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
+  }
+
+  const reason = sanitize(body.reason).slice(0, 200);
+  const details = sanitize(body.details || '').slice(0, 2000);
+  const now = isoNow();
+
+  await env.DB.prepare(
+    'INSERT INTO reports (reporter_id, reported_id, reason, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, reportedId, reason, details, 'pending', now).run();
+
+  // Create a notification for admin review (user_id=1 assumed admin for now)
+  await env.DB.prepare(
+    'INSERT INTO notifications (user_id, type, title, body, data, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
+  ).bind(1, 'report', 'New User Report', `${user.display_name} reported user #${reportedId}: ${reason}`, JSON.stringify({ reporter_id: user.id, reported_id: reportedId }), now).run();
+
+  return corsJson({ ok: true }, {}, request, env);
 }
 
-// ─── Delete Account Route ─────────────────────────────────────────────────────
+// ─── Account Deletion Route ──────────────────────────────────────────────────
 
 async function handleDeleteAccount(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
   const body = await readJson(request);
-  if (!body || body.confirmation !== 'DELETE') {
-    return corsJson({ ok: false, error: 'Must confirm with "DELETE"' }, { status: 400 }, request, env);
+  const confirmation = body?.confirmation || '';
+
+  if (confirmation !== 'DELETE') {
+    return corsJson({ ok: false, error: 'Please type DELETE to confirm account deletion' }, { status: 400 }, request, env);
   }
 
-  await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run();
-  return corsJson({ ok: true, message: 'Account deleted' }, {}, request, env);
+  // Delete user data in order (respecting foreign keys)
+  const userId = user.id;
+  const now = isoNow();
+
+  try {
+    // Delete messages
+    await env.DB.prepare('DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?').bind(userId, userId).run();
+    // Delete bookings
+    await env.DB.prepare('DELETE FROM bookings WHERE user_id = ?').bind(userId).run();
+    // Delete notifications
+    await env.DB.prepare('DELETE FROM notifications WHERE user_id = ?').bind(userId).run();
+    // Delete reports (both as reporter and reported)
+    await env.DB.prepare('DELETE FROM reports WHERE reporter_id = ? OR reported_id = ?').bind(userId, userId).run();
+    // Delete blocked users
+    await env.DB.prepare('DELETE FROM blocked_users WHERE blocker_id = ? OR blocked_id = ?').bind(userId, userId).run();
+    // Delete gym reviews
+    await env.DB.prepare('DELETE FROM gym_reviews WHERE user_id = ?').bind(userId).run();
+    // Delete favorite gyms
+    await env.DB.prepare('DELETE FROM favorite_gyms WHERE user_id = ?').bind(userId).run();
+    // Delete subscription
+    await env.DB.prepare('DELETE FROM subscriptions WHERE user_id = ?').bind(userId).run();
+    // Delete profile
+    await env.DB.prepare('DELETE FROM user_profiles WHERE user_id = ?').bind(userId).run();
+    // Delete user
+    await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+
+    return corsJson({ ok: true, message: 'Account deleted' }, {}, request, env);
+  } catch (e) {
+    console.error('Account deletion error:', e);
+    return corsJson({ ok: false, error: 'Failed to delete account' }, { status: 500 }, request, env);
+  }
 }
 
-// ─── Checkout Route ───────────────────────────────────────────────────────────
+// ─── Avatar Upload Route ─────────────────────────────────────────────────────
+// TODO: Migrate to Cloudflare R2 for image storage post-launch
 
-async function handleCreateCheckout(request, env) {
+async function handleUploadAvatar(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
-  // Placeholder checkout — returns a Lemon Squeezy checkout URL
-  // In production, create a real checkout session via Lemon Squeezy API
-  return corsJson({
-    ok: true,
-    checkout_url: `https://trainingpartner.lemonsqueezy.com/checkout/buy/premium?email=${encodeURIComponent(user.email)}`
-  }, {}, request, env);
+  const body = await readJson(request);
+  if (!body || !body.avatar) {
+    return corsJson({ ok: false, error: 'Avatar data is required' }, { status: 400 }, request, env);
+  }
+
+  // Accept base64 data URL (data:image/...) up to ~50KB
+  const avatar = body.avatar;
+  if (!avatar.startsWith('data:image/')) {
+    return corsJson({ ok: false, error: 'Invalid image format. Must be a data URL.' }, { status: 400 }, request, env);
+  }
+
+  // Rough size check (~50KB base64 = ~68000 chars)
+  if (avatar.length > 68000) {
+    return corsJson({ ok: false, error: 'Image too large. Maximum ~50KB.' }, { status: 400 }, request, env);
+  }
+
+  // Rate limit: 10 uploads per user per hour
+  const allowed = await checkRateLimit(env, `avatar:${user.id}`, 10, 3600);
+  if (!allowed) {
+    return corsJson({ ok: false, error: 'Too many uploads. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  await env.DB.prepare(
+    'UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?'
+  ).bind(avatar, isoNow(), user.id).run()
+
+  return corsJson({ ok: true, avatar_url: avatar }, {}, request, env);
 }
 
 // ─── Block User Route ────────────────────────────────────────────────────────
@@ -1383,6 +1869,120 @@ async function handleBlockUser(request, env) {
   await env.DB.prepare(
     'INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
   ).bind(user.id, body.user_id, now).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Admin Routes ────────────────────────────────────────────────────────────
+
+async function requireAdmin(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return { error: corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env) };
+  if (user.role !== 'admin') {
+    return { error: corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env) };
+  }
+  return { user };
+}
+
+async function handleAdminStats(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const [userCount, profileCount, gymCount, messageCount, reportCount, bookingCount] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM users').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM user_profiles WHERE profile_complete = 1').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM gyms').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM messages').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM reports WHERE status = ?').bind('pending').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM bookings WHERE status = ?').bind('confirmed').first(),
+  ]);
+
+  // Recent signups (last 7 days)
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const recentSignups = await env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM users WHERE created_at > ?'
+  ).bind(weekAgo).first();
+
+  return corsJson({
+    ok: true,
+    stats: {
+      total_users: userCount?.cnt || 0,
+      complete_profiles: profileCount?.cnt || 0,
+      total_gyms: gymCount?.cnt || 0,
+      total_messages: messageCount?.cnt || 0,
+      pending_reports: reportCount?.cnt || 0,
+      active_bookings: bookingCount?.cnt || 0,
+      recent_signups: recentSignups?.cnt || 0,
+    }
+  }, {}, request, env);
+}
+
+async function handleAdminUsers(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+  const search = url.searchParams.get('search') || '';
+
+  let query = 'SELECT id, email, display_name, role, city, email_verified, created_at FROM users';
+  const params = [];
+
+  if (search) {
+    query += ' WHERE display_name LIKE ? OR email LIKE ?';
+    params.push(`%${search}%`, `%${search}%`);
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const users = await env.DB.prepare(query).bind(...params).all();
+  const total = await env.DB.prepare('SELECT COUNT(*) as cnt FROM users').first();
+
+  return corsJson({
+    ok: true,
+    users: users.results || [],
+    total: total?.cnt || 0,
+  }, {}, request, env);
+}
+
+async function handleAdminReports(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const url = new URL(request.url);
+  const status = url.searchParams.get('status') || 'pending';
+
+  const reports = await env.DB.prepare(`
+    SELECT r.*,
+      reporter.display_name as reporter_name, reporter.email as reporter_email,
+      reported.display_name as reported_name, reported.email as reported_email
+    FROM reports r
+    LEFT JOIN users reporter ON r.reporter_id = reporter.id
+    LEFT JOIN users reported ON r.reported_id = reported.id
+    WHERE r.status = ?
+    ORDER BY r.created_at DESC
+    LIMIT 50
+  `).bind(status).all();
+
+  return corsJson({
+    ok: true,
+    reports: reports.results || [],
+  }, {}, request, env);
+}
+
+async function handleAdminResolveReport(request, env, reportId) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const body = await readJson(request);
+  const newStatus = body?.status || 'resolved';
+  const now = isoNow();
+
+  await env.DB.prepare(
+    'UPDATE reports SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?'
+  ).bind(newStatus, user.id, now, reportId).run();
 
   return corsJson({ ok: true }, {}, request, env);
 }
@@ -1449,6 +2049,248 @@ async function handleWaitlist(request, env) {
   return corsJson({ ok: true, status: 'received' }, {}, request, env);
 }
 
+// ─── Community Posts ─────────────────────────────────────────────────────────
+
+async function handleGetPosts(request, env) {
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || '';
+  const sport = url.searchParams.get('sport') || '';
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50);
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+
+  let where = [];
+  let params = [];
+  if (type) { where.push('p.type = ?'); params.push(type); }
+  if (sport) { where.push('p.sport = ?'); params.push(sport); }
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const countResult = await env.DB.prepare(`SELECT COUNT(*) as total FROM posts p ${whereClause}`).bind(...params).first();
+  const results = await env.DB.prepare(`
+    SELECT p.*, u.display_name as author_name, u.avatar_url as author_avatar
+    FROM posts p JOIN users u ON p.user_id = u.id
+    ${whereClause}
+    ORDER BY p.created_at DESC LIMIT ? OFFSET ?
+  `).bind(...params, limit, offset).all();
+
+  // Check if current user liked each post
+  const user = await getUser(request, env);
+  const posts = (results.results || []).map(p => ({
+    id: p.id,
+    user_id: p.user_id,
+    author_name: p.author_name,
+    author_avatar: p.author_avatar,
+    title: p.title,
+    body: p.body,
+    type: p.type,
+    sport: p.sport,
+    media_url: p.media_url,
+    likes_count: p.likes_count,
+    liked: false,
+    created_at: p.created_at,
+  }));
+
+  if (user && posts.length > 0) {
+    const postIds = posts.map(p => p.id);
+    const likes = await env.DB.prepare(
+      `SELECT post_id FROM post_likes WHERE user_id = ? AND post_id IN (${postIds.map(() => '?').join(',')})`
+    ).bind(user.id, ...postIds).all();
+    const likedSet = new Set((likes.results || []).map(l => l.post_id));
+    posts.forEach(p => { p.liked = likedSet.has(p.id); });
+  }
+
+  return corsJson({ ok: true, posts, total: countResult?.total || 0 }, {}, request, env);
+}
+
+async function handleCreatePost(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const title = sanitize(body.title);
+  const postBody = sanitize(body.body);
+  const type = ['article', 'tip', 'question', 'event'].includes(body.type) ? body.type : 'article';
+  const sport = sanitize(body.sport || '');
+  const mediaUrl = sanitize(body.media_url || '');
+
+  if (!title || !postBody) {
+    return corsJson({ ok: false, error: 'Title and body are required' }, { status: 400 }, request, env);
+  }
+
+  // Rate limit: 10 posts per user per hour
+  const allowed = await checkRateLimit(env, `post:${user.id}`, 10, 3600);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many posts. Try again later.' }, { status: 429 }, request, env);
+
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO posts (user_id, title, body, type, sport, media_url, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(user.id, title, postBody, type, sport, mediaUrl, now, now).run();
+
+  return corsJson({ ok: true, post_id: result.meta.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleGetPost(request, env, postId) {
+  const post = await env.DB.prepare(`
+    SELECT p.*, u.display_name as author_name, u.avatar_url as author_avatar
+    FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?
+  `).bind(postId).first();
+  if (!post) return corsJson({ ok: false, error: 'Post not found' }, { status: 404 }, request, env);
+
+  const user = await getUser(request, env);
+  let liked = false;
+  if (user) {
+    const like = await env.DB.prepare('SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?').bind(postId, user.id).first();
+    liked = !!like;
+  }
+
+  return corsJson({ ok: true, post: { ...post, liked } }, {}, request, env);
+}
+
+async function handleDeletePost(request, env, postId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const post = await env.DB.prepare('SELECT user_id FROM posts WHERE id = ?').bind(postId).first();
+  if (!post) return corsJson({ ok: false, error: 'Post not found' }, { status: 404 }, request, env);
+  if (post.user_id !== user.id && user.role !== 'admin') {
+    return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+  }
+
+  await env.DB.prepare('DELETE FROM post_likes WHERE post_id = ?').bind(postId).run();
+  await env.DB.prepare('DELETE FROM posts WHERE id = ?').bind(postId).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleToggleLike(request, env, postId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const existing = await env.DB.prepare('SELECT id FROM post_likes WHERE post_id = ? AND user_id = ?').bind(postId, user.id).first();
+  if (existing) {
+    await env.DB.prepare('DELETE FROM post_likes WHERE id = ?').bind(existing.id).run();
+  } else {
+    // Use INSERT OR IGNORE to prevent duplicate likes from concurrent requests
+    await env.DB.prepare('INSERT OR IGNORE INTO post_likes (post_id, user_id, created_at) VALUES (?, ?, ?)').bind(postId, user.id, isoNow()).run();
+  }
+  // Sync count from actual rows to prevent drift
+  const countResult = await env.DB.prepare('SELECT COUNT(*) as cnt FROM post_likes WHERE post_id = ?').bind(postId).first();
+  const newCount = countResult?.cnt || 0;
+  await env.DB.prepare('UPDATE posts SET likes_count = ? WHERE id = ?').bind(newCount, postId).run();
+  return corsJson({ ok: true, liked: !existing, likes_count: newCount }, {}, request, env);
+}
+
+// ─── Gym Documents & Private Lessons ──────────────────────────────────────
+
+async function handleGetGymDocuments(request, env, gymId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Only gym owner or admin can view documents
+  const gym = await env.DB.prepare('SELECT owner_id FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  if (gym.owner_id !== user.id && user.role !== 'admin') {
+    return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+  }
+
+  const docs = await env.DB.prepare('SELECT id, gym_id, type, name, verified, uploaded_at FROM gym_documents WHERE gym_id = ? ORDER BY uploaded_at DESC').bind(gymId).all();
+  return corsJson({ ok: true, documents: docs.results || [] }, {}, request, env);
+}
+
+async function handleUploadGymDocument(request, env, gymId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT owner_id FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  if (gym.owner_id !== user.id) {
+    return corsJson({ ok: false, error: 'Only gym owners can upload documents' }, { status: 403 }, request, env);
+  }
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const type = ['insurance', 'certification', 'license', 'other'].includes(body.type) ? body.type : 'other';
+  const name = sanitize(body.name || type);
+  const fileData = body.file_data || '';
+
+  if (!fileData) return corsJson({ ok: false, error: 'file_data is required' }, { status: 400 }, request, env);
+
+  // Limit file size (~200KB base64)
+  if (fileData.length > 275000) {
+    return corsJson({ ok: false, error: 'File too large. Max 200KB.' }, { status: 400 }, request, env);
+  }
+
+  const result = await env.DB.prepare(`
+    INSERT INTO gym_documents (gym_id, type, name, file_data, uploaded_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).bind(gymId, type, name, fileData, isoNow()).run();
+
+  return corsJson({ ok: true, document_id: result.meta.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleDeleteGymDocument(request, env, gymId, docId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT owner_id FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym || (gym.owner_id !== user.id && user.role !== 'admin')) {
+    return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+  }
+
+  await env.DB.prepare('DELETE FROM gym_documents WHERE id = ? AND gym_id = ?').bind(docId, gymId).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleGetPrivateLessons(request, env, gymId) {
+  const lessons = await env.DB.prepare(`
+    SELECT pl.*, u.display_name as coach_name, u.avatar_url as coach_avatar
+    FROM private_lessons pl JOIN users u ON pl.coach_user_id = u.id
+    WHERE pl.gym_id = ? AND pl.available = 1
+    ORDER BY pl.created_at DESC
+  `).bind(gymId).all();
+
+  return corsJson({ ok: true, lessons: (lessons.results || []).map(l => ({
+    id: l.id, gym_id: l.gym_id, coach_user_id: l.coach_user_id,
+    coach_name: l.coach_name, coach_avatar: l.coach_avatar,
+    sport: l.sport, title: l.title, description: l.description,
+    price_cents: l.price_cents, duration_minutes: l.duration_minutes,
+    available: l.available, created_at: l.created_at,
+  })) }, {}, request, env);
+}
+
+async function handleCreatePrivateLesson(request, env, gymId) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT owner_id FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  if (gym.owner_id !== user.id) {
+    return corsJson({ ok: false, error: 'Only gym owners can create lessons' }, { status: 403 }, request, env);
+  }
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const sport = sanitize(body.sport);
+  const title = sanitize(body.title);
+  const description = sanitize(body.description || '');
+  const priceCents = parseInt(body.price_cents) || 0;
+  const durationMinutes = parseInt(body.duration_minutes) || 60;
+  const coachUserId = body.coach_user_id || user.id;
+
+  if (!sport || !title) return corsJson({ ok: false, error: 'Sport and title are required' }, { status: 400 }, request, env);
+
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO private_lessons (gym_id, coach_user_id, sport, title, description, price_cents, duration_minutes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(gymId, coachUserId, sport, title, description, priceCents, durationMinutes, now, now).run();
+
+  return corsJson({ ok: true, lesson_id: result.meta.last_row_id }, { status: 201 }, request, env);
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export default {
@@ -1468,7 +2310,7 @@ export default {
 
       // Health & Meta
       if (path === '/api/health' && method === 'GET') {
-        return corsJson({ ok: true, service: 'training-partner-app', now: isoNow(), has_db: Boolean(env.DB) }, {}, request, env);
+        return corsJson({ ok: true, service: 'training-partner-app', now: isoNow() }, {}, request, env);
       }
       if (path === '/api/meta' && method === 'GET') {
         return corsJson({ ok: true, product: 'Training Partner', version: '2.0.0' }, {}, request, env);
@@ -1477,9 +2319,15 @@ export default {
       // Auth
       if (path === '/api/auth/register' && method === 'POST') return handleRegister(request, env);
       if (path === '/api/auth/login' && method === 'POST') return handleLogin(request, env);
+      if (path === '/api/auth/google' && method === 'POST') return handleGoogleAuth(request, env);
       if (path === '/api/auth/me' && method === 'GET') return handleGetMe(request, env);
+      if (path === '/api/auth/forgot-password' && method === 'POST') return handleForgotPassword(request, env);
+      if (path === '/api/auth/reset-password' && method === 'POST') return handleResetPassword(request, env);
+      if (path === '/api/auth/verify-email' && method === 'GET') return handleVerifyEmail(request, env);
+      if (path === '/api/auth/resend-verification' && method === 'POST') return handleResendVerification(request, env);
 
       // Profile
+      if (path === '/api/profile/instagram' && method === 'PUT') return handleUpdateInstagram(request, env);
       if (path === '/api/profile' && method === 'PUT') return handleUpdateProfile(request, env);
       if (path.match(/^\/api\/profile\/(\d+)$/) && method === 'GET') {
         const id = parseInt(path.split('/')[3]);
@@ -1520,9 +2368,11 @@ export default {
         return handleSendMessage(request, env, id);
       }
 
-      // Subscriptions
+      // Subscriptions & Stripe
       if (path === '/api/subscriptions/status' && method === 'GET') return handleGetSubscriptionStatus(request, env);
       if (path === '/api/subscriptions/webhook' && method === 'POST') return handleSubscriptionWebhook(request, env);
+      if (path === '/api/webhooks/stripe' && method === 'POST') return handleStripeWebhook(request, env);
+      if (path === '/api/checkout/create' && method === 'POST') return handleCreateCheckout(request, env);
 
       // Notifications
       if (path === '/api/notifications' && method === 'GET') return handleGetNotifications(request, env);
@@ -1531,28 +2381,59 @@ export default {
       // Reviews
       if (path === '/api/reviews' && method === 'POST') return handleCreateReview(request, env);
 
-      // Block
+      // Block, Report, Avatar
       if (path === '/api/block' && method === 'POST') return handleBlockUser(request, env);
+      if (path === '/api/report' && method === 'POST') return handleReportUser(request, env);
+      if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
+      if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
+
+      // Admin routes
+      if (path === '/api/admin/stats' && method === 'GET') return handleAdminStats(request, env);
+      if (path === '/api/admin/users' && method === 'GET') return handleAdminUsers(request, env);
+      if (path === '/api/admin/reports' && method === 'GET') return handleAdminReports(request, env);
+      if (path.match(/^\/api\/admin\/reports\/(\d+)\/resolve$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[4]);
+        return handleAdminResolveReport(request, env, id);
+      }
 
       // Community Posts
       if (path === '/api/posts' && method === 'GET') return handleGetPosts(request, env);
       if (path === '/api/posts' && method === 'POST') return handleCreatePost(request, env);
+      if (path.match(/^\/api\/posts\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetPost(request, env, id);
+      }
+      if (path.match(/^\/api\/posts\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeletePost(request, env, id);
+      }
       if (path.match(/^\/api\/posts\/(\d+)\/like$/) && method === 'POST') {
         const id = parseInt(path.split('/')[3]);
-        return handleLikePost(request, env, id);
+        return handleToggleLike(request, env, id);
       }
 
-      // Report
-      if (path === '/api/report' && method === 'POST') return handleReport(request, env);
-
-      // Upload Avatar
-      if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
-
-      // Delete Account
-      if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
-
-      // Checkout
-      if (path === '/api/checkout/create' && method === 'POST') return handleCreateCheckout(request, env);
+      // Gym Documents & Private Lessons
+      if (path.match(/^\/api\/gyms\/(\d+)\/documents$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetGymDocuments(request, env, id);
+      }
+      if (path.match(/^\/api\/gyms\/(\d+)\/documents$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleUploadGymDocument(request, env, id);
+      }
+      if (path.match(/^\/api\/gyms\/(\d+)\/documents\/(\d+)$/) && method === 'DELETE') {
+        const gymId = parseInt(path.split('/')[3]);
+        const docId = parseInt(path.split('/')[5]);
+        return handleDeleteGymDocument(request, env, gymId, docId);
+      }
+      if (path.match(/^\/api\/gyms\/(\d+)\/lessons$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetPrivateLessons(request, env, id);
+      }
+      if (path.match(/^\/api\/gyms\/(\d+)\/lessons$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleCreatePrivateLesson(request, env, id);
+      }
 
       // Legacy routes
       if (path === '/api/open-mats' && method === 'GET') {

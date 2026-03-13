@@ -2,14 +2,19 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
+import Turnstile from '@/components/turnstile'
+import GoogleSignIn from '@/components/google-signin'
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
 
 export default function SignUpPage() {
   const router = useRouter()
-  const { register } = useAuth()
+  const { register, googleLogin } = useAuth()
   const toast = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
@@ -21,6 +26,7 @@ export default function SignUpPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,9 +38,9 @@ export default function SignUpPage() {
     setError('')
 
     try {
-      await register(formData.name, formData.email, formData.password, formData.sport)
+      await register(formData.name, formData.email, formData.password, formData.sport, turnstileToken || undefined)
       toast.success('Account created! Welcome to Training Partner.')
-      router.push('/app/profile?new=true')
+      router.push('/app/onboarding')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Registration failed'
       setError(message)
@@ -50,8 +56,19 @@ export default function SignUpPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Background image with overlay */}
+      <div className="absolute inset-0 z-0">
+        <Image
+          src="/images/hero-banner.png"
+          alt=""
+          fill
+          className="object-cover object-center opacity-10"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/95 to-background" />
+      </div>
+      <div className="w-full max-w-md relative z-10">
         <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back to Home
@@ -66,7 +83,7 @@ export default function SignUpPage() {
 
         <div className="mb-8">
           <h1 className="font-heading text-4xl text-white mb-2">CREATE ACCOUNT</h1>
-          <p className="text-text-secondary">Join thousands of athletes training together</p>
+          <p className="text-text-secondary">Create your free account and find training partners</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -151,6 +168,15 @@ export default function SignUpPage() {
             </label>
           </div>
 
+          {TURNSTILE_SITE_KEY && (
+            <Turnstile
+              siteKey={TURNSTILE_SITE_KEY}
+              onVerify={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
+              theme="dark"
+            />
+          )}
+
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -166,6 +192,31 @@ export default function SignUpPage() {
             {loading ? 'Creating Account...' : 'CREATE ACCOUNT'}
           </button>
         </form>
+
+        <div className="flex items-center gap-4 my-6">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-text-secondary text-sm">or</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        <GoogleSignIn
+          onCredential={async (credential) => {
+            setLoading(true)
+            setError('')
+            try {
+              const result = await googleLogin(credential)
+              toast.success(result.isNewUser ? 'Account created!' : 'Welcome back!')
+              router.push(result.isNewUser ? '/app/onboarding' : '/app')
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Google sign-up failed'
+              setError(message)
+              toast.error(message)
+            } finally {
+              setLoading(false)
+            }
+          }}
+          disabled={loading}
+        />
 
         <p className="text-center text-text-secondary mt-8">
           Already have an account?{' '}

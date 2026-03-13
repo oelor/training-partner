@@ -2,9 +2,26 @@
 
 import { clsx } from 'clsx'
 
-export function Skeleton({ className }: { className?: string }) {
+export interface SkeletonProps {
+  className?: string
+  children?: React.ReactNode
+}
+
+export function Skeleton({ className, children }: SkeletonProps) {
   return (
-    <div className={clsx('animate-pulse bg-border/50 rounded', className)} />
+    <div className={clsx('animate-pulse bg-border/50 rounded', className)}>
+      {children}
+    </div>
+  )
+}
+
+export function SkeletonWithText() {
+  return (
+    <div className="space-y-2">
+      <Skeleton className="h-6 w-3/4" />
+      <Skeleton className="h-4 w-1/2" />
+      <Skeleton className="h-4 w-2/3" />
+    </div>
   )
 }
 
@@ -13,10 +30,7 @@ export function CardSkeleton() {
     <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
       <div className="flex items-center gap-4">
         <Skeleton className="w-14 h-14 rounded-full" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-5 w-1/3" />
-          <Skeleton className="h-4 w-1/4" />
-        </div>
+        <SkeletonWithText />
       </div>
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-2/3" />

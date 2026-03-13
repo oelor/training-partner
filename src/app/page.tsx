@@ -2,17 +2,21 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { 
-  Users, 
-  MapPin, 
-  Shield, 
-  Zap, 
-  ChevronRight, 
-  Menu, 
+import Image from 'next/image'
+import {
+  Users,
+  MapPin,
+  Shield,
+  Zap,
+  ChevronRight,
+  Menu,
   X,
   Target,
   Clock,
-  Heart
+  Heart,
+  CheckCircle,
+  ArrowRight,
+  Crown
 } from 'lucide-react'
 
 export default function LandingPage() {
@@ -95,8 +99,19 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Hero background image */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/images/hero-banner.png"
+            alt=""
+            fill
+            className="object-cover object-center opacity-20"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
+        </div>
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center">
             <div className="inline-flex items-center gap-2 bg-surface px-4 py-2 rounded-full border border-border mb-8 animate-fade-in">
               <Zap className="w-4 h-4 text-accent" />
@@ -127,19 +142,55 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* Stats */}
+            {/* Value Props */}
             <div className="grid grid-cols-3 gap-8 mt-20 max-w-lg mx-auto animate-slide-up delay-300">
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">2,500+</div>
-                <div className="text-text-secondary text-sm">Active Athletes</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">FREE</div>
+                <div className="text-text-secondary text-sm">To Get Started</div>
               </div>
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">150+</div>
-                <div className="text-text-secondary text-sm">Partner Gyms</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">BJJ</div>
+                <div className="text-text-secondary text-sm">Wrestling · MMA</div>
               </div>
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">50</div>
-                <div className="text-text-secondary text-sm">Cities</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">24/7</div>
+                <div className="text-text-secondary text-sm">Find Partners</div>
+              </div>
+            </div>
+
+            {/* Hero Visual - App Preview */}
+            <div className="mt-16 animate-slide-up delay-400 relative max-w-3xl mx-auto">
+              <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
+              <div className="bg-surface border border-border rounded-2xl p-6 shadow-2xl shadow-primary/10">
+                {/* App preview header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                      <Users className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="font-heading text-sm text-white">YOUR MATCHES</span>
+                  </div>
+                  <span className="text-text-secondary text-xs">Preview</span>
+                </div>
+                {/* Example match cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { name: 'Alex R.', sport: 'BJJ', match: 94, skill: 'Purple Belt' },
+                    { name: 'Jordan M.', sport: 'Wrestling', match: 91, skill: 'Advanced' },
+                    { name: 'Sam K.', sport: 'MMA', match: 87, skill: 'Intermediate' },
+                  ].map((p) => (
+                    <div key={p.name} className="bg-background rounded-xl p-4 border border-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold text-sm">
+                          {p.name.charAt(0)}
+                        </div>
+                        <span className="text-accent font-mono text-sm font-bold">{p.match}%</span>
+                      </div>
+                      <div className="text-white text-sm font-medium">{p.name}</div>
+                      <div className="text-text-secondary text-xs">{p.sport} · {p.skill}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -194,6 +245,22 @@ export default function LandingPage() {
                 confidence knowing everyone is verified.
               </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Visual break - feature showcase */}
+      <section className="relative py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        <div className="max-w-5xl mx-auto">
+          <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10">
+            <Image
+              src="/images/feature-cards.png"
+              alt="Training Partner app features - dynamic wrestling silhouettes with neon accents"
+              width={1920}
+              height={1080}
+              className="w-full h-auto"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/80" />
           </div>
         </div>
       </section>
@@ -284,96 +351,231 @@ export default function LandingPage() {
               SIMPLE <span className="gradient-text">PRICING</span>
             </h2>
             <p className="text-text-secondary text-lg max-w-2xl mx-auto">
-              Start free, upgrade when you're ready
+              Start free, upgrade when you&apos;re ready. Gyms list for free too.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {/* Free Tier */}
             <div className="bg-surface p-8 rounded-xl border border-border">
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h3 className="font-heading text-2xl text-white">FREE</h3>
-                <span className="text-text-secondary">$0/month</span>
+                <p className="text-text-secondary text-sm mt-1">For athletes &amp; gyms</p>
+                <div className="mt-3">
+                  <span className="text-3xl font-bold text-white">$0</span>
+                  <span className="text-text-secondary">/month</span>
+                </div>
               </div>
-              <ul className="space-y-4 mb-8">
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Users className="w-5 h-5 text-accent" />
-                  Create your profile
-                </li>
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Users className="w-5 h-5 text-accent" />
-                  Find training partners
-                </li>
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Users className="w-5 h-5 text-accent" />
-                  Browse partner gyms
-                </li>
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Users className="w-5 h-5 text-accent" />
-                  Basic matching
-                </li>
+              <ul className="space-y-3 mb-8">
+                {[
+                  'Create your athlete profile',
+                  'Find compatible training partners',
+                  'Browse & book open mats',
+                  'Direct messaging',
+                  'Community posts & content',
+                  'Gyms: claim & manage listing',
+                  'Gyms: set open mat schedules',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
+                    <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                    {item}
+                  </li>
+                ))}
               </ul>
-              <Link 
-                href="/auth/signup" 
+              <Link
+                href="/auth/signup"
                 className="block w-full bg-surface border border-primary text-primary px-6 py-3 rounded-md font-medium text-center hover:bg-primary hover:text-white transition-colors"
               >
                 Sign Up Free
               </Link>
             </div>
 
-            {/* Premium Tier */}
+            {/* Premium Athlete */}
             <div className="bg-gradient-to-br from-primary/20 to-surface p-8 rounded-xl border border-primary relative">
-              <div className="absolute top-0 right-0 bg-accent text-background px-4 py-1 rounded-bl-md font-medium text-sm">
-                RECOMMENDED
+              <div className="absolute top-0 right-0 bg-accent text-background px-4 py-1 rounded-bl-md rounded-tr-xl font-medium text-xs">
+                MOST POPULAR
               </div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <h3 className="font-heading text-2xl text-white">PREMIUM</h3>
-                <span className="text-text-secondary">$20/month</span>
+                <p className="text-text-secondary text-sm mt-1">For serious athletes</p>
+                <div className="mt-3">
+                  <span className="text-3xl font-bold text-white">$9.99</span>
+                  <span className="text-text-secondary">/month</span>
+                </div>
               </div>
-              <ul className="space-y-4 mb-8">
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Heart className="w-5 h-5 text-accent" />
-                  Everything in Free
-                </li>
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Clock className="w-5 h-5 text-accent" />
-                  Exclusive open mat access
-                </li>
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <MapPin className="w-5 h-5 text-accent" />
-                  Train at 150+ partner gyms
-                </li>
-                <li className="flex items-center gap-3 text-text-secondary">
-                  <Shield className="w-5 h-5 text-accent" />
-                  Verified gym partners
-                </li>
+              <ul className="space-y-3 mb-8">
+                {[
+                  'Everything in Free',
+                  'Verified badge (background check)',
+                  'Ad-free experience',
+                  'Boosted profile in search',
+                  'Secure encrypted messaging',
+                  'Priority matching algorithm',
+                  'Discounts on clinics & events',
+                  'Advanced filters (distance, age, etc.)',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
+                    {i === 0 ? <Heart className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
+                     i === 1 ? <Shield className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
+                     <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />}
+                    {item}
+                  </li>
+                ))}
               </ul>
-              <Link 
-                href="/auth/signup?plan=premium" 
+              <Link
+                href="/auth/signup?plan=premium"
                 className="block w-full bg-primary text-white px-6 py-3 rounded-md font-medium text-center hover:bg-primary/90 transition-colors btn-glow"
               >
                 Get Premium
               </Link>
             </div>
+
+            {/* Gym & Coach */}
+            <div className="bg-surface p-8 rounded-xl border border-border relative">
+              <div className="absolute top-0 right-0 bg-primary/80 text-white px-4 py-1 rounded-bl-md rounded-tr-xl font-medium text-xs">
+                FOR GYMS
+              </div>
+              <div className="mb-6">
+                <h3 className="font-heading text-2xl text-white">GYM PRO</h3>
+                <p className="text-text-secondary text-sm mt-1">For gym owners &amp; coaches</p>
+                <div className="mt-3">
+                  <span className="text-3xl font-bold text-white">$19.99</span>
+                  <span className="text-text-secondary">/month</span>
+                </div>
+              </div>
+              <ul className="space-y-3 mb-8">
+                {[
+                  'Everything in Free (gym)',
+                  'Promoted listing in search',
+                  'Upload insurance & certifications',
+                  'Sell private lessons on platform',
+                  'Advanced analytics dashboard',
+                  'Featured gym badge',
+                  'Priority support',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
+                    {i === 0 ? <Crown className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" /> :
+                     <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />}
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/auth/signup?plan=gym"
+                className="block w-full bg-surface border border-border text-white px-6 py-3 rounded-md font-medium text-center hover:border-primary hover:text-primary transition-colors"
+              >
+                Get Gym Pro
+              </Link>
+            </div>
+          </div>
+
+          <p className="text-center text-text-secondary text-sm mt-8">
+            All plans come with a 7-day free trial. Cancel anytime. Powered by Stripe.
+          </p>
+        </div>
+      </section>
+
+      {/* Why Training Partner — Visual showcase */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
+              BUILT FOR <span className="gradient-text">ATHLETES</span>
+            </h2>
+            <p className="text-text-secondary text-lg max-w-2xl mx-auto">
+              We&apos;re building the platform we wish existed — by combat sports athletes, for combat sports athletes.
+            </p>
+          </div>
+
+          {/* Gym showcase with overlay */}
+          <div className="relative rounded-2xl overflow-hidden mb-12 group">
+            <Image
+              src="/images/gym-interior.png"
+              alt="Modern combat sports gym with dramatic lighting"
+              width={1080}
+              height={600}
+              className="w-full h-[400px] object-cover transition-transform duration-700 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-8">
+              <h3 className="font-heading text-3xl text-white mb-2">TRAIN AT THE BEST GYMS</h3>
+              <p className="text-text-secondary max-w-lg">
+                Discover local gyms, check open mat schedules, and access exclusive training sessions — all in one place.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {[
+              {
+                icon: '🤼',
+                title: 'Skill-Based Matching',
+                text: 'Get matched with training partners at your level. Filter by sport, weight class, skill, and location.',
+              },
+              {
+                icon: '🏟️',
+                title: 'Discover Local Gyms',
+                text: 'Find gyms near you with schedules, class info, and open mat times — all in one place.',
+              },
+              {
+                icon: '📱',
+                title: 'Coordinate Training',
+                text: 'Message partners, plan sessions, and build your training network effortlessly.',
+              },
+            ].map((t) => (
+              <div key={t.title} className="bg-surface border border-border rounded-xl p-6 card-hover">
+                <div className="text-4xl mb-4">{t.icon}</div>
+                <h3 className="text-white font-heading text-lg mb-2">{t.title}</h3>
+                <p className="text-text-secondary leading-relaxed">{t.text}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="font-heading text-4xl sm:text-5xl text-white mb-6">
-            READY TO FIND YOUR <span className="gradient-text">TRAINING PARTNER</span>?
-          </h2>
-          <p className="text-text-secondary text-lg mb-10">
-            Join thousands of athletes training smarter, not harder
-          </p>
-          <Link 
-            href="/auth/signup" 
-            className="inline-block bg-primary text-white px-10 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105"
-          >
-            START TRAINING NOW
-          </Link>
+      {/* CTA Section with app mockup */}
+      <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* App mockup */}
+            <div className="relative mx-auto md:mx-0 max-w-[280px] md:max-w-[320px]">
+              <div className="relative rounded-[2rem] overflow-hidden shadow-2xl shadow-primary/20 border-2 border-border">
+                <Image
+                  src="/images/app-mockup.png"
+                  alt="Training Partner mobile app preview"
+                  width={320}
+                  height={568}
+                  className="w-full h-auto"
+                />
+              </div>
+              {/* Glow effect behind phone */}
+              <div className="absolute -inset-4 bg-primary/10 rounded-[3rem] blur-3xl -z-10" />
+            </div>
+
+            {/* CTA content */}
+            <div className="text-center md:text-left">
+              <h2 className="font-heading text-4xl sm:text-5xl text-white mb-6">
+                READY TO FIND YOUR <span className="gradient-text">TRAINING PARTNER</span>?
+              </h2>
+              <p className="text-text-secondary text-lg mb-10">
+                Sign up free and start finding training partners today. Available on web and mobile.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
+                <Link
+                  href="/auth/signup"
+                  className="inline-block bg-primary text-white px-10 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105 text-center"
+                >
+                  START TRAINING NOW
+                </Link>
+                <Link
+                  href="#features"
+                  className="inline-flex items-center justify-center gap-2 text-text-secondary hover:text-white transition-colors px-6 py-4"
+                >
+                  Learn More <ArrowRight className="w-5 h-5" />
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -396,18 +598,20 @@ export default function LandingPage() {
             <div>
               <h4 className="font-heading text-lg text-white mb-4">PLATFORM</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
+                <li><Link href="/partners" className="hover:text-primary">Find Partners</Link></li>
                 <li><Link href="#features" className="hover:text-primary">Features</Link></li>
                 <li><Link href="#how-it-works" className="hover:text-primary">How It Works</Link></li>
                 <li><Link href="#pricing" className="hover:text-primary">Pricing</Link></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="font-heading text-lg text-white mb-4">COMPANY</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
-                <li><Link href="/about" className="hover:text-primary">About</Link></li>
-                <li><Link href="/contact" className="hover:text-primary">Contact</Link></li>
-                <li><Link href="/careers" className="hover:text-primary">Careers</Link></li>
+                <li><Link href="/contact" className="hover:text-primary">Contact & Support</Link></li>
+                <li><Link href="/partners/wrestling" className="hover:text-primary">Wrestling</Link></li>
+                <li><Link href="/partners/mma" className="hover:text-primary">MMA</Link></li>
+                <li><Link href="/partners/bjj" className="hover:text-primary">BJJ</Link></li>
               </ul>
             </div>
             

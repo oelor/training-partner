@@ -13,7 +13,8 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string, sport?: string) => Promise<void>
+  register: (name: string, email: string, password: string, sport?: string, turnstileToken?: string) => Promise<void>
+  googleLogin: (credential: string) => Promise<{ isNewUser: boolean }>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -72,10 +73,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const register = async (name: string, email: string, password: string, sport?: string) => {
+  const register = async (name: string, email: string, password: string, sport?: string, turnstileToken?: string) => {
     setState(s => ({ ...s, loading: true, error: null }))
     try {
-      const data = await api.register({ name, email, password, sport })
+      const data = await api.register({ name, email, password, sport, turnstile_token: turnstileToken })
       setState({
         user: data.user,
         profile: null,
@@ -91,13 +92,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const googleLogin = async (credential: string) => {
+    setState(s => ({ ...s, loading: true, error: null }))
+    try {
+      const data = await api.googleAuth(credential)
+      setState({
+        user: data.user,
+        profile: null,
+        subscription: null,
+        loading: false,
+        error: null,
+      })
+      await refreshUser()
+      return { isNewUser: data.isNewUser }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Google login failed'
+      setState(s => ({ ...s, loading: false, error: message }))
+      throw err
+    }
+  }
+
   const logout = () => {
     api.logout()
     setState({ user: null, profile: null, subscription: null, loading: false, error: null })
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, refreshUser }}>
+    <AuthContext.Provider value={{ ...state, login, register, googleLogin, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )
