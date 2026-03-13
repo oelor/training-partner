@@ -10,25 +10,30 @@ function json(data, init = {}) {
 }
 
 // Allowed origins for CORS — restrict to known frontends
-const ALLOWED_ORIGINS = [
+const PRODUCTION_ORIGINS = [
   'https://training-partner.vercel.app',
   'https://trainingpartner.app',
+];
+
+const DEV_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
 ];
 
 function isAllowedOrigin(origin, env) {
   if (!origin) return false;
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (PRODUCTION_ORIGINS.includes(origin)) return true;
   // Allow custom frontend URL from env
   if (env.FRONTEND_URL && origin === env.FRONTEND_URL) return true;
   // Allow Vercel preview deployments
   if (origin.match(/^https:\/\/training-partner-[\w-]+\.vercel\.app$/)) return true;
+  // Only allow localhost in non-production environments
+  if (env.ENVIRONMENT !== 'production' && DEV_ORIGINS.includes(origin)) return true;
   return false;
 }
 
 function corsHeaders(origin, env) {
-  const allowedOrigin = isAllowedOrigin(origin, env) ? origin : ALLOWED_ORIGINS[0];
+  const allowedOrigin = isAllowedOrigin(origin, env) ? origin : PRODUCTION_ORIGINS[0];
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -156,6 +161,20 @@ function sanitize(str, maxLen = 5000) {
   if (typeof str !== 'string') return '';
   // Strip HTML-significant and script-injection characters
   return str.replace(/[<>"'`]/g, '').replace(/javascript:/gi, '').trim().slice(0, maxLen);
+}
+
+// Recursively sanitize string values in nested objects/arrays
+function sanitizeDeep(value) {
+  if (typeof value === 'string') return sanitize(value, 500);
+  if (Array.isArray(value)) return value.slice(0, 50).map(sanitizeDeep);
+  if (value && typeof value === 'object') {
+    const result = {};
+    for (const [k, v] of Object.entries(value).slice(0, 50)) {
+      result[sanitize(k, 100)] = sanitizeDeep(v);
+    }
+    return result;
+  }
+  return value; // numbers, booleans, null pass through
 }
 
 // ─── Password Hashing (PBKDF2 via Web Crypto API) ───────────────────────────
@@ -729,7 +748,7 @@ async function handleUpdateProfile(request, env) {
   const trainingGoals = body.training_goals ? JSON.stringify(body.training_goals.map(g => sanitize(g))) : undefined;
   const experienceYears = body.experience_years !== undefined ? parseInt(body.experience_years) || 0 : undefined;
   const bio = body.bio !== undefined ? sanitize(body.bio) : undefined;
-  const availability = body.availability ? JSON.stringify(body.availability) : undefined;
+  const availability = body.availability ? JSON.stringify(sanitizeDeep(body.availability)) : undefined;
   const age = body.age !== undefined ? parseInt(body.age) || 0 : undefined;
   const location = body.location !== undefined ? sanitize(body.location) : undefined;
 
@@ -1153,6 +1172,10 @@ async function handleGetGymDetail(request, env, gymId) {
 async function handleCreateBooking(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Rate limit: 20 bookings per hour per user
+  const allowed = await checkRateLimit(env, `booking:${user.id}`, 20, 3600);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many bookings. Try again later.' }, { status: 429 }, request, env);
 
   const body = await readJson(request);
   if (!body || !body.session_id) {
@@ -1604,6 +1627,10 @@ async function handleCreateReview(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
+  // Rate limit: 10 reviews per hour per user
+  const allowed = await checkRateLimit(env, `review:${user.id}`, 10, 3600);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many reviews. Try again later.' }, { status: 429 }, request, env);
+
   const body = await readJson(request);
   if (!body || !body.gym_id || !body.rating) {
     return corsJson({ ok: false, error: 'Gym ID and rating are required' }, { status: 400 }, request, env);
@@ -1916,6 +1943,10 @@ async function handleBlockUser(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
+  // Rate limit: 20 blocks per hour per user
+  const allowed = await checkRateLimit(env, `block:${user.id}`, 20, 3600);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many block requests. Try again later.' }, { status: 429 }, request, env);
+
   const body = await readJson(request);
   if (!body || !body.user_id) {
     return corsJson({ ok: false, error: 'User ID is required' }, { status: 400 }, request, env);
@@ -2080,14 +2111,14 @@ async function listOpenMats(env) {
 async function handleFoundingApply(request, env) {
   const body = await readJson(request);
   if (!body) return corsJson({ ok: false, error: 'invalid_json' }, { status: 400 }, request, env);
-  const name = normalizeText(body.name);
-  const email = normalizeText(body.email).toLowerCase();
-  const role = normalizeText(body.role);
+  const name = sanitize(body.name);
+  const email = sanitize(body.email).toLowerCase();
+  const role = sanitize(body.role);
   if (!name || !email || !role) return corsJson({ ok: false, error: 'missing_required_fields' }, { status: 400 }, request, env);
   if (env.DB) {
     await ensureSchema(env);
     await env.DB.prepare(`INSERT INTO founding_applications (created_at, name, email, role, city, sport, goal, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(isoNow(), name, email, role, normalizeText(body.city), normalizeText(body.sport), normalizeText(body.goal), normalizeText(body.notes)).run();
+      .bind(isoNow(), name, email, role, sanitize(body.city), sanitize(body.sport), sanitize(body.goal), sanitize(body.notes)).run();
   }
   return corsJson({ ok: true, status: 'received' }, {}, request, env);
 }
@@ -2095,12 +2126,12 @@ async function handleFoundingApply(request, env) {
 async function handleWaitlist(request, env) {
   const body = await readJson(request);
   if (!body) return corsJson({ ok: false, error: 'invalid_json' }, { status: 400 }, request, env);
-  const email = normalizeText(body.email).toLowerCase();
+  const email = sanitize(body.email).toLowerCase();
   if (!email) return corsJson({ ok: false, error: 'missing_email' }, { status: 400 }, request, env);
   if (env.DB) {
     await ensureSchema(env);
     await env.DB.prepare(`INSERT INTO waitlist_signups (created_at, name, email, role, city, notes) VALUES (?, ?, ?, ?, ?, ?)`)
-      .bind(isoNow(), normalizeText(body.name), email, normalizeText(body.role), normalizeText(body.city), normalizeText(body.notes)).run();
+      .bind(isoNow(), sanitize(body.name), email, sanitize(body.role), sanitize(body.city), sanitize(body.notes)).run();
   }
   return corsJson({ ok: true, status: 'received' }, {}, request, env);
 }
@@ -2276,6 +2307,12 @@ async function handleUploadGymDocument(request, env, gymId) {
 
   if (!fileData) return corsJson({ ok: false, error: 'file_data is required' }, { status: 400 }, request, env);
 
+  // Validate content type — only allow images and PDFs
+  const allowedDocMimes = /^data:(image\/(jpeg|jpg|png|gif|webp)|application\/pdf);base64,/;
+  if (!allowedDocMimes.test(fileData)) {
+    return corsJson({ ok: false, error: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP, PDF' }, { status: 400 }, request, env);
+  }
+
   // Limit file size (~200KB base64)
   if (fileData.length > 275000) {
     return corsJson({ ok: false, error: 'File too large. Max 200KB.' }, { status: 400 }, request, env);
@@ -2364,6 +2401,11 @@ async function handleGetPostComments(request, env, postId) {
 async function handleCreatePostComment(request, env, postId) {
   const user = await requireAuth(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Rate limit: 30 comments per 5 minutes per user
+  const allowed = await checkRateLimit(env, `comment:${user.id}`, 30, 300);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many comments. Try again later.' }, { status: 429 }, request, env);
+
   const body = await readJson(request);
   if (!body || !body.body?.trim()) return corsJson({ ok: false, error: 'Comment body required' }, { status: 400 }, request, env);
   const parentId = body.parent_id || null;
@@ -2585,9 +2627,9 @@ async function handleGetSupportStats(request, env) {
 // ─── Milo AI Monitoring Endpoints ────────────────────────────────────────────
 
 async function handleMiloHealthCheck(request, env) {
-  // API key auth for Milo
+  // API key auth for Milo — fail-closed: deny if key not configured or doesn't match
   const apiKey = request.headers.get('X-Milo-Key');
-  if (apiKey !== env.MILO_API_KEY && env.MILO_API_KEY) {
+  if (!env.MILO_API_KEY || apiKey !== env.MILO_API_KEY) {
     return corsJson({ ok: false, error: 'Invalid API key' }, { status: 401 }, request, env);
   }
   const now = isoNow();
@@ -2616,7 +2658,7 @@ async function handleMiloHealthCheck(request, env) {
 
 async function handleMiloMetrics(request, env) {
   const apiKey = request.headers.get('X-Milo-Key');
-  if (apiKey !== env.MILO_API_KEY && env.MILO_API_KEY) {
+  if (!env.MILO_API_KEY || apiKey !== env.MILO_API_KEY) {
     return corsJson({ ok: false, error: 'Invalid API key' }, { status: 401 }, request, env);
   }
   const now = isoNow();
@@ -2651,7 +2693,7 @@ async function handleMiloMetrics(request, env) {
 
 async function handleMiloRecordMetric(request, env) {
   const apiKey = request.headers.get('X-Milo-Key');
-  if (apiKey !== env.MILO_API_KEY && env.MILO_API_KEY) {
+  if (!env.MILO_API_KEY || apiKey !== env.MILO_API_KEY) {
     return corsJson({ ok: false, error: 'Invalid API key' }, { status: 401 }, request, env);
   }
   const body = await readJson(request);
