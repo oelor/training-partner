@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown } from 'lucide-react'
+import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import api from '@/lib/api'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -16,7 +17,40 @@ export default function SettingsPage() {
     gymUpdates: true,
     promotions: false
   })
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const [instagramUsername, setInstagramUsername] = useState('')
+  const [editingInstagram, setEditingInstagram] = useState(false)
+  const [savingInstagram, setSavingInstagram] = useState(false)
   const isPremium = subscription?.plan === 'premium'
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await api.deleteAccount('DELETE')
+      logout()
+      router.push('/')
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete account')
+    } finally {
+      setDeleting(false)
+    }
+  }
+  const [resendingVerification, setResendingVerification] = useState(false)
+  const [verificationSent, setVerificationSent] = useState(false)
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true)
+    try {
+      await api.resendVerification()
+      setVerificationSent(true)
+    } catch { /* silently fail */ }
+    finally { setResendingVerification(false) }
+  }
 
   const handleLogout = () => {
     logout()
@@ -83,6 +117,22 @@ export default function SettingsPage() {
                     <div className="text-white font-medium">Email Address</div>
                     <div className="text-text-secondary text-sm">{user?.email || 'Not set'}</div>
                   </div>
+                  {user?.email_verified ? (
+                    <span className="flex items-center gap-1 text-accent text-sm">
+                      <CheckCircle className="w-4 h-4" /> Verified
+                    </span>
+                  ) : verificationSent ? (
+                    <span className="text-accent text-sm">Email sent!</span>
+                  ) : (
+                    <button
+                      onClick={handleResendVerification}
+                      disabled={resendingVerification}
+                      className="flex items-center gap-1 text-primary text-sm hover:underline disabled:opacity-50"
+                    >
+                      {resendingVerification ? <Loader2 className="w-3 h-3 animate-spin" /> : <Mail className="w-3 h-3" />}
+                      Verify
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center justify-between py-4 border-b border-border">
                   <div>
@@ -90,12 +140,87 @@ export default function SettingsPage() {
                     <div className="text-text-secondary text-sm capitalize">{user?.role || 'athlete'}</div>
                   </div>
                 </div>
+                <div className="py-4 border-b border-border">
+                  <div className="text-white font-medium mb-3">Connected Accounts</div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Instagram className="w-5 h-5 text-pink-400" />
+                        <div>
+                          <div className="text-sm text-white">Instagram</div>
+                          <div className="text-xs text-text-secondary">
+                            {user?.instagram_username
+                              ? `@${user?.instagram_username}`
+                              : 'Not connected'}
+                          </div>
+                        </div>
+                      </div>
+                      {editingInstagram ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={instagramUsername}
+                            onChange={e => setInstagramUsername(e.target.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, ''))}
+                            placeholder="username"
+                            maxLength={30}
+                            pattern="[a-zA-Z0-9_.]+"
+                            className="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-white w-36 focus:border-primary focus:outline-none"
+                          />
+                          <button
+                            disabled={savingInstagram}
+                            onClick={async () => {
+                              setSavingInstagram(true)
+                              try {
+                                await api.updateInstagram(instagramUsername.trim())
+                                setEditingInstagram(false)
+                                window.location.reload()
+                              } catch {} finally {
+                                setSavingInstagram(false)
+                              }
+                            }}
+                            className="text-primary text-sm hover:underline disabled:opacity-50"
+                          >
+                            {savingInstagram ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                          </button>
+                          <button onClick={() => setEditingInstagram(false)} className="text-text-secondary text-sm hover:text-white">
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setInstagramUsername((user?.instagram_username as string) || '')
+                            setEditingInstagram(true)
+                          }}
+                          className="text-primary text-sm hover:underline"
+                        >
+                          {user?.instagram_username ? 'Edit' : 'Connect'}
+                        </button>
+                      )}
+                    </div>
+                    {user?.instagram_username && (
+                      <a
+                        href={`https://instagram.com/${encodeURIComponent(user?.instagram_username || '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-text-secondary hover:text-pink-400 transition-colors"
+                      >
+                        View profile <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                </div>
                 <div className="flex items-center justify-between py-4">
                   <div>
                     <div className="text-white font-medium">Delete Account</div>
                     <div className="text-text-secondary text-sm">Permanently delete your account and data</div>
                   </div>
-                  <button className="text-red-400 text-sm hover:underline">Delete</button>
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="text-red-400 text-sm hover:underline"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             </div>
@@ -244,6 +369,69 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <h2 className="font-heading text-xl text-white">DELETE ACCOUNT</h2>
+              </div>
+              <button onClick={() => { setShowDeleteModal(false); setDeleteConfirmation(''); setDeleteError(''); }} className="text-text-secondary hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-text-secondary text-sm mb-4">
+              This action is <span className="text-red-400 font-medium">permanent and cannot be undone</span>. All your data will be deleted including:
+            </p>
+            <ul className="text-text-secondary text-sm space-y-1 mb-6 ml-4">
+              <li>• Your profile and training preferences</li>
+              <li>• All messages and conversations</li>
+              <li>• Bookings and gym reviews</li>
+              <li>• Subscription and payment history</li>
+            </ul>
+
+            <label className="block text-text-secondary text-sm mb-2">
+              Type <span className="text-red-400 font-mono font-bold">DELETE</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              placeholder="DELETE"
+              className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-red-400 transition-colors mb-4"
+            />
+
+            {deleteError && (
+              <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-3 py-2 rounded-lg text-sm mb-4">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowDeleteModal(false); setDeleteConfirmation(''); setDeleteError(''); }}
+                className="flex-1 bg-background border border-border text-white py-3 rounded-lg font-medium hover:bg-surface transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmation !== 'DELETE' || deleting}
+                className="flex-1 bg-red-500 text-white py-3 rounded-lg font-medium hover:bg-red-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {deleting ? 'Deleting...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

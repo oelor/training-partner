@@ -2,11 +2,87 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { User, MapPin, Target, Clock, Save, Check, Loader2 } from 'lucide-react'
+import { User, MapPin, Target, Clock, Save, Check, Loader2, Camera, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api from '@/lib/api'
 import { useToast } from '@/components/toast'
 import { ProfileSkeleton } from '@/components/skeleton'
+
+function AvatarUpload({ currentUrl, userName, onUploaded }: { currentUrl?: string; userName?: string; onUploaded: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false)
+  const [preview, setPreview] = useState<string | null>(null)
+  const toast = useToast()
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+
+    // 100KB limit for base64 storage in D1
+    if (file.size > 100 * 1024) {
+      toast.error('Image must be under 100KB. Try a smaller or more compressed image.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = async () => {
+      const dataUrl = reader.result as string
+      setPreview(dataUrl)
+      setUploading(true)
+      try {
+        const res = await api.uploadAvatar(dataUrl)
+        onUploaded(res.avatar_url)
+        toast.success('Avatar updated!')
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Upload failed'
+        toast.error(msg)
+        setPreview(null)
+      } finally {
+        setUploading(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const displayUrl = preview || currentUrl
+  const initial = userName?.charAt(0)?.toUpperCase() || '?'
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative group">
+        <div className="w-20 h-20 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center">
+          {displayUrl ? (
+            <img src={displayUrl} alt="Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-2xl font-bold text-primary">{initial}</span>
+          )}
+        </div>
+        <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+          {uploading ? (
+            <Loader2 className="w-6 h-6 text-white animate-spin" />
+          ) : (
+            <Camera className="w-6 h-6 text-white" />
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            disabled={uploading}
+            className="hidden"
+          />
+        </label>
+      </div>
+      <div className="text-sm text-text-secondary">
+        <p>Click to upload avatar</p>
+        <p className="text-xs">Max 100KB · JPG, PNG, WebP</p>
+      </div>
+    </div>
+  )
+}
 
 const sportsList = [
   'Wrestling', 'MMA', 'BJJ', 'Boxing',
@@ -153,6 +229,14 @@ function ProfileForm() {
           <User className="w-5 h-5 text-primary" />
           BASIC INFO
         </h2>
+
+        <div className="mb-6">
+          <AvatarUpload
+            currentUrl={user?.avatar_url}
+            userName={user?.display_name}
+            onUploaded={() => refreshUser()}
+          />
+        </div>
 
         <div className="grid md:grid-cols-2 gap-6">
           <div>

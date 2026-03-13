@@ -52,7 +52,7 @@ export default function DashboardPage() {
 
       {/* Profile Completion Banner */}
       {isProfileIncomplete && (
-        <Link href="/app/profile?new=true" className="block bg-primary/10 border border-primary/30 rounded-xl p-6 hover:bg-primary/15 transition-colors">
+        <Link href="/app/onboarding" className="block bg-primary/10 border border-primary/30 rounded-xl p-6 hover:bg-primary/15 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-white font-heading text-lg mb-1">Complete Your Profile</h3>
@@ -160,12 +160,23 @@ export default function DashboardPage() {
           </div>
         ) : partners.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
-            <Users className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-            <p className="text-white font-medium mb-1">No partners found yet</p>
-            <p className="text-text-secondary text-sm mb-4">Complete your profile to get matched with training partners</p>
-            <Link href="/app/profile?new=true" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
-              Complete Profile <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="w-16 h-16 bg-surface/50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Users className="w-8 h-8 text-text-secondary" />
+            </div>
+            <p className="text-white font-heading text-lg mb-2">Find Your Training Partners</p>
+            <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Get matched with compatible athletes in your area for BJJ, wrestling, and combat sports training</p>
+            {isProfileIncomplete ? (
+              <Link href="/app/onboarding" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
+                Complete Profile <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <div className="text-text-secondary text-sm italic">
+                Adjust your preferences in settings to see more matches
+              </div>
+            )}
+            <p className="text-text-secondary text-xs mt-4">
+              Premium members get priority matching and see 3x more partners
+            </p>
           </div>
         ) : (
           <div className="grid md:grid-cols-3 gap-4">
@@ -215,9 +226,21 @@ export default function DashboardPage() {
           </div>
         ) : gyms.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
-            <MapPin className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-            <p className="text-white font-medium">No gyms available yet</p>
-            <p className="text-text-secondary text-sm">Check back soon for partner gym listings</p>
+            <div className="w-16 h-16 bg-surface/50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <MapPin className="w-8 h-8 text-text-secondary" />
+            </div>
+            <p className="text-white font-heading text-lg mb-2">Discover Partner Gyms</p>
+            <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Explore our network of partner gyms with verified open mat hours and facilities in your area</p>
+            {subscription?.plan === 'premium' ? (
+              <Link href="/app/gyms" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
+                View All Gyms <ArrowRight className="w-4 h-4" />
+              </Link>
+            ) : (
+              <Link href="/app/settings" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
+                Upgrade to View <ArrowRight className="w-4 h-4" />
+              </Link>
+            )}
+            <p className="text-text-secondary text-xs mt-4">Premium members get access to 150+ gyms with exclusive open mat hours</p>
           </div>
         ) : (
           <div className="grid md:grid-cols-3 gap-4">

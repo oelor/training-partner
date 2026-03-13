@@ -3,19 +3,34 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'),
   title: 'Training Partner - Find Your Perfect Sparring Partner',
   description: 'Connect with compatible training partners in your area. Match by skill level, weight class, and training goals. Plus access exclusive open mat hours at partner gyms.',
   keywords: 'wrestling, MMA, BJJ, boxing, training partner, sparring, combat sports, gym, open mat',
+  icons: {
+    icon: '/favicon.svg',
+    apple: '/icon.svg',
+  },
+  manifest: '/manifest.json',
   openGraph: {
     title: 'Training Partner - Never Train Alone Again',
     description: 'Connect with compatible training partners based on skill level, weight class, and training goals.',
     type: 'website',
     siteName: 'Training Partner',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Training Partner - Never Train Alone Again',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Training Partner - Never Train Alone Again',
     description: 'Connect with compatible training partners based on skill level, weight class, and training goals.',
+    images: ['/og-image.png'],
   },
   robots: {
     index: true,
@@ -30,6 +45,33 @@ export const viewport: Viewport = {
   themeColor: '#0D0D0D',
 }
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': 'https://trainingpartner.app/#org',
+      name: 'Training Partner',
+      url: 'https://trainingpartner.app',
+      logo: 'https://trainingpartner.app/icon.svg',
+      description: 'Connect with compatible training partners in your area for combat sports.',
+      sameAs: [],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': 'https://trainingpartner.app/#website',
+      url: 'https://trainingpartner.app',
+      name: 'Training Partner',
+      publisher: { '@id': 'https://trainingpartner.app/#org' },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: 'https://trainingpartner.app/partners?q={search_term_string}',
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  ],
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -37,10 +79,24 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      </head>
       <body className="antialiased">
         <Providers>
           {children}
         </Providers>
+        {/* Cloudflare Web Analytics — free, privacy-first, no cookies */}
+        {process.env.NEXT_PUBLIC_CF_BEACON_TOKEN && (
+          <script
+            defer
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon={`{"token":"${process.env.NEXT_PUBLIC_CF_BEACON_TOKEN}"}`}
+          />
+        )}
       </body>
     </html>
   )

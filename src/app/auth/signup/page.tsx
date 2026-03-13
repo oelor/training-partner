@@ -6,10 +6,14 @@ import { useRouter } from 'next/navigation'
 import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
+import Turnstile from '@/components/turnstile'
+import GoogleSignIn from '@/components/google-signin'
+
+const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ''
 
 export default function SignUpPage() {
   const router = useRouter()
-  const { register } = useAuth()
+  const { register, googleLogin } = useAuth()
   const toast = useToast()
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
@@ -21,6 +25,7 @@ export default function SignUpPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [turnstileToken, setTurnstileToken] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,9 +37,9 @@ export default function SignUpPage() {
     setError('')
 
     try {
-      await register(formData.name, formData.email, formData.password, formData.sport)
+      await register(formData.name, formData.email, formData.password, formData.sport, turnstileToken || undefined)
       toast.success('Account created! Welcome to Training Partner.')
-      router.push('/app/profile?new=true')
+      router.push('/app/onboarding')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Registration failed'
       setError(message)
@@ -151,6 +156,15 @@ export default function SignUpPage() {
             </label>
           </div>
 
+          {TURNSTILE_SITE_KEY && (
+            <Turnstile
+              siteKey={TURNSTILE_SITE_KEY}
+              onVerify={setTurnstileToken}
+              onExpire={() => setTurnstileToken('')}
+              theme="dark"
+            />
+          )}
+
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">
               {error}
@@ -166,6 +180,31 @@ export default function SignUpPage() {
             {loading ? 'Creating Account...' : 'CREATE ACCOUNT'}
           </button>
         </form>
+
+        <div className="flex items-center gap-4 my-6">
+          <div className="flex-1 h-px bg-border" />
+          <span className="text-text-secondary text-sm">or</span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+
+        <GoogleSignIn
+          onCredential={async (credential) => {
+            setLoading(true)
+            setError('')
+            try {
+              const result = await googleLogin(credential)
+              toast.success(result.isNewUser ? 'Account created!' : 'Welcome back!')
+              router.push(result.isNewUser ? '/app/onboarding' : '/app')
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : 'Google sign-up failed'
+              setError(message)
+              toast.error(message)
+            } finally {
+              setLoading(false)
+            }
+          }}
+          disabled={loading}
+        />
 
         <p className="text-center text-text-secondary mt-8">
           Already have an account?{' '}

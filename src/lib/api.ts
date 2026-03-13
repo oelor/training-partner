@@ -53,7 +53,7 @@ class ApiClient {
         // Retry on network errors only
         if (fetchError.message.includes('network') && attempt < MAX_RETRIES - 1) {
           await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (attempt + 1)));
-          lastError = error;
+          lastError = fetchError;
           continue;
         }
         throw error;
