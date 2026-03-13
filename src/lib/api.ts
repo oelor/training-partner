@@ -1,5 +1,5 @@
 // API Client for Training Partner Cloudflare Worker
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://training-partner-app.workers.dev';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://training-partner-app.elor-orry.workers.dev';
 
 // Retry configuration
 const MAX_RETRIES = 3;
