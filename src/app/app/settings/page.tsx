@@ -24,6 +24,9 @@ export default function SettingsPage() {
   const [instagramUsername, setInstagramUsername] = useState('')
   const [editingInstagram, setEditingInstagram] = useState(false)
   const [savingInstagram, setSavingInstagram] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
   const isPremium = subscription?.plan === 'premium'
 
   const handleDeleteAccount = async () => {
@@ -50,6 +53,20 @@ export default function SettingsPage() {
       setVerificationSent(true)
     } catch { /* silently fail */ }
     finally { setResendingVerification(false) }
+  }
+
+  const handleCancelSubscription = async () => {
+    setCancelling(true)
+    setCancelError('')
+    try {
+      await api.cancelSubscription()
+      setShowCancelModal(false)
+      window.location.reload()
+    } catch (err: unknown) {
+      setCancelError(err instanceof Error ? err.message : 'Failed to cancel subscription')
+    } finally {
+      setCancelling(false)
+    }
   }
 
   const handleLogout = () => {
@@ -279,7 +296,20 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {!isPremium && (
+              {isPremium ? (
+                <div className="bg-background border border-border rounded-xl p-6">
+                  <h3 className="text-white font-medium mb-2">Manage Subscription</h3>
+                  <p className="text-text-secondary text-sm mb-4">
+                    Your premium subscription renews automatically. You can cancel anytime.
+                  </p>
+                  <button
+                    onClick={() => setShowCancelModal(true)}
+                    className="text-red-400 text-sm hover:underline"
+                  >
+                    Cancel Subscription
+                  </button>
+                </div>
+              ) : (
                 <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary rounded-xl p-6 relative overflow-hidden">
                   <div className="absolute top-0 right-0 bg-accent text-background px-4 py-1 rounded-bl-md font-medium text-sm">
                     RECOMMENDED
@@ -342,7 +372,7 @@ export default function SettingsPage() {
                   {isPremium ? 'Premium subscription active' : 'No billing history'}
                 </div>
                 <div className="text-text-secondary text-sm">
-                  {isPremium ? 'Managed via Lemon Squeezy' : 'You\'re on the free plan'}
+                  {isPremium ? 'Managed via Stripe' : 'You\'re on the free plan'}
                 </div>
               </div>
             </div>
@@ -369,6 +399,57 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Cancel Subscription Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                </div>
+                <h2 className="font-heading text-xl text-white">CANCEL SUBSCRIPTION</h2>
+              </div>
+              <button onClick={() => { setShowCancelModal(false); setCancelError(''); }} className="text-text-secondary hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-text-secondary text-sm mb-4">
+              Are you sure you want to cancel your Premium subscription?
+            </p>
+            <ul className="text-text-secondary text-sm space-y-1 mb-6 ml-4">
+              <li>• You&apos;ll keep Premium access until your current billing period ends</li>
+              <li>• After that, you&apos;ll revert to the Free plan</li>
+              <li>• You can resubscribe anytime to regain Premium features</li>
+            </ul>
+
+            {cancelError && (
+              <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-3 py-2 rounded-lg text-sm mb-4">
+                {cancelError}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setShowCancelModal(false); setCancelError(''); }}
+                className="flex-1 bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+              >
+                Keep Premium
+              </button>
+              <button
+                onClick={handleCancelSubscription}
+                disabled={cancelling}
+                className="flex-1 bg-background border border-border text-text-secondary py-3 rounded-lg font-medium hover:text-white hover:border-red-500/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {cancelling && <Loader2 className="w-4 h-4 animate-spin" />}
+                {cancelling ? 'Cancelling...' : 'Cancel Plan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Account Modal */}
       {showDeleteModal && (

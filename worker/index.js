@@ -269,6 +269,13 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS donations (id INTEGER PRIMARY KEY AUTOINCREMENT, donor_id INTEGER NOT NULL, recipient_id INTEGER NOT NULL, amount_cents INTEGER NOT NULL, message TEXT DEFAULT '', stripe_payment_intent_id TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS gym_documents (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, type TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', file_data TEXT DEFAULT '', verified INTEGER NOT NULL DEFAULT 0, uploaded_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS private_lessons (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, coach_user_id INTEGER NOT NULL, sport TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', description TEXT DEFAULT '', price_cents INTEGER NOT NULL DEFAULT 0, duration_minutes INTEGER NOT NULL DEFAULT 60, available INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+      // Alpha launch features
+      `CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL, user_id INTEGER NOT NULL, body TEXT NOT NULL, parent_id INTEGER DEFAULT NULL, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT NOT NULL DEFAULT 'general', rating INTEGER, title TEXT DEFAULT '', body TEXT NOT NULL, page TEXT DEFAULT '', user_agent TEXT DEFAULT '', status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS invite_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, created_by INTEGER, max_uses INTEGER NOT NULL DEFAULT 10, current_uses INTEGER NOT NULL DEFAULT 0, expires_at TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS invite_redemptions (id INTEGER PRIMARY KEY AUTOINCREMENT, code_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS app_metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, metric_key TEXT NOT NULL, metric_value TEXT NOT NULL, recorded_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS support_donations (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, donor_name TEXT DEFAULT '', donor_email TEXT DEFAULT '', amount_cents INTEGER NOT NULL, message TEXT DEFAULT '', cause TEXT NOT NULL DEFAULT 'tma', stripe_session_id TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -297,6 +304,15 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_gym_reviews_user_gym ON gym_reviews(user_id, gym_id)',
       'CREATE INDEX IF NOT EXISTS idx_rate_limits_key ON rate_limits(key, window_start)',
       'CREATE INDEX IF NOT EXISTS idx_gym_sessions_gym ON gym_sessions(gym_id)',
+      // Alpha launch indexes
+      'CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id)',
+      'CREATE INDEX IF NOT EXISTS idx_post_comments_user ON post_comments(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)',
+      'CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code)',
+      'CREATE INDEX IF NOT EXISTS idx_invite_redemptions_code ON invite_redemptions(code_id)',
+      'CREATE INDEX IF NOT EXISTS idx_app_metrics_key ON app_metrics(metric_key, recorded_at)',
+      'CREATE INDEX IF NOT EXISTS idx_support_donations_user ON support_donations(user_id)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
@@ -2291,6 +2307,330 @@ async function handleCreatePrivateLesson(request, env, gymId) {
   return corsJson({ ok: true, lesson_id: result.meta.last_row_id }, { status: 201 }, request, env);
 }
 
+// ─── Post Comments ───────────────────────────────────────────────────────────
+
+async function handleGetPostComments(request, env, postId) {
+  const comments = await env.DB.prepare(`
+    SELECT c.*, u.display_name as author_name, u.avatar_url as author_avatar
+    FROM post_comments c JOIN users u ON c.user_id = u.id
+    WHERE c.post_id = ? ORDER BY c.created_at ASC
+  `).bind(postId).all();
+  return corsJson({ ok: true, comments: comments.results || [] }, {}, request, env);
+}
+
+async function handleCreatePostComment(request, env, postId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body || !body.body?.trim()) return corsJson({ ok: false, error: 'Comment body required' }, { status: 400 }, request, env);
+  const parentId = body.parent_id || null;
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO post_comments (post_id, user_id, body, parent_id, created_at) VALUES (?, ?, ?, ?, ?)
+  `).bind(postId, user.id, sanitize(body.body).slice(0, 2000), parentId, now).run();
+  return corsJson({ ok: true, comment_id: result.meta.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleDeletePostComment(request, env, commentId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const comment = await env.DB.prepare('SELECT * FROM post_comments WHERE id = ?').bind(commentId).first();
+  if (!comment) return corsJson({ ok: false, error: 'Comment not found' }, { status: 404 }, request, env);
+  if (comment.user_id !== user.id && user.role !== 'admin') return corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env);
+  await env.DB.prepare('DELETE FROM post_comments WHERE id = ?').bind(commentId).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Feedback System ─────────────────────────────────────────────────────────
+
+async function handleSubmitFeedback(request, env) {
+  const user = await requireAuth(request, env).catch(() => null);
+  const body = await readJson(request);
+  if (!body || !body.body?.trim()) return corsJson({ ok: false, error: 'Feedback body required' }, { status: 400 }, request, env);
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO feedback (user_id, type, rating, title, body, page, user_agent, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    user?.id || null,
+    sanitize(body.type || 'general'),
+    body.rating || null,
+    sanitize(body.title || '').slice(0, 200),
+    sanitize(body.body).slice(0, 5000),
+    sanitize(body.page || ''),
+    request.headers.get('User-Agent') || '',
+    now
+  ).run();
+  return corsJson({ ok: true, feedback_id: result.meta.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleGetFeedback(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user || user.role !== 'admin') return corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env);
+  const url = new URL(request.url);
+  const status = url.searchParams.get('status') || 'new';
+  const limit = Math.min(parseInt(url.searchParams.get('limit')) || 50, 200);
+  const feedback = await env.DB.prepare(`
+    SELECT f.*, u.display_name as user_name, u.email as user_email
+    FROM feedback f LEFT JOIN users u ON f.user_id = u.id
+    WHERE f.status = ? ORDER BY f.created_at DESC LIMIT ?
+  `).bind(status, limit).all();
+  return corsJson({ ok: true, feedback: feedback.results || [] }, {}, request, env);
+}
+
+// ─── Invite Codes (Alpha Launch) ─────────────────────────────────────────────
+
+async function handleValidateInviteCode(request, env) {
+  const body = await readJson(request);
+  if (!body?.code) return corsJson({ ok: false, error: 'Invite code required' }, { status: 400 }, request, env);
+  const code = await env.DB.prepare(`
+    SELECT * FROM invite_codes WHERE code = ? AND is_active = 1
+  `).bind(body.code.trim().toUpperCase()).first();
+  if (!code) return corsJson({ ok: false, error: 'Invalid invite code' }, { status: 404 }, request, env);
+  if (code.current_uses >= code.max_uses) return corsJson({ ok: false, error: 'Invite code is full' }, { status: 410 }, request, env);
+  if (code.expires_at && new Date(code.expires_at) < new Date()) return corsJson({ ok: false, error: 'Invite code expired' }, { status: 410 }, request, env);
+  return corsJson({ ok: true, valid: true, remaining: code.max_uses - code.current_uses }, {}, request, env);
+}
+
+async function handleRedeemInviteCode(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.code) return corsJson({ ok: false, error: 'Invite code required' }, { status: 400 }, request, env);
+  const code = await env.DB.prepare('SELECT * FROM invite_codes WHERE code = ? AND is_active = 1').bind(body.code.trim().toUpperCase()).first();
+  if (!code || code.current_uses >= code.max_uses) return corsJson({ ok: false, error: 'Invalid or full invite code' }, { status: 400 }, request, env);
+  const existing = await env.DB.prepare('SELECT id FROM invite_redemptions WHERE code_id = ? AND user_id = ?').bind(code.id, user.id).first();
+  if (existing) return corsJson({ ok: true, message: 'Already redeemed' }, {}, request, env);
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO invite_redemptions (code_id, user_id, created_at) VALUES (?, ?, ?)').bind(code.id, user.id, isoNow()),
+    env.DB.prepare('UPDATE invite_codes SET current_uses = current_uses + 1 WHERE id = ?').bind(code.id),
+  ]);
+  return corsJson({ ok: true, message: 'Invite code redeemed' }, {}, request, env);
+}
+
+async function handleCreateInviteCode(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user || user.role !== 'admin') return corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env);
+  const body = await readJson(request);
+  const code = (body?.code || generateInviteCode()).toUpperCase();
+  const maxUses = parseInt(body?.max_uses) || 10;
+  const expiresAt = body?.expires_at || null;
+  const now = isoNow();
+  await env.DB.prepare(`
+    INSERT INTO invite_codes (code, created_by, max_uses, expires_at, created_at) VALUES (?, ?, ?, ?, ?)
+  `).bind(code, user.id, maxUses, expiresAt, now).run();
+  return corsJson({ ok: true, code }, { status: 201 }, request, env);
+}
+
+function generateInviteCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'TP-';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+// ─── User Invite Codes (Alpha) ──────────────────────────────────────────────
+
+async function handleGetMyInviteCodes(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const codes = await env.DB.prepare(
+    'SELECT code, max_uses, current_uses AS times_used, created_at FROM invite_codes WHERE created_by = ? ORDER BY created_at DESC'
+  ).bind(user.id).all();
+  return corsJson({ ok: true, codes: codes.results.map(c => ({ ...c, max_uses: c.max_uses || 5 })) }, {}, request, env);
+}
+
+async function handleGenerateUserInviteCode(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  // Limit: 10 codes per user
+  const existing = await env.DB.prepare('SELECT COUNT(*) AS cnt FROM invite_codes WHERE created_by = ?').bind(user.id).first();
+  if (existing.cnt >= 10) return corsJson({ ok: false, error: 'Maximum 10 invite codes per user' }, { status: 400 }, request, env);
+  const code = generateInviteCode();
+  const now = isoNow();
+  await env.DB.prepare(
+    'INSERT INTO invite_codes (code, created_by, max_uses, created_at) VALUES (?, ?, 5, ?)'
+  ).bind(code, user.id, now).run();
+  return corsJson({ ok: true, invite: { code, max_uses: 5, times_used: 0, created_at: now } }, { status: 201 }, request, env);
+}
+
+// ─── Support / Donations ─────────────────────────────────────────────────────
+
+async function handleCreateSupportDonation(request, env) {
+  const body = await readJson(request);
+  if (!body || !body.amount_cents || body.amount_cents < 100) {
+    return corsJson({ ok: false, error: 'Minimum donation is $1.00' }, { status: 400 }, request, env);
+  }
+  const user = await requireAuth(request, env).catch(() => null);
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO support_donations (user_id, donor_name, donor_email, amount_cents, message, cause, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
+  `).bind(
+    user?.id || null,
+    sanitize(body.donor_name || user?.display_name || 'Anonymous').slice(0, 100),
+    sanitize(body.donor_email || user?.email || '').slice(0, 200),
+    body.amount_cents,
+    sanitize(body.message || '').slice(0, 500),
+    sanitize(body.cause || 'tma'),
+    now
+  ).run();
+  // TODO: Create Stripe checkout session for donation and return URL
+  // For now, return the donation record as pending
+  return corsJson({ ok: true, donation_id: result.meta.last_row_id, status: 'pending' }, { status: 201 }, request, env);
+}
+
+async function handleGetSupportStats(request, env) {
+  const stats = await env.DB.prepare(`
+    SELECT
+      COUNT(*) as total_donations,
+      COALESCE(SUM(CASE WHEN status = 'completed' THEN amount_cents ELSE 0 END), 0) as total_raised_cents,
+      COUNT(DISTINCT user_id) as unique_donors
+    FROM support_donations
+  `).first();
+  return corsJson({ ok: true, stats }, {}, request, env);
+}
+
+// ─── Milo AI Monitoring Endpoints ────────────────────────────────────────────
+
+async function handleMiloHealthCheck(request, env) {
+  // API key auth for Milo
+  const apiKey = request.headers.get('X-Milo-Key');
+  if (apiKey !== env.MILO_API_KEY && env.MILO_API_KEY) {
+    return corsJson({ ok: false, error: 'Invalid API key' }, { status: 401 }, request, env);
+  }
+  const now = isoNow();
+  const [users, messages, bookings, reports, feedback, posts] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) as c FROM users').first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM messages WHERE created_at > datetime(?, "-24 hours")').bind(now).first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM bookings WHERE created_at > datetime(?, "-24 hours")').bind(now).first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM reports WHERE status = "pending"').first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM feedback WHERE status = "new"').first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM posts WHERE created_at > datetime(?, "-24 hours")').bind(now).first(),
+  ]);
+  return corsJson({
+    ok: true,
+    timestamp: now,
+    metrics: {
+      total_users: users?.c || 0,
+      messages_24h: messages?.c || 0,
+      bookings_24h: bookings?.c || 0,
+      pending_reports: reports?.c || 0,
+      new_feedback: feedback?.c || 0,
+      posts_24h: posts?.c || 0,
+    },
+    status: 'healthy',
+  }, {}, request, env);
+}
+
+async function handleMiloMetrics(request, env) {
+  const apiKey = request.headers.get('X-Milo-Key');
+  if (apiKey !== env.MILO_API_KEY && env.MILO_API_KEY) {
+    return corsJson({ ok: false, error: 'Invalid API key' }, { status: 401 }, request, env);
+  }
+  const now = isoNow();
+  const [
+    totalUsers, newUsers7d, profileCompletion, topSports, activeGyms,
+    subStats, recentFeedback, errorRate
+  ] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) as c FROM users').first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM users WHERE created_at > datetime(?, "-7 days")').bind(now).first(),
+    env.DB.prepare('SELECT AVG(profile_complete) as avg FROM user_profiles').first(),
+    env.DB.prepare(`SELECT sports, COUNT(*) as c FROM user_profiles WHERE sports IS NOT NULL GROUP BY sports ORDER BY c DESC LIMIT 5`).all(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM gyms').first(),
+    env.DB.prepare(`SELECT plan, COUNT(*) as c FROM subscriptions GROUP BY plan`).all(),
+    env.DB.prepare('SELECT id, type, rating, title, body, created_at FROM feedback WHERE status = "new" ORDER BY created_at DESC LIMIT 10').all(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM feedback WHERE type = "bug" AND created_at > datetime(?, "-7 days")').bind(now).first(),
+  ]);
+  return corsJson({
+    ok: true,
+    timestamp: now,
+    overview: {
+      total_users: totalUsers?.c || 0,
+      new_users_7d: newUsers7d?.c || 0,
+      avg_profile_completion: Math.round(profileCompletion?.avg || 0),
+      total_gyms: activeGyms?.c || 0,
+      bug_reports_7d: errorRate?.c || 0,
+    },
+    subscriptions: subStats?.results || [],
+    top_sports: topSports?.results || [],
+    recent_feedback: recentFeedback?.results || [],
+  }, {}, request, env);
+}
+
+async function handleMiloRecordMetric(request, env) {
+  const apiKey = request.headers.get('X-Milo-Key');
+  if (apiKey !== env.MILO_API_KEY && env.MILO_API_KEY) {
+    return corsJson({ ok: false, error: 'Invalid API key' }, { status: 401 }, request, env);
+  }
+  const body = await readJson(request);
+  if (!body?.key || !body?.value) return corsJson({ ok: false, error: 'Key and value required' }, { status: 400 }, request, env);
+  await env.DB.prepare('INSERT INTO app_metrics (metric_key, metric_value, recorded_at) VALUES (?, ?, ?)').bind(
+    sanitize(body.key), sanitize(String(body.value)), isoNow()
+  ).run();
+  return corsJson({ ok: true }, { status: 201 }, request, env);
+}
+
+// ─── Gym Owner Profile Management ────────────────────────────────────────────
+
+async function handleGetMyGym(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const gym = await env.DB.prepare('SELECT * FROM gyms WHERE owner_id = ?').bind(user.id).first();
+  if (!gym) return corsJson({ ok: false, error: 'No gym found for this account' }, { status: 404 }, request, env);
+  // Parse JSON fields
+  try { gym.sports = JSON.parse(gym.sports || '[]'); } catch { gym.sports = []; }
+  try { gym.amenities = JSON.parse(gym.amenities || '[]'); } catch { gym.amenities = []; }
+  // Get sessions, reviews, documents
+  const [sessions, reviews, docs] = await Promise.all([
+    env.DB.prepare('SELECT * FROM gym_sessions WHERE gym_id = ? ORDER BY day_of_week, start_time').bind(gym.id).all(),
+    env.DB.prepare(`SELECT r.*, u.display_name as user_name FROM gym_reviews r JOIN users u ON r.user_id = u.id WHERE r.gym_id = ? ORDER BY r.created_at DESC LIMIT 20`).bind(gym.id).all(),
+    env.DB.prepare('SELECT id, type, name, verified, uploaded_at FROM gym_documents WHERE gym_id = ?').bind(gym.id).all(),
+  ]);
+  return corsJson({
+    ok: true,
+    gym: { ...gym, sessions: sessions.results || [], reviews: reviews.results || [], documents: docs.results || [] }
+  }, {}, request, env);
+}
+
+async function handleUpdateMyGym(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const gym = await env.DB.prepare('SELECT id FROM gyms WHERE owner_id = ?').bind(user.id).first();
+  if (!gym) return corsJson({ ok: false, error: 'No gym found' }, { status: 404 }, request, env);
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+  const updates = [];
+  const params = [];
+  const allowedFields = ['name', 'address', 'city', 'state', 'phone', 'email', 'description', 'price'];
+  for (const f of allowedFields) {
+    if (body[f] !== undefined) { updates.push(`${f} = ?`); params.push(sanitize(String(body[f]))); }
+  }
+  if (body.sports) { updates.push('sports = ?'); params.push(JSON.stringify(body.sports)); }
+  if (body.amenities) { updates.push('amenities = ?'); params.push(JSON.stringify(body.amenities)); }
+  if (body.lat !== undefined) { updates.push('lat = ?'); params.push(parseFloat(body.lat) || 0); }
+  if (body.lng !== undefined) { updates.push('lng = ?'); params.push(parseFloat(body.lng) || 0); }
+  if (updates.length === 0) return corsJson({ ok: false, error: 'No fields to update' }, { status: 400 }, request, env);
+  updates.push('updated_at = ?');
+  params.push(isoNow());
+  params.push(gym.id);
+  await env.DB.prepare(`UPDATE gyms SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Subscription Management ─────────────────────────────────────────────────
+
+async function handleCancelSubscription(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const sub = await env.DB.prepare('SELECT * FROM subscriptions WHERE user_id = ?').bind(user.id).first();
+  if (!sub || sub.plan === 'free') return corsJson({ ok: false, error: 'No active subscription' }, { status: 400 }, request, env);
+  // TODO: Call Stripe API to cancel subscription
+  // For now, mark as cancelled in DB
+  await env.DB.prepare(`UPDATE subscriptions SET status = 'cancelled', plan = 'free', updated_at = ? WHERE user_id = ?`).bind(isoNow(), user.id).run();
+  return corsJson({ ok: true, message: 'Subscription cancelled' }, {}, request, env);
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export default {
@@ -2434,6 +2774,47 @@ export default {
         const id = parseInt(path.split('/')[3]);
         return handleCreatePrivateLesson(request, env, id);
       }
+
+      // Post Comments
+      if (path.match(/^\/api\/posts\/(\d+)\/comments$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetPostComments(request, env, id);
+      }
+      if (path.match(/^\/api\/posts\/(\d+)\/comments$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleCreatePostComment(request, env, id);
+      }
+      if (path.match(/^\/api\/comments\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeletePostComment(request, env, id);
+      }
+
+      // Feedback
+      if (path === '/api/feedback' && method === 'POST') return handleSubmitFeedback(request, env);
+      if (path === '/api/admin/feedback' && method === 'GET') return handleGetFeedback(request, env);
+
+      // Invite Codes (Alpha)
+      if (path === '/api/invite/validate' && method === 'POST') return handleValidateInviteCode(request, env);
+      if (path === '/api/invite/redeem' && method === 'POST') return handleRedeemInviteCode(request, env);
+      if (path === '/api/invite/my-codes' && method === 'GET') return handleGetMyInviteCodes(request, env);
+      if (path === '/api/invite/generate' && method === 'POST') return handleGenerateUserInviteCode(request, env);
+      if (path === '/api/admin/invite-codes' && method === 'POST') return handleCreateInviteCode(request, env);
+
+      // Support / Donations
+      if (path === '/api/support/donate' && method === 'POST') return handleCreateSupportDonation(request, env);
+      if (path === '/api/support/stats' && method === 'GET') return handleGetSupportStats(request, env);
+
+      // Milo AI Monitoring
+      if (path === '/api/milo/health' && method === 'GET') return handleMiloHealthCheck(request, env);
+      if (path === '/api/milo/metrics' && method === 'GET') return handleMiloMetrics(request, env);
+      if (path === '/api/milo/metrics' && method === 'POST') return handleMiloRecordMetric(request, env);
+
+      // Gym Owner Management
+      if (path === '/api/gym/mine' && method === 'GET') return handleGetMyGym(request, env);
+      if (path === '/api/gym/mine' && method === 'PUT') return handleUpdateMyGym(request, env);
+
+      // Subscription Management
+      if (path === '/api/subscriptions/cancel' && method === 'POST') return handleCancelSubscription(request, env);
 
       // Legacy routes
       if (path === '/api/open-mats' && method === 'GET') {

@@ -377,6 +377,100 @@ class ApiClient {
     })
   }
 
+  // Post Comments
+  async getPostComments(postId: number) {
+    return this.request<{ ok: boolean; comments: Comment[]; total: number }>(`/api/posts/${postId}/comments`);
+  }
+
+  async createPostComment(postId: number, body: string, parentId?: number) {
+    return this.request<{ ok: boolean; comment: Comment; comment_id: number }>(`/api/posts/${postId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ body, parent_id: parentId }),
+    });
+  }
+
+  async deleteComment(commentId: number) {
+    return this.request<{ ok: boolean }>(`/api/comments/${commentId}`, { method: 'DELETE' });
+  }
+
+  // Feedback
+  async submitFeedback(data: { type?: string; rating?: number; title?: string; body: string; page?: string }) {
+    return this.request<{ ok: boolean; feedback_id: number }>('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminFeedback(status?: string, limit?: number) {
+    const query = new URLSearchParams();
+    if (status) query.set('status', status);
+    if (limit) query.set('limit', String(limit));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; feedback: Feedback[] }>(`/api/admin/feedback${qs ? '?' + qs : ''}`);
+  }
+
+  // Invite Codes (Alpha)
+  async validateInviteCode(code: string) {
+    return this.request<{ ok: boolean; valid: boolean; remaining: number }>('/api/invite/validate', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async redeemInviteCode(code: string) {
+    return this.request<{ ok: boolean; message: string }>('/api/invite/redeem', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  async createInviteCode(maxUses?: number, expiresAt?: string, code?: string) {
+    return this.request<{ ok: boolean; code: string }>('/api/admin/invite-codes', {
+      method: 'POST',
+      body: JSON.stringify({ max_uses: maxUses, expires_at: expiresAt, code }),
+    });
+  }
+
+  // User Invite Codes (Alpha)
+  async getMyInviteCodes() {
+    return this.request<{ ok: boolean; codes: { code: string; max_uses: number; times_used: number; created_at: string }[] }>('/api/invite/my-codes');
+  }
+
+  async generateInviteCode() {
+    return this.request<{ ok: boolean; invite: { code: string; max_uses: number; times_used: number; created_at: string } }>('/api/invite/generate', {
+      method: 'POST',
+    });
+  }
+
+  // Support / Donations
+  async createSupportDonation(data: { amount_cents: number; donor_name?: string; donor_email?: string; message?: string; cause?: string }) {
+    return this.request<{ ok: boolean; donation_id: number; status: string; url?: string }>('/api/support/donate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getSupportStats() {
+    return this.request<{ ok: boolean; stats: SupportStats }>('/api/support/stats');
+  }
+
+  // Gym Owner Management
+  async getMyGym() {
+    return this.request<{ ok: boolean; gym: GymOwnerDetail }>('/api/gym/mine');
+  }
+
+  async updateMyGym(data: Partial<Omit<Gym, 'id' | 'verified' | 'premium' | 'rating' | 'review_count'>>) {
+    return this.request<{ ok: boolean }>('/api/gym/mine', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Subscription Management
+  async cancelSubscription() {
+    return this.request<{ ok: boolean; message: string }>('/api/subscriptions/cancel', { method: 'POST' });
+  }
+
   // Legacy
   async submitFoundingApplication(data: Record<string, string>) {
     return this.request<{ ok: boolean }>('/api/founding/apply', {
@@ -563,6 +657,7 @@ export interface Post {
   media_url: string;
   likes_count: number;
   liked: boolean;
+  comment_count: number;
   created_at: string;
 }
 
@@ -632,6 +727,84 @@ export interface AdminReport {
   details: string;
   status: string;
   created_at: string;
+}
+
+export interface Comment {
+  id: number;
+  post_id: number;
+  user_id: number;
+  body: string;
+  parent_id: number | null;
+  author_name: string;
+  author_avatar: string;
+  created_at: string;
+}
+
+export interface Feedback {
+  id: number;
+  user_id: number | null;
+  type: string;
+  rating: number | null;
+  title: string;
+  body: string;
+  page: string;
+  user_agent: string;
+  status: string;
+  user_name?: string;
+  user_email?: string;
+  created_at: string;
+}
+
+export interface InviteCode {
+  id: number;
+  code: string;
+  created_by: number;
+  max_uses: number;
+  current_uses: number;
+  expires_at: string | null;
+  is_active: number;
+  created_at: string;
+}
+
+export interface SupportDonation {
+  id: number;
+  user_id: number | null;
+  donor_name: string;
+  donor_email: string;
+  amount_cents: number;
+  message: string;
+  cause: string;
+  status: string;
+  created_at: string;
+}
+
+export interface SupportStats {
+  total_donations: number;
+  total_raised_cents: number;
+  unique_donors: number;
+}
+
+export interface MiloHealthMetrics {
+  total_users: number;
+  messages_24h: number;
+  bookings_24h: number;
+  pending_reports: number;
+  new_feedback: number;
+  posts_24h: number;
+}
+
+export interface MiloOverview {
+  total_users: number;
+  new_users_7d: number;
+  avg_profile_completion: number;
+  total_gyms: number;
+  bug_reports_7d: number;
+}
+
+export interface GymOwnerDetail extends Gym {
+  sessions: GymSession[];
+  reviews: GymReview[];
+  documents: GymDocument[];
 }
 
 export const api = new ApiClient();

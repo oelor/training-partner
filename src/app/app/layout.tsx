@@ -6,11 +6,12 @@ import { useRouter, usePathname } from 'next/navigation'
 import {
   Users, Home, User, MapPin, Settings, LogOut, Menu, X,
   MessageCircle, Crown, UserSearch, Bell, Calendar, AlertTriangle, Loader2,
-  Shield, Newspaper
+  Shield, Newspaper, Heart, Sparkles
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api from '@/lib/api'
 import ErrorBoundary from '@/components/error-boundary'
+import FeedbackWidget from '@/components/feedback-widget'
 
 const baseNavItems = [
   { href: '/app', label: 'Dashboard', icon: Home },
@@ -20,6 +21,8 @@ const baseNavItems = [
   { href: '/app/community', label: 'Community', icon: Newspaper },
   { href: '/app/bookings', label: 'Bookings', icon: Calendar },
   { href: '/app/notifications', label: 'Notifications', icon: Bell },
+  { href: '/app/support', label: 'Support TMA', icon: Heart },
+  { href: '/app/invite', label: 'Alpha Invites', icon: Sparkles },
   { href: '/app/profile', label: 'Profile', icon: User },
   { href: '/app/settings', label: 'Settings', icon: Settings },
 ]
@@ -235,6 +238,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {children}
           </ErrorBoundary>
         </div>
+        <FeedbackWidget />
       </main>
     </div>
   )
