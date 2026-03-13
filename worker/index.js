@@ -43,6 +43,11 @@ function corsJson(data, init = {}, request, env) {
   const origin = request.headers.get('Origin') || '';
   const headers = new Headers(init.headers || {});
   headers.set('Content-Type', 'application/json; charset=utf-8');
+  // Security headers
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('X-Frame-Options', 'DENY');
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  headers.set('X-XSS-Protection', '0');
   const cors = corsHeaders(origin, env);
   for (const [k, v] of Object.entries(cors)) headers.set(k, v);
   return new Response(JSON.stringify(data), { ...init, headers });
@@ -391,8 +396,11 @@ async function handleRegister(request, env) {
   if (!name || !email || !password) {
     return corsJson({ ok: false, error: 'Name, email, and password are required' }, { status: 400 }, request, env);
   }
-  if (password.length < 6 || password.length > 128) {
-    return corsJson({ ok: false, error: 'Password must be 6-128 characters' }, { status: 400 }, request, env);
+  if (password.length < 8 || password.length > 128) {
+    return corsJson({ ok: false, error: 'Password must be 8-128 characters' }, { status: 400 }, request, env);
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+    return corsJson({ ok: false, error: 'Password must include uppercase, lowercase, and a number' }, { status: 400 }, request, env);
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return corsJson({ ok: false, error: 'Invalid email address' }, { status: 400 }, request, env);
@@ -1667,8 +1675,11 @@ async function handleResetPassword(request, env) {
   if (!token || !password) {
     return corsJson({ ok: false, error: 'Token and new password are required' }, { status: 400 }, request, env);
   }
-  if (password.length < 6 || password.length > 128) {
-    return corsJson({ ok: false, error: 'Password must be 6-128 characters' }, { status: 400 }, request, env);
+  if (password.length < 8 || password.length > 128) {
+    return corsJson({ ok: false, error: 'Password must be 8-128 characters' }, { status: 400 }, request, env);
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+    return corsJson({ ok: false, error: 'Password must include uppercase, lowercase, and a number' }, { status: 400 }, request, env);
   }
 
   // Rate limit: 5 reset attempts per IP per 15 minutes
@@ -2140,14 +2151,17 @@ async function handleCreatePost(request, env) {
   const body = await readJson(request);
   if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
 
-  const title = sanitize(body.title);
-  const postBody = sanitize(body.body);
+  const title = sanitize(body.title).slice(0, 200);
+  const postBody = sanitize(body.body).slice(0, 5000);
   const type = ['article', 'tip', 'question', 'event'].includes(body.type) ? body.type : 'article';
-  const sport = sanitize(body.sport || '');
-  const mediaUrl = sanitize(body.media_url || '');
+  const sport = sanitize(body.sport || '').slice(0, 50);
+  const mediaUrl = sanitize(body.media_url || '').slice(0, 500);
 
   if (!title || !postBody) {
     return corsJson({ ok: false, error: 'Title and body are required' }, { status: 400 }, request, env);
+  }
+  if (title.length < 3) {
+    return corsJson({ ok: false, error: 'Title must be at least 3 characters' }, { status: 400 }, request, env);
   }
 
   // Rate limit: 10 posts per user per hour
@@ -2474,8 +2488,12 @@ async function handleGenerateUserInviteCode(request, env) {
 
 async function handleCreateSupportDonation(request, env) {
   const body = await readJson(request);
-  if (!body || !body.amount_cents || body.amount_cents < 100) {
-    return corsJson({ ok: false, error: 'Minimum donation is $1.00' }, { status: 400 }, request, env);
+  if (!body || !body.amount_cents) {
+    return corsJson({ ok: false, error: 'Donation amount is required' }, { status: 400 }, request, env);
+  }
+  const amountCents = Number(body.amount_cents);
+  if (!Number.isInteger(amountCents) || amountCents < 100 || amountCents > 1000000) {
+    return corsJson({ ok: false, error: 'Donation must be between $1.00 and $10,000.00' }, { status: 400 }, request, env);
   }
   const user = await requireAuth(request, env).catch(() => null);
   const now = isoNow();
@@ -2486,7 +2504,7 @@ async function handleCreateSupportDonation(request, env) {
     user?.id || null,
     sanitize(body.donor_name || user?.display_name || 'Anonymous').slice(0, 100),
     sanitize(body.donor_email || user?.email || '').slice(0, 200),
-    body.amount_cents,
+    amountCents,
     sanitize(body.message || '').slice(0, 500),
     sanitize(body.cause || 'tma'),
     now
@@ -2510,7 +2528,7 @@ async function handleCreateSupportDonation(request, env) {
       body: new URLSearchParams({
         'mode': 'payment',
         'line_items[0][price_data][currency]': 'usd',
-        'line_items[0][price_data][unit_amount]': String(body.amount_cents),
+        'line_items[0][price_data][unit_amount]': String(amountCents),
         'line_items[0][price_data][product_data][name]': 'Donation to The Mat Association',
         'line_items[0][price_data][product_data][description]': 'Support youth wrestling and combat sports programs',
         'line_items[0][quantity]': '1',

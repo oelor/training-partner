@@ -125,10 +125,10 @@ export default function SignUpPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({...formData, password: e.target.value})}
-                placeholder="Min 6 characters"
+                placeholder="Min 8 chars, upper + lower + number"
                 className="w-full bg-surface border border-border rounded-lg py-3 pl-11 pr-12 text-white placeholder-text-secondary focus:border-primary transition-colors"
                 required
-                minLength={6}
+                minLength={8}
               />
               <button
                 type="button"
