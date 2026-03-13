@@ -7,6 +7,7 @@ import api, { Post } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 import ShareButton from '@/components/share-button'
+import CommentSection from '@/components/comment-section'
 
 const postTypes = [
   { value: '', label: 'All' },
@@ -253,6 +254,8 @@ export default function CommunityPage() {
                   )}
                 </div>
               </div>
+
+              <CommentSection postId={post.id} commentCount={post.comment_count || 0} />
             </article>
           ))}
 

@@ -7,7 +7,6 @@ import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch,
 import { useAuth } from '@/lib/auth-context'
 import api, { Partner, Gym, Booking } from '@/lib/api'
 import { CardSkeleton } from '@/components/skeleton'
-import { toast, Toaster } from 'sonner'
 
 export default function DashboardPage() {
   const { user, profile, subscription } = useAuth()
@@ -57,7 +56,6 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Toaster position="top-right" richColors />
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-3 flex-1">
