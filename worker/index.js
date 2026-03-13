@@ -281,6 +281,9 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS invite_redemptions (id INTEGER PRIMARY KEY AUTOINCREMENT, code_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS app_metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, metric_key TEXT NOT NULL, metric_value TEXT NOT NULL, recorded_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS support_donations (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, donor_name TEXT DEFAULT '', donor_email TEXT DEFAULT '', amount_cents INTEGER NOT NULL, message TEXT DEFAULT '', cause TEXT NOT NULL DEFAULT 'tma', stripe_session_id TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
+      // Observability tables — API request tracking & error logging
+      `CREATE TABLE IF NOT EXISTS api_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, method TEXT NOT NULL, path TEXT NOT NULL, status INTEGER NOT NULL, duration_ms INTEGER NOT NULL, user_agent TEXT DEFAULT '', country TEXT DEFAULT '', created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS api_errors (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL, method TEXT NOT NULL, error_message TEXT NOT NULL, error_stack TEXT DEFAULT '', user_agent TEXT DEFAULT '', created_at TEXT NOT NULL)`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -318,6 +321,10 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_invite_redemptions_code ON invite_redemptions(code_id)',
       'CREATE INDEX IF NOT EXISTS idx_app_metrics_key ON app_metrics(metric_key, recorded_at)',
       'CREATE INDEX IF NOT EXISTS idx_support_donations_user ON support_donations(user_id)',
+      // Observability indexes
+      'CREATE INDEX IF NOT EXISTS idx_api_requests_created ON api_requests(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_api_requests_path ON api_requests(path, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_api_errors_created ON api_errors(created_at)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
@@ -2730,26 +2737,176 @@ async function handleCancelSubscription(request, env) {
   return corsJson({ ok: true, message: 'Subscription cancelled' }, {}, request, env);
 }
 
+// ─── Admin Analytics & Error Dashboard ────────────────────────────────────────
+
+async function handleAdminAnalytics(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const url = new URL(request.url);
+  const hours = Math.min(parseInt(url.searchParams.get('hours') || '24'), 720); // max 30 days
+  const since = new Date(Date.now() - hours * 3600000).toISOString();
+
+  const [
+    totalRequests, errorRequests, avgDuration,
+    topEndpoints, statusBreakdown, errorsByPath,
+    requestsByHour, topCountries
+  ] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) as c FROM api_requests WHERE created_at > ?').bind(since).first(),
+    env.DB.prepare('SELECT COUNT(*) as c FROM api_requests WHERE status >= 400 AND created_at > ?').bind(since).first(),
+    env.DB.prepare('SELECT AVG(duration_ms) as avg, MAX(duration_ms) as max, MIN(duration_ms) as min FROM api_requests WHERE created_at > ?').bind(since).first(),
+    env.DB.prepare(`SELECT path, method, COUNT(*) as hits, AVG(duration_ms) as avg_ms,
+      SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) as errors
+      FROM api_requests WHERE created_at > ?
+      GROUP BY path, method ORDER BY hits DESC LIMIT 20`).bind(since).all(),
+    env.DB.prepare(`SELECT status, COUNT(*) as c FROM api_requests WHERE created_at > ?
+      GROUP BY status ORDER BY c DESC`).bind(since).all(),
+    env.DB.prepare(`SELECT path, COUNT(*) as c FROM api_errors WHERE created_at > ?
+      GROUP BY path ORDER BY c DESC LIMIT 10`).bind(since).all(),
+    env.DB.prepare(`SELECT strftime('%Y-%m-%dT%H:00:00', created_at) as hour, COUNT(*) as c
+      FROM api_requests WHERE created_at > ?
+      GROUP BY hour ORDER BY hour DESC LIMIT 48`).bind(since).all(),
+    env.DB.prepare(`SELECT country, COUNT(*) as c FROM api_requests
+      WHERE created_at > ? AND country != ''
+      GROUP BY country ORDER BY c DESC LIMIT 10`).bind(since).all(),
+  ]);
+
+  const total = totalRequests?.c || 0;
+  const errors = errorRequests?.c || 0;
+
+  return corsJson({
+    ok: true,
+    period_hours: hours,
+    since,
+    summary: {
+      total_requests: total,
+      error_requests: errors,
+      error_rate_pct: total > 0 ? Math.round((errors / total) * 10000) / 100 : 0,
+      avg_duration_ms: Math.round(avgDuration?.avg || 0),
+      max_duration_ms: avgDuration?.max || 0,
+      min_duration_ms: avgDuration?.min || 0,
+    },
+    top_endpoints: topEndpoints?.results || [],
+    status_breakdown: statusBreakdown?.results || [],
+    errors_by_path: errorsByPath?.results || [],
+    requests_by_hour: requestsByHour?.results || [],
+    top_countries: topCountries?.results || [],
+  }, {}, request, env);
+}
+
+async function handleAdminErrors(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
+  const hours = Math.min(parseInt(url.searchParams.get('hours') || '24'), 720);
+  const since = new Date(Date.now() - hours * 3600000).toISOString();
+
+  const errors = await env.DB.prepare(
+    `SELECT id, path, method, error_message, error_stack, user_agent, created_at
+     FROM api_errors WHERE created_at > ?
+     ORDER BY created_at DESC LIMIT ?`
+  ).bind(since, limit).all();
+
+  const errorSummary = await env.DB.prepare(
+    `SELECT error_message, COUNT(*) as occurrences, MAX(created_at) as last_seen
+     FROM api_errors WHERE created_at > ?
+     GROUP BY error_message ORDER BY occurrences DESC LIMIT 20`
+  ).bind(since).all();
+
+  return corsJson({
+    ok: true,
+    period_hours: hours,
+    total_errors: errors?.results?.length || 0,
+    error_summary: errorSummary?.results || [],
+    recent_errors: errors?.results || [],
+  }, {}, request, env);
+}
+
+// ─── Observability ────────────────────────────────────────────────────────────
+
+// Non-blocking request logger — uses waitUntil to avoid slowing responses
+function trackRequest(env, ctx, { method, path, status, durationMs, request }) {
+  if (!env.DB || !ctx?.waitUntil) return;
+  // Only track API requests, skip static assets
+  if (!path.startsWith('/api/')) return;
+  // Truncate path to avoid storing query strings or huge paths
+  const cleanPath = path.split('?')[0].slice(0, 100);
+  const ua = (request.headers.get('User-Agent') || '').slice(0, 200);
+  const country = request.headers.get('CF-IPCountry') || '';
+  ctx.waitUntil(
+    env.DB.prepare(
+      'INSERT INTO api_requests (method, path, status, duration_ms, user_agent, country, created_at) VALUES (?,?,?,?,?,?,?)'
+    ).bind(cleanPath, method, status, durationMs, ua, country, isoNow()).run().catch(() => {})
+  );
+}
+
+// Non-blocking error logger
+function trackError(env, ctx, { path, method, error, request }) {
+  if (!env.DB || !ctx?.waitUntil) return;
+  const cleanPath = (path || '').split('?')[0].slice(0, 100);
+  const ua = (request.headers.get('User-Agent') || '').slice(0, 200);
+  const msg = (error?.message || String(error)).slice(0, 500);
+  const stack = (error?.stack || '').slice(0, 2000);
+  ctx.waitUntil(
+    env.DB.prepare(
+      'INSERT INTO api_errors (path, method, error_message, error_stack, user_agent, created_at) VALUES (?,?,?,?,?,?)'
+    ).bind(cleanPath, method, msg, stack, ua, isoNow()).run().catch(() => {})
+  );
+}
+
+// Cleanup old tracking data (keep 30 days) — call periodically
+async function cleanupOldTrackingData(env) {
+  const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+  await Promise.all([
+    env.DB.prepare('DELETE FROM api_requests WHERE created_at < ?').bind(cutoff).run().catch(() => {}),
+    env.DB.prepare('DELETE FROM api_errors WHERE created_at < ?').bind(cutoff).run().catch(() => {}),
+  ]);
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    const startTime = Date.now();
     const url = new URL(request.url);
     const path = url.pathname;
     const method = request.method;
 
-    // Handle CORS preflight
+    // Handle CORS preflight — don't track these
     if (method === 'OPTIONS') {
       return handleCors(request, env);
     }
 
+    let tracked = false;
     try {
       // Initialize schema on first request
       await ensureFullSchema(env);
 
-      // Health & Meta
+      // Periodic cleanup — 0.1% of requests trigger it (roughly once per 1000 requests)
+      if (Math.random() < 0.001) {
+        ctx?.waitUntil?.(cleanupOldTrackingData(env));
+      }
+
+      // Health & Meta — includes DB connectivity check
       if (path === '/api/health' && method === 'GET') {
-        return corsJson({ ok: true, service: 'training-partner-app', now: isoNow() }, {}, request, env);
+        let dbOk = false;
+        try {
+          const check = await env.DB.prepare('SELECT 1 as ok').first();
+          dbOk = check?.ok === 1;
+        } catch {}
+        const resp = {
+          ok: true,
+          service: 'training-partner-app',
+          now: isoNow(),
+          db_connected: dbOk,
+          version: '2.1.0',
+        };
+        const status = dbOk ? 200 : 503;
+        tracked = true;
+        trackRequest(env, ctx, { method, path, status, durationMs: Date.now() - startTime, request });
+        return corsJson(resp, { status }, request, env);
       }
       if (path === '/api/meta' && method === 'GET') {
         return corsJson({ ok: true, product: 'Training Partner', version: '2.0.0' }, {}, request, env);
@@ -2922,13 +3079,27 @@ export default {
       if (path === '/api/founding/apply' && method === 'POST') return handleFoundingApply(request, env);
       if (path === '/api/waitlist' && method === 'POST') return handleWaitlist(request, env);
 
+      // Admin Analytics (observability dashboard)
+      if (path === '/api/admin/analytics' && method === 'GET') return handleAdminAnalytics(request, env);
+      if (path === '/api/admin/errors' && method === 'GET') return handleAdminErrors(request, env);
+
       // Fallback to static assets
       if (env.ASSETS) return env.ASSETS.fetch(request);
+      tracked = true;
+      trackRequest(env, ctx, { method, path, status: 404, durationMs: Date.now() - startTime, request });
       return new Response('Not found', { status: 404 });
 
     } catch (err) {
       console.error('Worker error:', err);
+      tracked = true;
+      trackError(env, ctx, { path, method, error: err, request });
+      trackRequest(env, ctx, { method, path, status: 500, durationMs: Date.now() - startTime, request });
       return corsJson({ ok: false, error: 'Internal server error' }, { status: 500 }, request, env);
+    } finally {
+      // Track all successful API requests that weren't already tracked
+      if (!tracked && path.startsWith('/api/')) {
+        trackRequest(env, ctx, { method, path, status: 200, durationMs: Date.now() - startTime, request });
+      }
     }
   }
 };
