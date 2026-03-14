@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Calendar, Plus, ChevronDown, ChevronUp, MapPin, Clock, Users, Trash2, Loader2 } from 'lucide-react'
-import { api } from '@/lib/api'
+import api from '@/lib/api'
 import type { AppEvent } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
