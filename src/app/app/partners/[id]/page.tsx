@@ -151,10 +151,10 @@ export default function PartnerDetailPage() {
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 onClick={handleMessage}
-                className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center gap-2"
+                className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
               >
                 <MessageCircle className="w-5 h-5" />
                 Send Message
@@ -162,14 +162,14 @@ export default function PartnerDetailPage() {
               <button
                 onClick={handleBlock}
                 disabled={blocking}
-                className="bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg hover:text-red-400 hover:border-red-500/50 transition-colors flex items-center gap-2"
+                className="bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg hover:text-red-400 hover:border-red-500/50 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
               >
                 <Ban className="w-4 h-4" />
                 {blocking ? 'Blocking...' : 'Block'}
               </button>
               <button
                 onClick={() => setShowReport(true)}
-                className="bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg hover:text-yellow-400 hover:border-yellow-500/50 transition-colors flex items-center gap-2"
+                className="bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg hover:text-yellow-400 hover:border-yellow-500/50 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
               >
                 <AlertTriangle className="w-4 h-4" />
                 Report

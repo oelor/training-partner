@@ -107,7 +107,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="lg:w-64 space-y-2">
+        {/* Tab Navigation */}
+        <div className="overflow-x-auto lg:overflow-visible -mx-4 px-4 lg:mx-0 lg:px-0 lg:w-64 lg:space-y-2">
+          <div className="flex lg:flex-col gap-2 lg:gap-0 min-w-max lg:min-w-0">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -122,12 +124,13 @@ export default function SettingsPage() {
               {tab.label}
             </button>
           ))}
+          </div>
 
-          <hr className="border-border my-4" />
+          <hr className="border-border my-2 lg:my-4 hidden lg:block" />
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+            className="hidden lg:flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <LogOut className="w-5 h-5" />
             Sign Out
