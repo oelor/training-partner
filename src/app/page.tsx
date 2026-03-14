@@ -564,12 +564,12 @@ export default function LandingPage() {
             </div>
 
             <div>
-              <h4 className="font-heading text-lg text-white mb-4">COMPANY</h4>
+              <h4 className="font-heading text-lg text-white mb-4">SPORTS</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
-                <li><Link href="/contact" className="hover:text-primary">Contact & Support</Link></li>
-                <li><Link href="/partners/wrestling" className="hover:text-primary">Wrestling</Link></li>
-                <li><Link href="/partners/mma" className="hover:text-primary">MMA</Link></li>
-                <li><Link href="/partners/bjj" className="hover:text-primary">BJJ</Link></li>
+                <li><Link href="/partners/wrestling" className="hover:text-primary">Wrestling Partners</Link></li>
+                <li><Link href="/partners/mma" className="hover:text-primary">MMA Partners</Link></li>
+                <li><Link href="/partners/bjj" className="hover:text-primary">BJJ Partners</Link></li>
+                <li><Link href="/partners/muay-thai" className="hover:text-primary">Muay Thai Partners</Link></li>
               </ul>
             </div>
             
@@ -578,7 +578,7 @@ export default function LandingPage() {
               <ul className="space-y-2 text-text-secondary text-sm">
                 <li><Link href="/privacy" className="hover:text-primary">Privacy Policy</Link></li>
                 <li><Link href="/terms" className="hover:text-primary">Terms of Service</Link></li>
-                <li><Link href="/terms" className="hover:text-primary">Liability Waiver</Link></li>
+                <li><Link href="/contact" className="hover:text-primary">Contact Us</Link></li>
               </ul>
             </div>
           </div>

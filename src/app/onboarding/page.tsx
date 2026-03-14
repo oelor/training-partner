@@ -133,7 +133,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex flex-col max-w-2xl mx-auto">
+    <div className="min-h-[70vh] flex flex-col">
       {/* Progress */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">

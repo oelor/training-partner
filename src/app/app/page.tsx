@@ -95,7 +95,7 @@ export default function DashboardPage() {
 
       {/* Profile Completion Banner */}
       {isProfileIncomplete && (
-        <Link href="/app/onboarding" className="block bg-primary/10 border border-primary/30 rounded-xl p-6 hover:bg-primary/15 transition-colors">
+        <Link href="/onboarding" className="block bg-primary/10 border border-primary/30 rounded-xl p-6 hover:bg-primary/15 transition-colors">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-white font-heading text-lg mb-1">Complete Your Profile</h3>
@@ -242,7 +242,7 @@ export default function DashboardPage() {
             <p className="text-white font-heading text-lg mb-2">Find Your Training Partners</p>
             <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Get matched with compatible athletes in your area for BJJ, wrestling, and combat sports training</p>
             {isProfileIncomplete ? (
-              <Link href="/app/onboarding" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
+              <Link href="/onboarding" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
                 Complete Profile <ArrowRight className="w-4 h-4" />
               </Link>
             ) : (

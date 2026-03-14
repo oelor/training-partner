@@ -17,11 +17,12 @@ import {
   Crown,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import api from '@/lib/api'
 
 const navItems = [
   { href: '/app', icon: Home, label: 'Dashboard' },
   { href: '/app/partners', icon: Users, label: 'Partners' },
-  { href: '/app/messages', icon: MessageCircle, label: 'Messages' },
+  { href: '/app/messages', icon: MessageCircle, label: 'Messages', badge: true },
   { href: '/app/gyms', icon: MapPin, label: 'Gyms' },
   { href: '/app/profile', icon: User, label: 'Profile' },
 ]
@@ -38,6 +39,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, loading, logout } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  // Poll for unread messages
+  useEffect(() => {
+    if (!user) return
+    const fetchUnread = () => {
+      api.getUnreadCount().then(d => setUnreadCount(d.unread || 0)).catch(() => {})
+    }
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 30000) // every 30s
+    return () => clearInterval(interval)
+  }, [user])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -104,7 +117,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-            {navItems.map(({ href, icon: Icon, label }) => (
+            {navItems.map(({ href, icon: Icon, label, badge }) => (
               <Link
                 key={href}
                 href={href}
@@ -115,8 +128,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     : 'text-text-secondary hover:text-white hover:bg-white/5'
                 }`}
               >
-                <Icon className="w-5 h-5 flex-shrink-0" />
+                <div className="relative flex-shrink-0">
+                  <Icon className="w-5 h-5" />
+                  {badge && unreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </div>
                 {label}
+                {badge && unreadCount > 0 && (
+                  <span className="ml-auto bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
               </Link>
             ))}
 
@@ -172,7 +197,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur-sm border-t border-border">
         <div className="flex items-center justify-around h-16">
-          {navItems.map(({ href, icon: Icon, label }) => (
+          {navItems.map(({ href, icon: Icon, label, badge }) => (
             <Link
               key={href}
               href={href}
@@ -180,7 +205,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 isActive(href) ? 'text-primary' : 'text-text-secondary'
               }`}
             >
-              <Icon className="w-5 h-5" />
+              <div className="relative">
+                <Icon className="w-5 h-5" />
+                {badge && unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 w-3.5 h-3.5 bg-primary text-white text-[8px] font-bold rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '!' : unreadCount}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] truncate">{label}</span>
             </Link>
           ))}

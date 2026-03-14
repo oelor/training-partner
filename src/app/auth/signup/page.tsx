@@ -39,7 +39,7 @@ export default function SignUpPage() {
     try {
       await register(formData.name, formData.email, formData.password, formData.sport, turnstileToken || undefined)
       toast.success('Account created! Welcome to Training Partner.')
-      router.push('/app/onboarding')
+      router.push('/onboarding')
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Registration failed'
       setError(message)
@@ -203,7 +203,7 @@ export default function SignUpPage() {
             try {
               const result = await googleLogin(credential)
               toast.success(result.isNewUser ? 'Account created!' : 'Welcome back!')
-              router.push(result.isNewUser ? '/app/onboarding' : '/app')
+              router.push(result.isNewUser ? '/onboarding' : '/app')
             } catch (err: unknown) {
               const message = err instanceof Error ? err.message : 'Google sign-up failed'
               setError(message)

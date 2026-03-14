@@ -135,7 +135,7 @@ export default function SignInPage() {
             try {
               const result = await googleLogin(credential)
               toast.success('Welcome!')
-              router.push(result.isNewUser ? '/app/onboarding' : '/app')
+              router.push(result.isNewUser ? '/onboarding' : '/app')
             } catch (err: unknown) {
               const message = err instanceof Error ? err.message : 'Google sign-in failed'
               setError(message)
