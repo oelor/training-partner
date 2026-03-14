@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import {
   ArrowLeft, MessageCircle, MapPin, Trophy, Clock, Shield, Star,
   Dumbbell, Target, Calendar, Ban, Loader2, UserCheck
@@ -14,6 +15,7 @@ import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 import { ProfileSkeleton } from '@/components/skeleton'
 import ReportDialog from '@/components/report-dialog'
+import MatchCompatibilityChart from '@/components/match-compatibility-chart'
 
 export default function PartnerDetailPage() {
   const params = useParams()
@@ -81,16 +83,30 @@ export default function PartnerDetailPage() {
 
   const matchPercent = partner.match > 0 ? Math.round(partner.match * 100) : null
 
+  // Mock compatibility data for visualization
+  const compatibilityData = [
+    { category: 'Skill Match', score: matchPercent || 75 },
+    { category: 'Location', score: 85 },
+    { category: 'Schedule', score: 70 },
+    { category: 'Style', score: 80 },
+  ]
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back link */}
-      <Link
-        href="/app/partners"
-        className="inline-flex items-center gap-2 text-text-secondary hover:text-primary transition-colors"
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
       >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Partners
-      </Link>
+        <Link
+          href="/app/partners"
+          className="inline-flex items-center gap-2 text-text-secondary hover:text-primary transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Partners
+        </Link>
+      </motion.div>
 
       {/* Hero card */}
       <div className="bg-surface border border-border rounded-xl p-6 lg:p-8">
@@ -178,6 +194,14 @@ export default function PartnerDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Match Compatibility Chart */}
+      {matchPercent && (
+        <MatchCompatibilityChart
+          data={compatibilityData}
+          overallMatch={matchPercent}
+        />
+      )}
 
       {/* Details grid */}
       <div className="grid md:grid-cols-2 gap-4">

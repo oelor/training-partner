@@ -6,6 +6,7 @@ import { Users, MapPin, Filter, Search } from 'lucide-react'
 import api, { Partner } from '@/lib/api'
 import { CardSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
+import AnimatedPartnerCard from '@/components/animated-partner-card'
 
 const sportsList = ['All', 'Wrestling', 'MMA', 'BJJ', 'Boxing', 'Judo', 'Kickboxing', 'Muay Thai']
 const skillLevels = ['All', 'Beginner', 'Intermediate', 'Advanced', 'Pro']
@@ -114,45 +115,12 @@ export default function PartnersPage() {
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {partners.map((partner) => (
-            <Link
+          {partners.map((partner, index) => (
+            <AnimatedPartnerCard
               key={partner.id}
-              href={`/app/partners/${partner.id}`}
-              className="bg-surface border border-border rounded-xl p-5 card-hover cursor-pointer block"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-14 h-14 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold text-lg">
-                  {partner.name?.charAt(0)?.toUpperCase() || '?'}
-                </div>
-                {partner.match > 0 && (
-                  <div className="text-right">
-                    <div className="text-accent font-mono text-xl font-bold">{Math.round(partner.match * 100)}%</div>
-                    <div className="text-text-secondary text-xs">match</div>
-                  </div>
-                )}
-              </div>
-
-              <h3 className="font-heading text-xl text-white mb-1">{partner.name}</h3>
-              <p className="text-text-secondary text-sm mb-3">
-                {partner.sport || partner.sports?.[0] || 'Combat Sports'} {partner.skill ? `• ${partner.skill}` : ''}
-              </p>
-
-              <div className="flex flex-wrap gap-2 mb-3">
-                {partner.goals?.slice(0, 3).map(goal => (
-                  <span key={goal} className="text-xs px-2 py-1 bg-background rounded-full text-text-secondary">
-                    {goal}
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1 text-text-secondary text-sm">
-                  <MapPin className="w-4 h-4" />
-                  {partner.city || partner.location || 'Unknown'} {partner.experience ? `• ${partner.experience} years exp.` : ''}
-                </div>
-                <span className="text-primary text-sm">View Profile</span>
-              </div>
-            </Link>
+              partner={partner}
+              delay={index * 0.05}
+            />
           ))}
         </div>
       )}
