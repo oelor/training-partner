@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { MapPin, Shield, Star, Search, Filter, Megaphone, Tag, Navigation, X } from 'lucide-react'
+import { MapPin, Shield, Star, Search, Filter, Megaphone, Tag, Navigation, X, Calendar, Clock, Zap } from 'lucide-react'
 import api, { Gym, DiscoverGym, isPremiumPlan } from '@/lib/api'
+import type { AppEvent } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { GymCardSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
+import { AdBanner } from '@/components/ad-banner'
 
 const SPORTS = ['BJJ', 'MMA', 'Wrestling', 'Muay Thai', 'Boxing', 'Judo', 'Karate', 'Taekwondo', 'Kickboxing']
 
@@ -26,6 +28,25 @@ export default function GymsPage() {
   const [userLng, setUserLng] = useState(0)
   const [showFilters, setShowFilters] = useState(false)
   const isPremium = isPremiumPlan(subscription?.plan)
+  const [headlineEvents, setHeadlineEvents] = useState<AppEvent[]>([])
+
+  // Fetch headline promoted events for the banner
+  useEffect(() => {
+    async function loadHeadlineEvents() {
+      try {
+        const res = await api.getPromotedEvents()
+        const headlines = (res.events || []).filter((e: AppEvent) => e.promotion_tier === 'headline').slice(0, 2)
+        setHeadlineEvents(headlines)
+        // Track impressions
+        for (const ev of headlines) {
+          api.trackEventImpression(ev.id)
+        }
+      } catch {
+        // silently fail
+      }
+    }
+    loadHeadlineEvents()
+  }, [])
 
   useEffect(() => {
     async function load() {
@@ -205,6 +226,52 @@ export default function GymsPage() {
               Clear all filters
             </button>
           )}
+        </div>
+      )}
+
+      {/* Ad Banner */}
+      <AdBanner slot="discover_banner" className="my-4" />
+
+      {/* Headline Promoted Events Banner */}
+      {headlineEvents.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="font-heading text-lg text-yellow-400 flex items-center gap-2">
+            <Zap className="w-5 h-5" />
+            UPCOMING EVENTS
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {headlineEvents.map(event => (
+              <Link
+                key={event.id}
+                href="/app/events"
+                onClick={() => api.trackEventClick(event.id)}
+                className="bg-surface border border-yellow-500/50 bg-yellow-500/5 rounded-xl p-4 card-hover block"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h3 className="font-medium text-white text-sm truncate">{event.title}</h3>
+                  <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] font-medium rounded-full">
+                    <Zap className="w-2.5 h-2.5" />
+                    Promoted
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                  {event.sport && (
+                    <span className="px-1.5 py-0.5 bg-primary/15 text-primary rounded-full">{event.sport}</span>
+                  )}
+                  {event.location && (
+                    <span className="flex items-center gap-1 truncate">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      {event.location}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

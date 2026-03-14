@@ -1783,6 +1783,14 @@ async function handleStripeWebhook(request, env) {
           WHERE id = ?
         `).bind(session.id, parseInt(session.metadata.donation_id)).run().catch(() => {});
       }
+      // Handle event promotion checkout completions
+      if (session.metadata?.type === 'event_promotion') {
+        const promoNow = new Date().toISOString();
+        const promoEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare(
+          'UPDATE events SET is_promoted = 1, promotion_tier = ?, promotion_start = ?, promotion_end = ?, promotion_stripe_session = ? WHERE id = ?'
+        ).bind(session.metadata.tier, promoNow, promoEnd, session.id, parseInt(session.metadata.event_id)).run();
+      }
       // Handle subscription checkout completions (mode === 'subscription')
       if (session.mode === 'subscription') {
         const customerId = session.customer;
@@ -4643,7 +4651,7 @@ async function handleGetEvents(request, env) {
     LEFT JOIN users u ON e.creator_id = u.id
     LEFT JOIN gyms g ON e.gym_id = g.id
     ${where}
-    ORDER BY e.event_date ASC
+    ORDER BY e.is_promoted DESC, e.event_date ASC
     LIMIT ? OFFSET ?
   `).bind(...params).all();
 
@@ -4742,6 +4750,105 @@ async function handleDeleteEvent(request, env, eventId) {
   await env.DB.prepare('DELETE FROM event_rsvps WHERE event_id = ?').bind(eventId).run();
   await env.DB.prepare('DELETE FROM events WHERE id = ?').bind(eventId).run();
 
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Promoted Events ──────────────────────────────────────────────────────
+
+const PROMOTION_TIERS = {
+  featured: { price: 5000, name: 'Featured Event' },
+  spotlight: { price: 10000, name: 'Spotlight Event' },
+  headline: { price: 20000, name: 'Headline Event' },
+};
+
+async function handlePromoteEvent(request, env, eventId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  const tier = body?.tier;
+  if (!tier || !PROMOTION_TIERS[tier]) {
+    return corsJson({ ok: false, error: 'Invalid tier. Must be featured, spotlight, or headline' }, { status: 400 }, request, env);
+  }
+
+  const event = await env.DB.prepare('SELECT id, creator_id FROM events WHERE id = ?').bind(eventId).first();
+  if (!event) return corsJson({ ok: false, error: 'Event not found' }, { status: 404 }, request, env);
+  if (event.creator_id !== user.id) {
+    return corsJson({ ok: false, error: 'Only the event creator can promote this event' }, { status: 403 }, request, env);
+  }
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const frontendUrl = env.FRONTEND_URL || FRONTEND_URL;
+  const tierInfo = PROMOTION_TIERS[tier];
+
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'mode': 'payment',
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][unit_amount]': String(tierInfo.price),
+      'line_items[0][price_data][product_data][name]': tierInfo.name,
+      'line_items[0][quantity]': '1',
+      'success_url': `${frontendUrl}/app/events?promoted=success`,
+      'cancel_url': `${frontendUrl}/app/events?promoted=cancelled`,
+      'metadata[type]': 'event_promotion',
+      'metadata[event_id]': String(eventId),
+      'metadata[tier]': tier,
+      'metadata[user_id]': String(user.id),
+    }),
+  });
+
+  const session = await res.json();
+  if (!res.ok) {
+    return corsJson({ ok: false, error: session.error?.message || 'Stripe error' }, { status: 400 }, request, env);
+  }
+
+  return corsJson({ ok: true, url: session.url }, {}, request, env);
+}
+
+async function handleGetPromotedEvents(request, env) {
+  const events = await env.DB.prepare(`
+    SELECT e.*,
+           u.display_name as creator_name, u.avatar_url as creator_avatar,
+           g.name as gym_name, g.city as gym_city,
+           (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.status = 'going') as attendee_count
+    FROM events e
+    LEFT JOIN users u ON e.creator_id = u.id
+    LEFT JOIN gyms g ON e.gym_id = g.id
+    WHERE e.is_promoted = 1 AND e.promotion_end > datetime('now') AND e.event_date >= datetime('now')
+    ORDER BY CASE e.promotion_tier
+      WHEN 'headline' THEN 1
+      WHEN 'spotlight' THEN 2
+      WHEN 'featured' THEN 3
+    END ASC, e.event_date ASC
+    LIMIT 5
+  `).all();
+
+  return corsJson({ ok: true, events: events.results || [] }, {}, request, env);
+}
+
+async function handleEventImpression(request, env, eventId) {
+  const today = new Date().toISOString().split('T')[0];
+  await env.DB.prepare(`
+    INSERT INTO event_promotion_impressions (event_id, date, impressions, clicks) VALUES (?, ?, 1, 0)
+    ON CONFLICT(event_id, date) DO UPDATE SET impressions = impressions + 1
+  `).bind(eventId, today).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleEventClick(request, env, eventId) {
+  const today = new Date().toISOString().split('T')[0];
+  await env.DB.prepare(`
+    INSERT INTO event_promotion_impressions (event_id, date, impressions, clicks) VALUES (?, ?, 0, 1)
+    ON CONFLICT(event_id, date) DO UPDATE SET clicks = clicks + 1
+  `).bind(eventId, today).run();
   return corsJson({ ok: true }, {}, request, env);
 }
 
@@ -5380,6 +5487,48 @@ async function handleCancelSubscription(request, env) {
   return corsJson({ ok: true, message: 'Subscription cancelled' }, {}, request, env);
 }
 
+// ─── Ads ──────────────────────────────────────────────────────────────────────
+
+async function handleGetAd(request, env, slotName) {
+  try {
+    const slot = await env.DB.prepare('SELECT id FROM ad_slots WHERE name = ? AND is_active = 1').bind(slotName).first();
+    if (!slot) {
+      return corsJson({ ok: true, ad: null }, {}, request, env);
+    }
+
+    const ad = await env.DB.prepare(
+      `SELECT id, advertiser_name, image_url, link_url, alt_text
+       FROM ads
+       WHERE slot_id = ? AND is_active = 1
+         AND (start_date IS NULL OR start_date <= datetime('now'))
+         AND (end_date IS NULL OR end_date >= datetime('now'))
+       ORDER BY RANDOM() LIMIT 1`
+    ).bind(slot.id).first();
+
+    return corsJson({ ok: true, ad: ad || null }, {}, request, env);
+  } catch (e) {
+    return corsJson({ ok: false, error: 'Failed to fetch ad' }, { status: 500 }, request, env);
+  }
+}
+
+async function handleAdImpression(request, env, adId) {
+  try {
+    await env.DB.prepare('UPDATE ads SET impressions = impressions + 1 WHERE id = ?').bind(adId).run();
+    return corsJson({ ok: true }, {}, request, env);
+  } catch (e) {
+    return corsJson({ ok: false, error: 'Failed to track impression' }, { status: 500 }, request, env);
+  }
+}
+
+async function handleAdClick(request, env, adId) {
+  try {
+    await env.DB.prepare('UPDATE ads SET clicks = clicks + 1 WHERE id = ?').bind(adId).run();
+    return corsJson({ ok: true }, {}, request, env);
+  } catch (e) {
+    return corsJson({ ok: false, error: 'Failed to track click' }, { status: 500 }, request, env);
+  }
+}
+
 // ─── Admin Analytics & Error Dashboard ────────────────────────────────────────
 
 async function handleAdminAnalytics(request, env) {
@@ -5465,6 +5614,76 @@ async function handleAdminErrors(request, env) {
     error_summary: errorSummary?.results || [],
     recent_errors: errors?.results || [],
   }, {}, request, env);
+}
+
+// ─── Fitness Tracker Integrations ─────────────────────────────────────────────
+
+const INTEGRATION_PROVIDERS = [
+  { id: 'whoop', name: 'WHOOP', description: 'Recovery, strain, and sleep tracking' },
+  { id: 'withings', name: 'Withings', description: 'Weight, body composition, and health metrics' },
+  { id: 'garmin', name: 'Garmin', description: 'Training load, VO2 max, and activity tracking' },
+  { id: 'fitbit', name: 'Fitbit', description: 'Activity, sleep, and heart rate monitoring' },
+];
+
+async function handleGetIntegrations(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Get user's connected accounts
+  const connected = await env.DB.prepare(
+    'SELECT provider, status FROM connected_accounts WHERE user_id = ?'
+  ).bind(user.id).all();
+  const connectedMap = {};
+  for (const row of (connected.results || [])) {
+    connectedMap[row.provider] = row.status;
+  }
+
+  // Get user's waitlist entries
+  const waitlist = await env.DB.prepare(
+    'SELECT provider FROM integration_waitlist WHERE user_id = ?'
+  ).bind(user.id).all();
+  const waitlistSet = new Set((waitlist.results || []).map(r => r.provider));
+
+  const providers = INTEGRATION_PROVIDERS.map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    status: connectedMap[p.id] || 'coming_soon',
+    on_waitlist: waitlistSet.has(p.id),
+  }));
+
+  return corsJson({ ok: true, providers }, {}, request, env);
+}
+
+async function handleToggleIntegrationNotify(request, env, provider) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Validate provider
+  const validProviders = INTEGRATION_PROVIDERS.map(p => p.id);
+  if (!validProviders.includes(provider)) {
+    return corsJson({ ok: false, error: 'Invalid provider' }, { status: 400 }, request, env);
+  }
+
+  // Check if already on waitlist
+  const existing = await env.DB.prepare(
+    'SELECT id FROM integration_waitlist WHERE user_id = ? AND provider = ?'
+  ).bind(user.id, provider).first();
+
+  if (existing) {
+    // Remove from waitlist
+    await env.DB.prepare(
+      'DELETE FROM integration_waitlist WHERE user_id = ? AND provider = ?'
+    ).bind(user.id, provider).run();
+    return corsJson({ ok: true, on_waitlist: false }, {}, request, env);
+  } else {
+    // Add to waitlist
+    const now = isoNow();
+    await env.DB.prepare(
+      'INSERT INTO integration_waitlist (user_id, provider, created_at) VALUES (?, ?, ?)'
+    ).bind(user.id, provider, now).run();
+    return corsJson({ ok: true, on_waitlist: true }, {}, request, env);
+  }
 }
 
 // ─── Observability ────────────────────────────────────────────────────────────
@@ -5840,6 +6059,19 @@ export default {
       // Events
       if (path === '/api/events' && method === 'POST') return handleCreateEvent(request, env);
       if (path === '/api/events' && method === 'GET') return handleGetEvents(request, env);
+      if (path === '/api/events/promoted' && method === 'GET') return handleGetPromotedEvents(request, env);
+      if (path.match(/^\/api\/events\/(\d+)\/promote$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handlePromoteEvent(request, env, id);
+      }
+      if (path.match(/^\/api\/events\/(\d+)\/impression$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleEventImpression(request, env, id);
+      }
+      if (path.match(/^\/api\/events\/(\d+)\/click$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleEventClick(request, env, id);
+      }
       if (path.match(/^\/api\/events\/(\d+)$/) && method === 'GET') {
         const id = parseInt(path.split('/')[3]);
         return handleGetEvent(request, env, id);
@@ -5904,6 +6136,27 @@ export default {
       }
       if (path === '/api/founding/apply' && method === 'POST') return handleFoundingApply(request, env);
       if (path === '/api/waitlist' && method === 'POST') return handleWaitlist(request, env);
+
+      // Ads (public, no auth required)
+      if (path.match(/^\/api\/ads\/(\d+)\/impression$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleAdImpression(request, env, id);
+      }
+      if (path.match(/^\/api\/ads\/(\d+)\/click$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleAdClick(request, env, id);
+      }
+      if (path.match(/^\/api\/ads\/([a-z_]+)$/) && method === 'GET') {
+        const slotName = path.split('/')[3];
+        return handleGetAd(request, env, slotName);
+      }
+
+      // Fitness Tracker Integrations
+      if (path === '/api/integrations' && method === 'GET') return handleGetIntegrations(request, env);
+      if (path.match(/^\/api\/integrations\/([a-z]+)\/notify$/) && method === 'POST') {
+        const provider = path.split('/')[3];
+        return handleToggleIntegrationNotify(request, env, provider);
+      }
 
       // Admin Analytics (observability dashboard)
       if (path === '/api/admin/analytics' && method === 'GET') return handleAdminAnalytics(request, env);

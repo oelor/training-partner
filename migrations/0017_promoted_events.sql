@@ -1,0 +1,15 @@
+ALTER TABLE events ADD COLUMN is_promoted INTEGER DEFAULT 0;
+ALTER TABLE events ADD COLUMN promotion_tier TEXT DEFAULT NULL;
+ALTER TABLE events ADD COLUMN promotion_start TEXT DEFAULT NULL;
+ALTER TABLE events ADD COLUMN promotion_end TEXT DEFAULT NULL;
+ALTER TABLE events ADD COLUMN promotion_stripe_session TEXT DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS event_promotion_impressions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  impressions INTEGER DEFAULT 0,
+  clicks INTEGER DEFAULT 0,
+  FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE,
+  UNIQUE(event_id, date)
+);

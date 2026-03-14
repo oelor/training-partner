@@ -11,6 +11,7 @@ import {
 import api, { GymDetail, GymSession, GymMembership, GymPromotion, isPremiumPlan } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
+import { AdBanner } from '@/components/ad-banner'
 
 export default function GymDetailPage() {
   const params = useParams()
@@ -365,6 +366,9 @@ export default function GymDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Ad Banner */}
+      <AdBanner slot="gym_detail_sidebar" className="mt-4" />
 
       {/* Sessions */}
       <div className="bg-surface border border-border rounded-xl p-5">

@@ -733,6 +733,29 @@ class ApiClient {
     return this.request<{ ok: boolean }>(`/api/events/${eventId}`, { method: 'DELETE' });
   }
 
+  async promoteEvent(eventId: number, tier: 'featured' | 'spotlight' | 'headline') {
+    return this.request<{ ok: boolean; url: string }>(`/api/events/${eventId}/promote`, {
+      method: 'POST',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  async getPromotedEvents() {
+    return this.request<{ ok: boolean; events: AppEvent[] }>('/api/events/promoted');
+  }
+
+  trackEventImpression(eventId: number) {
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      navigator.sendBeacon(`${this.baseUrl}/api/events/${eventId}/impression`);
+    }
+  }
+
+  trackEventClick(eventId: number) {
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      navigator.sendBeacon(`${this.baseUrl}/api/events/${eventId}/click`);
+    }
+  }
+
   // Gym Promotions
   async createPromotion(data: { gym_id: number; title: string; description?: string; type?: string; start_date?: string; end_date?: string }) {
     return this.request<{ ok: boolean; promotion_id: number }>('/api/promotions', {
@@ -811,6 +834,32 @@ class ApiClient {
   // Subscription Management
   async cancelSubscription() {
     return this.request<{ ok: boolean; message: string }>('/api/subscriptions/cancel', { method: 'POST' });
+  }
+
+  // Fitness Tracker Integrations
+  async getIntegrations() {
+    return this.request<{ ok: boolean; providers: IntegrationProvider[] }>('/api/integrations');
+  }
+
+  async toggleIntegrationNotify(provider: string) {
+    return this.request<{ ok: boolean; on_waitlist: boolean }>(`/api/integrations/${provider}/notify`, { method: 'POST' });
+  }
+
+  // Ads
+  async getAd(slotName: string) {
+    return this.request<{ ok: boolean; ad: { id: number; advertiser_name: string; image_url: string; link_url: string; alt_text: string } | null }>(`/api/ads/${slotName}`);
+  }
+
+  trackAdImpression(adId: number) {
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      navigator.sendBeacon(`${this.baseUrl}/api/ads/${adId}/impression`);
+    }
+  }
+
+  trackAdClick(adId: number) {
+    if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+      navigator.sendBeacon(`${this.baseUrl}/api/ads/${adId}/click`);
+    }
   }
 
   // Legacy
@@ -1352,6 +1401,8 @@ export interface AppEvent {
   gym_city: string | null;
   attendee_count: number;
   my_rsvp: string | null;
+  is_promoted?: number;
+  promotion_tier?: string;
   created_at: string;
 }
 
@@ -1394,6 +1445,14 @@ export interface AdminPendingIdentity {
   id_photo: string;
   selfie_photo: string;
   created_at: string;
+}
+
+export interface IntegrationProvider {
+  id: string;
+  name: string;
+  description: string;
+  status: 'coming_soon' | 'active' | 'disconnected';
+  on_waitlist: boolean;
 }
 
 /** Check if a subscription plan grants premium access */
