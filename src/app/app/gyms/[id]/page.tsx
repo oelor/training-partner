@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, MapPin, Clock, Shield, Phone, Mail, Calendar, Star,
   Lock, Loader2, CheckCircle, Dumbbell, Globe, ChevronDown, ChevronUp,
-  UserPlus, LogIn, Tag, Megaphone
+  UserPlus, LogIn, Tag, Megaphone, Heart
 } from 'lucide-react'
 import api, { GymDetail, GymSession, GymMembership, GymPromotion, isPremiumPlan } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
@@ -28,6 +28,7 @@ export default function GymDetailPage() {
   const [joiningGym, setJoiningGym] = useState(false)
   const [checkingIn, setCheckingIn] = useState(false)
   const [promotions, setPromotions] = useState<GymPromotion[]>([])
+  const [isFavorited, setIsFavorited] = useState(false)
 
   const gymId = Number(params.id)
   const isPremium = isPremiumPlan(subscription?.plan)
@@ -35,13 +36,15 @@ export default function GymDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [gymData, membershipsData, promosData] = await Promise.all([
+        const [gymData, membershipsData, promosData, favData] = await Promise.all([
           api.getGymDetail(gymId),
           api.getMyGymMemberships().catch(() => ({ memberships: [] })),
           api.getGymPromotions(gymId).catch(() => ({ promotions: [] })),
+          api.checkFavoriteGym(gymId).catch(() => ({ favorited: false })),
         ])
         setGym(gymData.gym)
         setPromotions(promosData.promotions || [])
+        setIsFavorited(favData.favorited)
         // Check if user is already a member of this gym
         const membership = (membershipsData.memberships || []).find((m: GymMembership) => m.gym_id === gymId)
         if (membership) setMembershipStatus(membership.status)
@@ -164,6 +167,18 @@ export default function GymDetailPage() {
                 <p className="text-text-secondary">{gym.address}, {gym.city}, {gym.state}</p>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await api.toggleFavoriteGym(gymId);
+                      setIsFavorited(res.favorited);
+                    } catch {}
+                  }}
+                  className={`p-2 rounded-lg transition-colors ${isFavorited ? 'text-red-500 bg-red-500/10' : 'text-text-secondary hover:text-red-400'}`}
+                  aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
+                </button>
                 {gym.verified && (
                   <span className="bg-accent/20 text-accent text-xs px-3 py-1.5 rounded-lg flex items-center gap-1">
                     <Shield className="w-3 h-3" /> Verified

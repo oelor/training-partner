@@ -409,6 +409,9 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_training_logs_user ON training_logs(user_id, created_at DESC)',
       'CREATE INDEX IF NOT EXISTS idx_training_logs_gym ON training_logs(gym_id)',
       'CREATE INDEX IF NOT EXISTS idx_training_logs_sport ON training_logs(user_id, sport)',
+      // Gym Favorites indexes
+      'CREATE INDEX IF NOT EXISTS idx_favorite_gyms_user ON favorite_gyms(user_id)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_gyms_pair ON favorite_gyms(user_id, gym_id)',
       // Events indexes
       'CREATE INDEX IF NOT EXISTS idx_events_creator ON events(creator_id)',
       'CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date)',
@@ -4215,6 +4218,102 @@ async function handleDeleteEvent(request, env, eventId) {
   return corsJson({ ok: true }, {}, request, env);
 }
 
+// ─── Public Training Activity ─────────────────────────────────────────────
+
+async function handleGetUserTrainingActivity(request, env, userId) {
+  // Public endpoint - shows basic training stats for any user
+  // No detailed logs, just aggregate numbers
+  const stats = await env.DB.prepare(`
+    SELECT
+      COUNT(*) as total_sessions,
+      SUM(duration_minutes) as total_minutes,
+      COUNT(DISTINCT sport) as sports_trained,
+      COUNT(DISTINCT gym_id) as gyms_visited
+    FROM training_logs
+    WHERE user_id = ?
+  `).bind(userId).first();
+
+  const checkinStats = await env.DB.prepare(`
+    SELECT COUNT(*) as total_checkins, SUM(points) as total_points
+    FROM checkins WHERE user_id = ?
+  `).bind(userId).first();
+
+  const recentSports = await env.DB.prepare(`
+    SELECT sport, COUNT(*) as sessions
+    FROM training_logs
+    WHERE user_id = ?
+    GROUP BY sport
+    ORDER BY sessions DESC
+    LIMIT 5
+  `).bind(userId).all();
+
+  return corsJson({
+    ok: true,
+    activity: {
+      total_sessions: stats?.total_sessions || 0,
+      total_hours: Math.round((stats?.total_minutes || 0) / 60),
+      sports_trained: stats?.sports_trained || 0,
+      gyms_visited: stats?.gyms_visited || 0,
+      total_checkins: checkinStats?.total_checkins || 0,
+      total_points: checkinStats?.total_points || 0,
+      top_sports: (recentSports.results || []),
+    },
+  }, {}, request, env);
+}
+
+// ─── Gym Favorites ────────────────────────────────────────────────────────
+
+async function handleToggleFavoriteGym(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id) return corsJson({ ok: false, error: 'gym_id required' }, { status: 400 }, request, env);
+
+  const gymId = parseInt(body.gym_id);
+  const gym = await env.DB.prepare('SELECT id FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+
+  const existing = await env.DB.prepare('SELECT id FROM favorite_gyms WHERE user_id = ? AND gym_id = ?').bind(user.id, gymId).first();
+
+  if (existing) {
+    await env.DB.prepare('DELETE FROM favorite_gyms WHERE id = ?').bind(existing.id).run();
+    return corsJson({ ok: true, favorited: false }, {}, request, env);
+  } else {
+    await env.DB.prepare('INSERT INTO favorite_gyms (user_id, gym_id, created_at) VALUES (?, ?, ?)').bind(user.id, gymId, isoNow()).run();
+    return corsJson({ ok: true, favorited: true }, {}, request, env);
+  }
+}
+
+async function handleGetFavoriteGyms(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const favorites = await env.DB.prepare(`
+    SELECT g.id, g.name, g.city, g.state, g.sports, g.rating, g.review_count, g.verified, g.premium,
+           fg.created_at as favorited_at
+    FROM favorite_gyms fg
+    JOIN gyms g ON fg.gym_id = g.id
+    WHERE fg.user_id = ?
+    ORDER BY fg.created_at DESC
+  `).bind(user.id).all();
+
+  return corsJson({
+    ok: true,
+    favorites: (favorites.results || []).map(f => ({
+      ...f,
+      sports: JSON.parse(f.sports || '[]'),
+    })),
+  }, {}, request, env);
+}
+
+async function handleCheckFavoriteGym(request, env, gymId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const fav = await env.DB.prepare('SELECT id FROM favorite_gyms WHERE user_id = ? AND gym_id = ?').bind(user.id, gymId).first();
+  return corsJson({ ok: true, favorited: !!fav }, {}, request, env);
+}
+
 // Get user's training passport — summary of all gyms visited with stats
 async function handleGetTrainingPassport(request, env) {
   const user = await requireAuth(request, env);
@@ -5047,6 +5146,20 @@ export default {
 
       // Leaderboard
       if (path === '/api/leaderboard' && method === 'GET') return handleGetLeaderboard(request, env);
+
+      // User Training Activity (public)
+      if (path.match(/^\/api\/users\/(\d+)\/activity$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetUserTrainingActivity(request, env, id);
+      }
+
+      // Gym Favorites
+      if (path === '/api/favorites/gyms' && method === 'POST') return handleToggleFavoriteGym(request, env);
+      if (path === '/api/favorites/gyms' && method === 'GET') return handleGetFavoriteGyms(request, env);
+      if (path.match(/^\/api\/favorites\/gyms\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[4]);
+        return handleCheckFavoriteGym(request, env, id);
+      }
 
       // Events
       if (path === '/api/events' && method === 'POST') return handleCreateEvent(request, env);

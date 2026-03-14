@@ -31,18 +31,21 @@ export default function PartnerDetailPage() {
   const [canRateUser, setCanRateUser] = useState(false)
   const [ratingSubmitted, setRatingSubmitted] = useState(false)
   const [submittingRating, setSubmittingRating] = useState(false)
+  const [activity, setActivity] = useState<{ total_sessions: number; total_hours: number; sports_trained: number; gyms_visited: number; total_checkins: number; total_points: number; top_sports: { sport: string; sessions: number }[] } | null>(null)
 
   const partnerId = Number(params.id)
 
   useEffect(() => {
     async function load() {
       try {
-        const [data, rateRes] = await Promise.all([
+        const [data, rateRes, activityRes] = await Promise.all([
           api.getPartnerDetail(partnerId),
           api.canRate(partnerId).catch(() => ({ can_rate: false, reason: '' })),
+          api.getUserActivity(partnerId).catch(() => null),
         ])
         setPartner(data.partner)
         setCanRateUser(rateRes.can_rate)
+        if (activityRes?.activity) setActivity(activityRes.activity)
       } catch {
         toast.error('Failed to load partner profile')
       } finally {
@@ -229,6 +232,43 @@ export default function PartnerDetailPage() {
         </h3>
         <TrustScoreComponent userId={partnerId} />
       </div>
+
+      {/* Training Activity */}
+      {activity && activity.total_sessions > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="text-text-secondary text-sm font-medium mb-3 flex items-center gap-2">
+            <Dumbbell className="w-4 h-4" />
+            TRAINING ACTIVITY
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="text-center">
+              <div className="text-white font-heading text-xl">{activity.total_sessions}</div>
+              <div className="text-text-secondary text-xs">Sessions</div>
+            </div>
+            <div className="text-center">
+              <div className="text-primary font-heading text-xl">{activity.total_hours}h</div>
+              <div className="text-text-secondary text-xs">Trained</div>
+            </div>
+            <div className="text-center">
+              <div className="text-accent font-heading text-xl">{activity.total_checkins}</div>
+              <div className="text-text-secondary text-xs">Check-ins</div>
+            </div>
+            <div className="text-center">
+              <div className="text-white font-heading text-xl">{activity.total_points}</div>
+              <div className="text-text-secondary text-xs">Points</div>
+            </div>
+          </div>
+          {activity.top_sports.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border">
+              {activity.top_sports.map(s => (
+                <span key={s.sport} className="text-xs px-2 py-1 bg-primary/10 text-primary rounded-full">
+                  {s.sport} ({s.sessions})
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Match Compatibility Chart */}
       {matchPercent && (

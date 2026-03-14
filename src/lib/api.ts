@@ -673,6 +673,27 @@ class ApiClient {
     return this.request<{ ok: boolean; type: string; period_days: number; leaderboard: LeaderboardEntry[]; my_rank: number | null; my_score: number }>(`/api/leaderboard${qs ? '?' + qs : ''}`);
   }
 
+  // Gym Favorites
+  async toggleFavoriteGym(gymId: number) {
+    return this.request<{ ok: boolean; favorited: boolean }>('/api/favorites/gyms', {
+      method: 'POST',
+      body: JSON.stringify({ gym_id: gymId }),
+    });
+  }
+
+  async getFavoriteGyms() {
+    return this.request<{ ok: boolean; favorites: FavoriteGym[] }>('/api/favorites/gyms');
+  }
+
+  async checkFavoriteGym(gymId: number) {
+    return this.request<{ ok: boolean; favorited: boolean }>(`/api/favorites/gyms/${gymId}`);
+  }
+
+  // User Activity (public)
+  async getUserActivity(userId: number) {
+    return this.request<{ ok: boolean; activity: UserActivity }>(`/api/users/${userId}/activity`);
+  }
+
   // Events
   async createEvent(data: { title: string; description?: string; sport?: string; event_date: string; end_date?: string; location?: string; max_attendees?: number; gym_id?: number; is_public?: boolean }) {
     return this.request<{ ok: boolean; event_id: number }>('/api/events', {
@@ -1328,6 +1349,29 @@ export interface AppEvent {
   attendee_count: number;
   my_rsvp: string | null;
   created_at: string;
+}
+
+export interface UserActivity {
+  total_sessions: number;
+  total_hours: number;
+  sports_trained: number;
+  gyms_visited: number;
+  total_checkins: number;
+  total_points: number;
+  top_sports: { sport: string; sessions: number }[];
+}
+
+export interface FavoriteGym {
+  id: number;
+  name: string;
+  city: string;
+  state: string;
+  sports: string[];
+  rating: number;
+  review_count: number;
+  verified: boolean;
+  premium: boolean;
+  favorited_at: string;
 }
 
 export interface EventAttendee {
