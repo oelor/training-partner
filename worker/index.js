@@ -60,7 +60,7 @@ function corsJson(data, init = {}, request, env) {
 
 // ─── Email Service ──────────────────────────────────────────────────────────
 
-const FRONTEND_URL = 'https://training-partner.vercel.app';
+const FRONTEND_URL = 'https://trainingpartner.app';
 
 async function sendEmail(env, { to, subject, html }) {
   // If RESEND_API_KEY is set, use Resend (free tier: 100 emails/day)
