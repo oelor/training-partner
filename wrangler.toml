@@ -3,7 +3,7 @@ main = "worker/index.js"
 compatibility_date = "2026-03-09"
 workers_dev = true
 
-# Custom domain — routes trainingpartner.app to this Worker
+# Custom domain — Worker handles all routes (API lives here, frontend on Vercel)
 [[routes]]
 pattern = "trainingpartner.app/*"
 zone_name = "trainingpartner.app"
