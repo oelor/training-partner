@@ -336,7 +336,6 @@ let schemaInitialized = false;
 
 async function ensureFullSchema(env) {
   if (schemaInitialized || !env.DB) return;
-  schemaInitialized = true;
   try {
     const tables = [
       `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, display_name TEXT NOT NULL, avatar_url TEXT DEFAULT '', city TEXT DEFAULT '', role TEXT NOT NULL DEFAULT 'athlete', email_verified INTEGER NOT NULL DEFAULT 0, verification_token TEXT, reset_token TEXT, reset_token_expires TEXT, google_id TEXT, instagram_username TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, token TEXT)`,
@@ -513,8 +512,10 @@ async function ensureFullSchema(env) {
         await env.DB.prepare('INSERT OR IGNORE INTO gym_sessions (id,gym_id,day_of_week,start_time,end_time,max_slots,current_slots,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(...s, now).run();
       }
     }
+    schemaInitialized = true;
   } catch (err) {
     console.error('Schema init error:', err);
+    // Do NOT set schemaInitialized so it retries on next request
   }
 }
 
@@ -2039,8 +2040,9 @@ async function handleDeleteAccount(request, env) {
     await env.DB.prepare('DELETE FROM notifications WHERE user_id = ?').bind(userId).run();
     // Delete reports (both as reporter and reported)
     await env.DB.prepare('DELETE FROM reports WHERE reporter_id = ? OR reported_id = ?').bind(userId, userId).run();
-    // Delete blocked users
+    // Delete blocked users (both legacy and new tables)
     await env.DB.prepare('DELETE FROM blocked_users WHERE blocker_id = ? OR blocked_id = ?').bind(userId, userId).run();
+    await env.DB.prepare('DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?').bind(userId, userId).run();
     // Delete gym reviews
     await env.DB.prepare('DELETE FROM gym_reviews WHERE user_id = ?').bind(userId).run();
     // Delete favorite gyms
@@ -2212,6 +2214,41 @@ async function handleBlockUser(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
+  const method = request.method;
+
+  // GET /api/block — list blocked users (delegates to blocks table)
+  if (method === 'GET') {
+    const results = await env.DB.prepare(`
+      SELECT b.id, b.blocked_id, b.created_at,
+             u.display_name, u.avatar_url
+      FROM blocks b
+      JOIN users u ON b.blocked_id = u.id
+      WHERE b.blocker_id = ?
+      ORDER BY b.created_at DESC
+    `).bind(user.id).all();
+
+    return corsJson({ ok: true, blocks: (results.results || []).map(b => ({
+      id: b.id,
+      user_id: b.blocked_id,
+      name: b.display_name,
+      avatar_url: b.avatar_url,
+      created_at: b.created_at,
+    })) }, {}, request, env);
+  }
+
+  // DELETE /api/block — unblock user (delegates to blocks table)
+  if (method === 'DELETE') {
+    const body = await readJson(request);
+    if (!body || !body.user_id) {
+      return corsJson({ ok: false, error: 'User ID is required' }, { status: 400 }, request, env);
+    }
+    await env.DB.prepare(
+      'DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?'
+    ).bind(user.id, body.user_id).run();
+    return corsJson({ ok: true }, {}, request, env);
+  }
+
+  // POST /api/block — block user (delegates to blocks table)
   // Rate limit: 20 blocks per hour per user
   const allowed = await checkRateLimit(env, `block:${user.id}`, 20, 3600);
   if (!allowed) return corsJson({ ok: false, error: 'Too many block requests. Try again later.' }, { status: 429 }, request, env);
@@ -2221,10 +2258,23 @@ async function handleBlockUser(request, env) {
     return corsJson({ ok: false, error: 'User ID is required' }, { status: 400 }, request, env);
   }
 
+  const blockedId = parseInt(body.user_id);
+  if (blockedId === user.id) {
+    return corsJson({ ok: false, error: 'You cannot block yourself' }, { status: 400 }, request, env);
+  }
+
   const now = isoNow();
-  await env.DB.prepare(
-    'INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
-  ).bind(user.id, body.user_id, now).run();
+  try {
+    await env.DB.prepare(
+      'INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
+    ).bind(user.id, blockedId, now).run();
+  } catch (e) {
+    // Handle duplicate gracefully
+    if (e.message && e.message.includes('UNIQUE')) {
+      return corsJson({ ok: true }, {}, request, env);
+    }
+    throw e;
+  }
 
   return corsJson({ ok: true }, {}, request, env);
 }
@@ -5138,7 +5188,7 @@ export default {
       if (path === '/api/reviews' && method === 'POST') return handleCreateReview(request, env);
 
       // Block, Report, Avatar
-      if (path === '/api/block' && method === 'POST') return handleBlockUser(request, env);
+      if (path === '/api/block' && (method === 'POST' || method === 'GET' || method === 'DELETE')) return handleBlockUser(request, env);
       if (path === '/api/report' && method === 'POST') return handleReportUser(request, env);
       if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
       if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);

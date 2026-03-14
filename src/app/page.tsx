@@ -229,7 +229,7 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface relative overflow-hidden">
-        <MuayThaiKickSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] text-white opacity-[0.08] z-0" />
+        <MuayThaiKickSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] text-white/[0.15] z-0" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -487,8 +487,8 @@ export default function LandingPage() {
 
       {/* Built For Athletes — Visual showcase */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <JudoThrowSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-80 text-primary opacity-[0.10] z-0 -rotate-3" />
-        <BoxerSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-72 text-primary opacity-[0.10] z-0 rotate-3" />
+        <JudoThrowSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-96 text-primary/[0.15] z-0 -rotate-3" />
+        <BoxerSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-80 text-primary/[0.15] z-0 rotate-3" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -560,7 +560,7 @@ export default function LandingPage() {
 
       {/* CTA Section with app mockup */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
-        <MMAFighterSilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-96 text-white opacity-[0.08] z-0" />
+        <MMAFighterSilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-[28rem] text-white/[0.12] z-0" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* App mockup — CSS phone */}

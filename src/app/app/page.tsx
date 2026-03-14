@@ -376,13 +376,14 @@ export default function DashboardPage() {
         transition={{ duration: 0.6, delay: 0.3 }}
       >
         <TrainingStatsChart
-          data={[
-            { week: 'Week 1', sessions: 3, hours: 6 },
-            { week: 'Week 2', sessions: 4, hours: 8 },
-            { week: 'Week 3', sessions: 5, hours: 10 },
-            { week: 'Week 4', sessions: 4, hours: 8 },
-            { week: 'Week 5', sessions: 6, hours: 12 },
-            { week: 'Week 6', sessions: 5, hours: 10 },
+          data={weeklyStats ? [
+            { week: 'This Period', sessions: weeklyStats.total_sessions || 0, hours: Math.round((weeklyStats.total_minutes || 0) / 60) },
+          ] : recentLogs.length > 0 ? recentLogs.slice(0, 6).map((log) => ({
+            week: new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            sessions: 1,
+            hours: Math.round((log.duration_minutes || 60) / 60),
+          })) : [
+            { week: 'No data yet', sessions: 0, hours: 0 },
           ]}
         />
       </motion.div>

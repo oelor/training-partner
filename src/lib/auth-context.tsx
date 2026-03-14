@@ -3,6 +3,18 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import api, { User, UserProfile, Subscription } from './api'
 
+// Cookie helpers for middleware-based route protection
+function setAuthCookie() {
+  if (typeof document !== 'undefined') {
+    document.cookie = 'tp_authenticated=1; path=/; max-age=604800; SameSite=Lax'
+  }
+}
+function clearAuthCookie() {
+  if (typeof document !== 'undefined') {
+    document.cookie = 'tp_authenticated=; path=/; max-age=0'
+  }
+}
+
 interface AuthState {
   user: User | null
   profile: UserProfile | null
@@ -37,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     try {
       const data = await api.getMe()
+      setAuthCookie()
       setState({
         user: data.user,
         profile: data.profile,
@@ -46,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
     } catch {
       api.logout()
+      clearAuthCookie()
       setState({ user: null, profile: null, subscription: null, loading: false, error: null })
     }
   }, [])
@@ -58,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, loading: true, error: null }))
     try {
       const data = await api.login({ email, password })
+      setAuthCookie()
       setState({
         user: data.user,
         profile: null,
@@ -77,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, loading: true, error: null }))
     try {
       const data = await api.register({ name, email, password, sport, turnstile_token: turnstileToken })
+      setAuthCookie()
       setState({
         user: data.user,
         profile: null,
@@ -96,6 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, loading: true, error: null }))
     try {
       const data = await api.googleAuth(credential)
+      setAuthCookie()
       setState({
         user: data.user,
         profile: null,
@@ -114,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = () => {
     api.logout()
+    clearAuthCookie()
     setState({ user: null, profile: null, subscription: null, loading: false, error: null })
   }
 

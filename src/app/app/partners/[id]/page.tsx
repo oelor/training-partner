@@ -109,12 +109,13 @@ export default function PartnerDetailPage() {
 
   const matchPercent = partner.match > 0 ? Math.round(partner.match * 100) : null
 
-  // Mock compatibility data for visualization
-  const compatibilityData = [
-    { category: 'Skill Match', score: matchPercent || 75 },
-    { category: 'Location', score: 85 },
-    { category: 'Schedule', score: 70 },
-    { category: 'Style', score: 80 },
+  // Derive compatibility data from API explanation or overall match
+  const explanation = partner.explanation as Record<string, Record<string, unknown>> | null
+  const compatibilityData = explanation ? Object.entries(explanation).slice(0, 5).map(([key, val]) => ({
+    category: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    score: typeof val?.score === 'number' ? Math.min(Math.round(val.score * 10), 100) : (matchPercent || 75),
+  })) : [
+    { category: 'Overall Match', score: matchPercent || 0 },
   ]
 
   return (

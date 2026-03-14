@@ -7,6 +7,15 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'images.unsplash.com',
       },
+      {
+        protocol: 'https',
+        hostname: '*.r2.cloudflarestorage.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'trainingpartner.app',
+        pathname: '/api/images/**',
+      },
     ],
   },
 }
