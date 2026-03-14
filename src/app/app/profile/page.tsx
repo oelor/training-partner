@@ -196,6 +196,20 @@ function ProfileForm() {
     })
   }
 
+  // Calculate profile completion percentage
+  const completionChecks = [
+    { label: 'Name', done: !!profile.name.trim() },
+    { label: 'Location', done: !!profile.location.trim() },
+    { label: 'Sports', done: profile.sports.length > 0 },
+    { label: 'Skill Level', done: !!profile.skillLevel },
+    { label: 'Training Goals', done: profile.trainingGoals.length > 0 },
+    { label: 'Bio', done: !!profile.bio.trim() },
+    { label: 'Availability', done: profile.availability.length > 0 },
+    { label: 'Avatar', done: !!user?.avatar_url },
+  ]
+  const completedCount = completionChecks.filter(c => c.done).length
+  const completionPercent = Math.round((completedCount / completionChecks.length) * 100)
+
   if (loading) return <ProfileSkeleton />
 
   return (
@@ -221,6 +235,44 @@ function ProfileForm() {
           Welcome! Complete your profile to find the perfect training partners.
         </div>
       )}
+
+      {/* Profile Completion Indicator */}
+      <div className="bg-surface border border-border rounded-xl p-5 animate-fade-in">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-white font-medium text-sm">Profile Completion</h2>
+            <span className={`font-heading text-lg ${completionPercent === 100 ? 'text-accent' : 'text-primary'}`}>
+              {completionPercent}%
+            </span>
+          </div>
+          {completionPercent === 100 && (
+            <span className="inline-flex items-center gap-1 text-accent text-xs font-medium bg-accent/10 px-2.5 py-1 rounded-full">
+              <Check className="w-3 h-3" /> Complete
+            </span>
+          )}
+        </div>
+        <div className="h-2 bg-background rounded-full overflow-hidden mb-3">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${completionPercent === 100 ? 'bg-accent' : 'bg-primary'}`}
+            style={{ width: `${completionPercent}%` }}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {completionChecks.map((check) => (
+            <span
+              key={check.label}
+              className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border ${
+                check.done
+                  ? 'bg-accent/10 border-accent/30 text-accent'
+                  : 'bg-background border-border text-text-secondary'
+              }`}
+            >
+              {check.done && <Check className="w-3 h-3" />}
+              {check.label}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {/* Basic Info */}
       <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in">
