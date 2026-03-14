@@ -66,7 +66,7 @@ export default function FeedbackWidget() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-40 bg-primary hover:bg-primary/90 text-white rounded-full p-3.5 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95 group"
+          className="fixed bottom-20 lg:bottom-6 right-6 z-40 bg-primary hover:bg-primary/90 text-white rounded-full p-3.5 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95 group"
           aria-label="Send feedback"
         >
           <MessageSquarePlus className="w-5 h-5" />
@@ -78,7 +78,7 @@ export default function FeedbackWidget() {
 
       {/* Feedback panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-40 w-[360px] max-h-[80vh] overflow-hidden">
+        <div className="fixed bottom-20 lg:bottom-6 right-6 z-40 w-[360px] max-w-[calc(100vw-3rem)] max-h-[70vh] overflow-hidden">
           <div className={`bg-surface border border-border rounded-xl shadow-2xl transition-all ${minimized ? '' : 'animate-slide-up'}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
