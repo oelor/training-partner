@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { motion } from 'framer-motion'
 import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api, { Partner, Gym, Booking, isPremiumPlan } from '@/lib/api'
 import { CardSkeleton } from '@/components/skeleton'
+import TrainingStatsChart from '@/components/training-stats-chart'
 
 export default function DashboardPage() {
   const { user, profile, subscription } = useAuth()
@@ -199,6 +201,24 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+
+      {/* Training Activity Chart */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.3 }}
+      >
+        <TrainingStatsChart
+          data={[
+            { week: 'Week 1', sessions: 3, hours: 6 },
+            { week: 'Week 2', sessions: 4, hours: 8 },
+            { week: 'Week 3', sessions: 5, hours: 10 },
+            { week: 'Week 4', sessions: 4, hours: 8 },
+            { week: 'Week 5', sessions: 6, hours: 12 },
+            { week: 'Week 6', sessions: 5, hours: 10 },
+          ]}
+        />
+      </motion.div>
 
       {/* Top Partners */}
       <div>
