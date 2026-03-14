@@ -341,6 +341,9 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, blocker_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(blocker_id, blocked_id))`,
       // QR Check-in: guest check-ins table
       `CREATE TABLE IF NOT EXISTS guest_checkins (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, lat REAL, lng REAL, created_at TEXT DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS training_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, gym_id INTEGER, checkin_id INTEGER, partner_id INTEGER, sport TEXT NOT NULL, session_type TEXT NOT NULL DEFAULT 'drilling', duration_minutes INTEGER NOT NULL DEFAULT 60, intensity INTEGER NOT NULL DEFAULT 5, notes TEXT DEFAULT '', techniques TEXT DEFAULT '[]', rounds INTEGER DEFAULT 0, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, creator_id INTEGER NOT NULL, gym_id INTEGER, title TEXT NOT NULL, description TEXT DEFAULT '', sport TEXT DEFAULT '', event_date TEXT NOT NULL, end_date TEXT, location TEXT DEFAULT '', max_attendees INTEGER DEFAULT 0, is_public INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'upcoming', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS event_rsvps (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'going', created_at TEXT NOT NULL, UNIQUE(event_id, user_id))`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -402,6 +405,17 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_guest_checkins_gym ON guest_checkins(gym_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_guest_checkins_email ON guest_checkins(email, gym_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_gyms_checkin_code ON gyms(checkin_code)',
+      // Training Log indexes
+      'CREATE INDEX IF NOT EXISTS idx_training_logs_user ON training_logs(user_id, created_at DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_training_logs_gym ON training_logs(gym_id)',
+      'CREATE INDEX IF NOT EXISTS idx_training_logs_sport ON training_logs(user_id, sport)',
+      // Events indexes
+      'CREATE INDEX IF NOT EXISTS idx_events_creator ON events(creator_id)',
+      'CREATE INDEX IF NOT EXISTS idx_events_date ON events(event_date)',
+      'CREATE INDEX IF NOT EXISTS idx_events_gym ON events(gym_id)',
+      'CREATE INDEX IF NOT EXISTS idx_events_sport ON events(sport, event_date)',
+      'CREATE INDEX IF NOT EXISTS idx_event_rsvps_event ON event_rsvps(event_id, status)',
+      'CREATE INDEX IF NOT EXISTS idx_event_rsvps_user ON event_rsvps(user_id)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
@@ -3646,6 +3660,561 @@ async function handleGetCheckins(request, env) {
   }, {}, request, env);
 }
 
+// ─── Training Log Endpoints ───────────────────────────────────────────────
+
+async function handleCreateTrainingLog(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid request body' }, { status: 400 }, request, env);
+
+  const sport = sanitize(body.sport || '', 50);
+  const sessionType = sanitize(body.session_type || 'drilling', 30);
+  const durationMinutes = Math.max(1, Math.min(600, parseInt(body.duration_minutes) || 60));
+  const intensity = Math.max(1, Math.min(10, parseInt(body.intensity) || 5));
+  const notes = sanitize(body.notes || '', 2000);
+  const techniques = JSON.stringify((body.techniques || []).slice(0, 20).map(t => sanitize(String(t), 100)));
+  const rounds = Math.max(0, Math.min(100, parseInt(body.rounds) || 0));
+  const gymId = body.gym_id ? parseInt(body.gym_id) : null;
+  const checkinId = body.checkin_id ? parseInt(body.checkin_id) : null;
+  const partnerId = body.partner_id ? parseInt(body.partner_id) : null;
+
+  if (!sport) return corsJson({ ok: false, error: 'Sport is required' }, { status: 400 }, request, env);
+
+  const validTypes = ['sparring', 'drilling', 'rolling', 'striking', 'conditioning', 'technique', 'competition', 'private_lesson', 'open_mat', 'other'];
+  if (!validTypes.includes(sessionType)) {
+    return corsJson({ ok: false, error: `Invalid session_type. Must be one of: ${validTypes.join(', ')}` }, { status: 400 }, request, env);
+  }
+
+  // Verify gym exists if provided
+  if (gymId) {
+    const gym = await env.DB.prepare('SELECT id FROM gyms WHERE id = ?').bind(gymId).first();
+    if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  }
+
+  // Verify partner exists if provided
+  if (partnerId) {
+    const partner = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(partnerId).first();
+    if (!partner) return corsJson({ ok: false, error: 'Partner not found' }, { status: 404 }, request, env);
+  }
+
+  const result = await env.DB.prepare(
+    'INSERT INTO training_logs (user_id, gym_id, checkin_id, partner_id, sport, session_type, duration_minutes, intensity, notes, techniques, rounds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, gymId, checkinId, partnerId, sport, sessionType, durationMinutes, intensity, notes, techniques, rounds, isoNow()).run();
+
+  return corsJson({ ok: true, log_id: result.meta?.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleGetTrainingLogs(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const limit = Math.min(50, parseInt(url.searchParams.get('limit')) || 20);
+  const offset = parseInt(url.searchParams.get('offset')) || 0;
+  const sport = url.searchParams.get('sport') || '';
+  const sessionType = url.searchParams.get('session_type') || '';
+
+  let where = 'WHERE tl.user_id = ?';
+  const params = [user.id];
+
+  if (sport) {
+    where += ' AND tl.sport = ?';
+    params.push(sport);
+  }
+  if (sessionType) {
+    where += ' AND tl.session_type = ?';
+    params.push(sessionType);
+  }
+
+  params.push(limit, offset);
+
+  const logs = await env.DB.prepare(`
+    SELECT tl.*,
+           g.name as gym_name, g.city as gym_city,
+           u.display_name as partner_name, u.avatar_url as partner_avatar
+    FROM training_logs tl
+    LEFT JOIN gyms g ON tl.gym_id = g.id
+    LEFT JOIN users u ON tl.partner_id = u.id
+    ${where}
+    ORDER BY tl.created_at DESC
+    LIMIT ? OFFSET ?
+  `).bind(...params).all();
+
+  // Get total count
+  const countParams = params.slice(0, params.length - 2); // remove limit/offset
+  const countResult = await env.DB.prepare(`SELECT COUNT(*) as total FROM training_logs tl ${where}`).bind(...countParams).first();
+
+  return corsJson({
+    ok: true,
+    logs: (logs.results || []).map(l => ({
+      ...l,
+      techniques: JSON.parse(l.techniques || '[]'),
+    })),
+    total: countResult?.total || 0,
+  }, {}, request, env);
+}
+
+async function handleGetTrainingLog(request, env, logId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const log = await env.DB.prepare(`
+    SELECT tl.*,
+           g.name as gym_name, g.city as gym_city,
+           u.display_name as partner_name, u.avatar_url as partner_avatar
+    FROM training_logs tl
+    LEFT JOIN gyms g ON tl.gym_id = g.id
+    LEFT JOIN users u ON tl.partner_id = u.id
+    WHERE tl.id = ? AND tl.user_id = ?
+  `).bind(logId, user.id).first();
+
+  if (!log) return corsJson({ ok: false, error: 'Training log not found' }, { status: 404 }, request, env);
+
+  return corsJson({
+    ok: true,
+    log: { ...log, techniques: JSON.parse(log.techniques || '[]') },
+  }, {}, request, env);
+}
+
+async function handleDeleteTrainingLog(request, env, logId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const log = await env.DB.prepare('SELECT id FROM training_logs WHERE id = ? AND user_id = ?').bind(logId, user.id).first();
+  if (!log) return corsJson({ ok: false, error: 'Training log not found' }, { status: 404 }, request, env);
+
+  await env.DB.prepare('DELETE FROM training_logs WHERE id = ? AND user_id = ?').bind(logId, user.id).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleGetTrainingStats(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const period = url.searchParams.get('period') || '30'; // days
+  const days = Math.max(1, Math.min(365, parseInt(period) || 30));
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  // Aggregate stats
+  const stats = await env.DB.prepare(`
+    SELECT
+      COUNT(*) as total_sessions,
+      SUM(duration_minutes) as total_minutes,
+      ROUND(AVG(duration_minutes), 0) as avg_duration,
+      ROUND(AVG(intensity), 1) as avg_intensity,
+      SUM(rounds) as total_rounds,
+      COUNT(DISTINCT sport) as sports_trained,
+      COUNT(DISTINCT gym_id) as gyms_visited,
+      COUNT(DISTINCT partner_id) as training_partners
+    FROM training_logs
+    WHERE user_id = ? AND created_at > ?
+  `).bind(user.id, since).first();
+
+  // Sessions by sport
+  const bySport = await env.DB.prepare(`
+    SELECT sport, COUNT(*) as sessions, SUM(duration_minutes) as minutes
+    FROM training_logs
+    WHERE user_id = ? AND created_at > ?
+    GROUP BY sport
+    ORDER BY sessions DESC
+  `).bind(user.id, since).all();
+
+  // Sessions by type
+  const byType = await env.DB.prepare(`
+    SELECT session_type, COUNT(*) as sessions, SUM(duration_minutes) as minutes
+    FROM training_logs
+    WHERE user_id = ? AND created_at > ?
+    GROUP BY session_type
+    ORDER BY sessions DESC
+  `).bind(user.id, since).all();
+
+  // Weekly breakdown (last N weeks based on period)
+  const weeklyBreakdown = await env.DB.prepare(`
+    SELECT
+      strftime('%Y-%W', created_at) as week,
+      COUNT(*) as sessions,
+      SUM(duration_minutes) as minutes,
+      ROUND(AVG(intensity), 1) as avg_intensity
+    FROM training_logs
+    WHERE user_id = ? AND created_at > ?
+    GROUP BY week
+    ORDER BY week DESC
+    LIMIT 12
+  `).bind(user.id, since).all();
+
+  // Current streak (consecutive days with training)
+  const recentDays = await env.DB.prepare(`
+    SELECT DISTINCT DATE(created_at) as training_date
+    FROM training_logs
+    WHERE user_id = ?
+    ORDER BY training_date DESC
+    LIMIT 60
+  `).bind(user.id).all();
+
+  let streak = 0;
+  if (recentDays.results && recentDays.results.length > 0) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dates = recentDays.results.map(r => new Date(r.training_date + 'T00:00:00'));
+
+    // Check if trained today or yesterday
+    const diffToday = Math.floor((today - dates[0]) / (24 * 60 * 60 * 1000));
+    if (diffToday <= 1) {
+      streak = 1;
+      for (let i = 1; i < dates.length; i++) {
+        const diff = Math.floor((dates[i - 1] - dates[i]) / (24 * 60 * 60 * 1000));
+        if (diff === 1) streak++;
+        else break;
+      }
+    }
+  }
+
+  return corsJson({
+    ok: true,
+    stats: {
+      ...stats,
+      streak,
+      period_days: days,
+    },
+    by_sport: bySport.results || [],
+    by_type: byType.results || [],
+    weekly: (weeklyBreakdown.results || []).reverse(),
+  }, {}, request, env);
+}
+
+// ─── Leaderboard Endpoint ─────────────────────────────────────────────────
+
+async function handleGetLeaderboard(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type') || 'points'; // points, checkins, sessions, hours
+  const period = url.searchParams.get('period') || '30'; // days
+  const limit = Math.min(50, parseInt(url.searchParams.get('limit')) || 20);
+  const city = url.searchParams.get('city') || '';
+  const sport = url.searchParams.get('sport') || '';
+  const days = Math.max(7, Math.min(365, parseInt(period) || 30));
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+  let query, countQuery;
+
+  if (type === 'points' || type === 'checkins') {
+    // Leaderboard based on check-ins / points
+    const metric = type === 'points' ? 'SUM(c.points)' : 'COUNT(*)';
+    const orderCol = type === 'points' ? 'score' : 'score';
+
+    let cityFilter = '';
+    const params = [since];
+
+    if (city) {
+      cityFilter = ' AND u.city = ?';
+      params.push(city);
+    }
+
+    query = `
+      SELECT u.id, u.display_name as name, u.avatar_url, u.city,
+             ${metric} as score,
+             COUNT(DISTINCT c.gym_id) as unique_gyms
+      FROM checkins c
+      JOIN users u ON c.user_id = u.id
+      WHERE c.created_at > ?${cityFilter}
+      GROUP BY u.id
+      ORDER BY score DESC
+      LIMIT ?
+    `;
+    params.push(limit);
+
+    const results = await env.DB.prepare(query).bind(...params).all();
+
+    // Get current user's rank
+    const userParams = [since];
+    if (city) userParams.push(city);
+    userParams.push(user.id);
+
+    const userRank = await env.DB.prepare(`
+      SELECT rank FROM (
+        SELECT u.id, ROW_NUMBER() OVER (ORDER BY ${metric} DESC) as rank
+        FROM checkins c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.created_at > ?${cityFilter}
+        GROUP BY u.id
+      ) WHERE id = ?
+    `).bind(...userParams).first();
+
+    const userScore = await env.DB.prepare(`
+      SELECT ${metric} as score FROM checkins c WHERE c.user_id = ? AND c.created_at > ?
+    `).bind(user.id, since).first();
+
+    return corsJson({
+      ok: true,
+      type,
+      period_days: days,
+      leaderboard: (results.results || []).map((r, i) => ({ ...r, rank: i + 1 })),
+      my_rank: userRank?.rank || null,
+      my_score: userScore?.score || 0,
+    }, {}, request, env);
+
+  } else {
+    // Leaderboard based on training logs (sessions or hours)
+    const metric = type === 'hours' ? 'SUM(tl.duration_minutes)' : 'COUNT(*)';
+
+    let extraFilter = '';
+    const params = [since];
+
+    if (city) {
+      extraFilter += ' AND u.city = ?';
+      params.push(city);
+    }
+    if (sport) {
+      extraFilter += ' AND tl.sport = ?';
+      params.push(sport);
+    }
+
+    query = `
+      SELECT u.id, u.display_name as name, u.avatar_url, u.city,
+             ${metric} as score
+      FROM training_logs tl
+      JOIN users u ON tl.user_id = u.id
+      WHERE tl.created_at > ?${extraFilter}
+      GROUP BY u.id
+      ORDER BY score DESC
+      LIMIT ?
+    `;
+    params.push(limit);
+
+    const results = await env.DB.prepare(query).bind(...params).all();
+
+    // Get current user's rank
+    const userParams = [since];
+    if (city) userParams.push(city);
+    if (sport) userParams.push(sport);
+    userParams.push(user.id);
+
+    const userRank = await env.DB.prepare(`
+      SELECT rank FROM (
+        SELECT u.id, ROW_NUMBER() OVER (ORDER BY ${metric} DESC) as rank
+        FROM training_logs tl
+        JOIN users u ON tl.user_id = u.id
+        WHERE tl.created_at > ?${extraFilter}
+        GROUP BY u.id
+      ) WHERE id = ?
+    `).bind(...userParams).first();
+
+    const userScore = await env.DB.prepare(`
+      SELECT ${metric} as score FROM training_logs tl WHERE tl.user_id = ? AND tl.created_at > ?${sport ? ' AND tl.sport = ?' : ''}
+    `).bind(...(sport ? [user.id, since, sport] : [user.id, since])).first();
+
+    return corsJson({
+      ok: true,
+      type,
+      period_days: days,
+      leaderboard: (results.results || []).map((r, i) => ({
+        ...r,
+        score: type === 'hours' ? Math.round((r.score || 0) / 60 * 10) / 10 : r.score,
+        rank: i + 1,
+      })),
+      my_rank: userRank?.rank || null,
+      my_score: type === 'hours' ? Math.round((userScore?.score || 0) / 60 * 10) / 10 : (userScore?.score || 0),
+    }, {}, request, env);
+  }
+}
+
+// ─── Events Endpoints ─────────────────────────────────────────────────────
+
+async function handleCreateEvent(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid request body' }, { status: 400 }, request, env);
+
+  const title = sanitize(body.title || '', 200);
+  const description = sanitize(body.description || '', 2000);
+  const sport = sanitize(body.sport || '', 50);
+  const eventDate = body.event_date || '';
+  const endDate = body.end_date || null;
+  const location = sanitize(body.location || '', 200);
+  const maxAttendees = Math.max(0, Math.min(1000, parseInt(body.max_attendees) || 0));
+  const gymId = body.gym_id ? parseInt(body.gym_id) : null;
+  const isPublic = body.is_public !== false ? 1 : 0;
+
+  if (!title) return corsJson({ ok: false, error: 'Title is required' }, { status: 400 }, request, env);
+  if (!eventDate) return corsJson({ ok: false, error: 'Event date is required' }, { status: 400 }, request, env);
+
+  // Validate date
+  const parsedDate = new Date(eventDate);
+  if (isNaN(parsedDate.getTime())) return corsJson({ ok: false, error: 'Invalid event date' }, { status: 400 }, request, env);
+
+  // Verify gym if provided
+  if (gymId) {
+    const gym = await env.DB.prepare('SELECT id, name FROM gyms WHERE id = ?').bind(gymId).first();
+    if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  }
+
+  const now = isoNow();
+  const result = await env.DB.prepare(
+    'INSERT INTO events (creator_id, gym_id, title, description, sport, event_date, end_date, location, max_attendees, is_public, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, gymId, title, description, sport, eventDate, endDate, location, maxAttendees, isPublic, 'upcoming', now, now).run();
+
+  // Auto-RSVP creator as 'going'
+  const eventId = result.meta?.last_row_id;
+  if (eventId) {
+    await env.DB.prepare('INSERT INTO event_rsvps (event_id, user_id, status, created_at) VALUES (?, ?, ?, ?)').bind(eventId, user.id, 'going', now).run();
+  }
+
+  return corsJson({ ok: true, event_id: eventId }, { status: 201 }, request, env);
+}
+
+async function handleGetEvents(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const limit = Math.min(50, parseInt(url.searchParams.get('limit')) || 20);
+  const offset = parseInt(url.searchParams.get('offset')) || 0;
+  const sport = url.searchParams.get('sport') || '';
+  const status = url.searchParams.get('status') || 'upcoming';
+  const mine = url.searchParams.get('mine') === 'true';
+  const gymId = url.searchParams.get('gym_id') || '';
+
+  let where = 'WHERE e.is_public = 1';
+  const params = [];
+
+  if (mine) {
+    where = 'WHERE e.creator_id = ?';
+    params.push(user.id);
+  }
+  if (status === 'upcoming') {
+    where += ' AND e.event_date >= datetime("now")';
+  } else if (status === 'past') {
+    where += ' AND e.event_date < datetime("now")';
+  }
+  if (sport) {
+    where += ' AND e.sport = ?';
+    params.push(sport);
+  }
+  if (gymId) {
+    where += ' AND e.gym_id = ?';
+    params.push(parseInt(gymId));
+  }
+
+  params.push(limit, offset);
+
+  const events = await env.DB.prepare(`
+    SELECT e.*,
+           u.display_name as creator_name, u.avatar_url as creator_avatar,
+           g.name as gym_name, g.city as gym_city,
+           (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.status = 'going') as attendee_count,
+           (SELECT r.status FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ${user.id}) as my_rsvp
+    FROM events e
+    LEFT JOIN users u ON e.creator_id = u.id
+    LEFT JOIN gyms g ON e.gym_id = g.id
+    ${where}
+    ORDER BY e.event_date ASC
+    LIMIT ? OFFSET ?
+  `).bind(...params).all();
+
+  const countParams = params.slice(0, params.length - 2);
+  const total = await env.DB.prepare(`SELECT COUNT(*) as cnt FROM events e ${where}`).bind(...countParams).first();
+
+  return corsJson({
+    ok: true,
+    events: events.results || [],
+    total: total?.cnt || 0,
+  }, {}, request, env);
+}
+
+async function handleGetEvent(request, env, eventId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const event = await env.DB.prepare(`
+    SELECT e.*,
+           u.display_name as creator_name, u.avatar_url as creator_avatar,
+           g.name as gym_name, g.city as gym_city, g.address as gym_address,
+           (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id AND r.status = 'going') as attendee_count,
+           (SELECT r.status FROM event_rsvps r WHERE r.event_id = e.id AND r.user_id = ?) as my_rsvp
+    FROM events e
+    LEFT JOIN users u ON e.creator_id = u.id
+    LEFT JOIN gyms g ON e.gym_id = g.id
+    WHERE e.id = ?
+  `).bind(user.id, eventId).first();
+
+  if (!event) return corsJson({ ok: false, error: 'Event not found' }, { status: 404 }, request, env);
+
+  // Get attendees
+  const attendees = await env.DB.prepare(`
+    SELECT r.status, r.created_at, u.id as user_id, u.display_name as name, u.avatar_url
+    FROM event_rsvps r
+    JOIN users u ON r.user_id = u.id
+    WHERE r.event_id = ? AND r.status = 'going'
+    ORDER BY r.created_at ASC
+    LIMIT 50
+  `).bind(eventId).all();
+
+  return corsJson({
+    ok: true,
+    event,
+    attendees: attendees.results || [],
+  }, {}, request, env);
+}
+
+async function handleRsvpEvent(request, env, eventId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  const rsvpStatus = body?.status || 'going'; // 'going', 'interested', 'not_going'
+
+  if (!['going', 'interested', 'not_going'].includes(rsvpStatus)) {
+    return corsJson({ ok: false, error: 'Invalid RSVP status' }, { status: 400 }, request, env);
+  }
+
+  const event = await env.DB.prepare('SELECT id, max_attendees FROM events WHERE id = ?').bind(eventId).first();
+  if (!event) return corsJson({ ok: false, error: 'Event not found' }, { status: 404 }, request, env);
+
+  // Check capacity for 'going'
+  if (rsvpStatus === 'going' && event.max_attendees > 0) {
+    const count = await env.DB.prepare("SELECT COUNT(*) as cnt FROM event_rsvps WHERE event_id = ? AND status = 'going'").bind(eventId).first();
+    const existing = await env.DB.prepare('SELECT id FROM event_rsvps WHERE event_id = ? AND user_id = ?').bind(eventId, user.id).first();
+    if ((count?.cnt || 0) >= event.max_attendees && !existing) {
+      return corsJson({ ok: false, error: 'Event is at capacity' }, { status: 400 }, request, env);
+    }
+  }
+
+  if (rsvpStatus === 'not_going') {
+    // Remove RSVP
+    await env.DB.prepare('DELETE FROM event_rsvps WHERE event_id = ? AND user_id = ?').bind(eventId, user.id).run();
+  } else {
+    // Upsert RSVP
+    await env.DB.prepare(
+      'INSERT INTO event_rsvps (event_id, user_id, status, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(event_id, user_id) DO UPDATE SET status = ?'
+    ).bind(eventId, user.id, rsvpStatus, isoNow(), rsvpStatus).run();
+  }
+
+  const attendeeCount = await env.DB.prepare("SELECT COUNT(*) as cnt FROM event_rsvps WHERE event_id = ? AND status = 'going'").bind(eventId).first();
+
+  return corsJson({ ok: true, status: rsvpStatus, attendee_count: attendeeCount?.cnt || 0 }, {}, request, env);
+}
+
+async function handleDeleteEvent(request, env, eventId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const event = await env.DB.prepare('SELECT id, creator_id FROM events WHERE id = ?').bind(eventId).first();
+  if (!event) return corsJson({ ok: false, error: 'Event not found' }, { status: 404 }, request, env);
+  if (event.creator_id !== user.id && user.role !== 'admin') {
+    return corsJson({ ok: false, error: 'Not authorized to delete this event' }, { status: 403 }, request, env);
+  }
+
+  await env.DB.prepare('DELETE FROM event_rsvps WHERE event_id = ?').bind(eventId).run();
+  await env.DB.prepare('DELETE FROM events WHERE id = ?').bind(eventId).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
 // Get user's training passport — summary of all gyms visited with stats
 async function handleGetTrainingPassport(request, env) {
   const user = await requireAuth(request, env);
@@ -4462,6 +5031,38 @@ export default {
       if (path === '/api/gym/checkin-code' && method === 'GET') return handleGetCheckinCode(request, env);
       if (path === '/api/gym/checkin-code/regenerate' && method === 'POST') return handleRegenerateCheckinCode(request, env);
       if (path === '/api/gym/guest-checkins' && method === 'GET') return handleGetGuestCheckins(request, env);
+
+      // Training Logs
+      if (path === '/api/training-logs' && method === 'POST') return handleCreateTrainingLog(request, env);
+      if (path === '/api/training-logs' && method === 'GET') return handleGetTrainingLogs(request, env);
+      if (path === '/api/training-logs/stats' && method === 'GET') return handleGetTrainingStats(request, env);
+      if (path.match(/^\/api\/training-logs\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetTrainingLog(request, env, id);
+      }
+      if (path.match(/^\/api\/training-logs\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeleteTrainingLog(request, env, id);
+      }
+
+      // Leaderboard
+      if (path === '/api/leaderboard' && method === 'GET') return handleGetLeaderboard(request, env);
+
+      // Events
+      if (path === '/api/events' && method === 'POST') return handleCreateEvent(request, env);
+      if (path === '/api/events' && method === 'GET') return handleGetEvents(request, env);
+      if (path.match(/^\/api\/events\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetEvent(request, env, id);
+      }
+      if (path.match(/^\/api\/events\/(\d+)\/rsvp$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleRsvpEvent(request, env, id);
+      }
+      if (path.match(/^\/api\/events\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeleteEvent(request, env, id);
+      }
 
       // Check-Ins (existing)
       if (path === '/api/checkins' && method === 'POST') return handleCheckin(request, env);

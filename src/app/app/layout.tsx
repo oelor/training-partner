@@ -17,6 +17,9 @@ import {
   Crown,
   Trophy,
   Building2,
+  Dumbbell,
+  Medal,
+  CalendarDays,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api from '@/lib/api'
@@ -30,6 +33,9 @@ const navItems = [
 ]
 
 const secondaryNav = [
+  { href: '/app/training-log', icon: Dumbbell, label: 'Training Log' },
+  { href: '/app/leaderboard', icon: Medal, label: 'Leaderboard' },
+  { href: '/app/events', icon: CalendarDays, label: 'Events' },
   { href: '/app/passport', icon: Trophy, label: 'Passport' },
   { href: '/app/bookings', icon: Crown, label: 'Bookings' },
   { href: '/app/community', icon: Users, label: 'Community' },

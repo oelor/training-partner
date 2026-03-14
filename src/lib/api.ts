@@ -630,6 +630,84 @@ class ApiClient {
     return this.request<{ ok: boolean; guests: { id: number; name: string; email: string; created_at: string }[] }>(`/api/gym/guest-checkins${qs}`);
   }
 
+  // Training Logs
+  async createTrainingLog(data: { sport: string; session_type: string; duration_minutes: number; intensity: number; notes?: string; techniques?: string[]; rounds?: number; gym_id?: number; checkin_id?: number; partner_id?: number }) {
+    return this.request<{ ok: boolean; log_id: number }>('/api/training-logs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getTrainingLogs(params?: { sport?: string; session_type?: string; limit?: number; offset?: number }) {
+    const query = new URLSearchParams();
+    if (params?.sport) query.set('sport', params.sport);
+    if (params?.session_type) query.set('session_type', params.session_type);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; logs: TrainingLog[]; total: number }>(`/api/training-logs${qs ? '?' + qs : ''}`);
+  }
+
+  async getTrainingLog(logId: number) {
+    return this.request<{ ok: boolean; log: TrainingLog }>(`/api/training-logs/${logId}`);
+  }
+
+  async deleteTrainingLog(logId: number) {
+    return this.request<{ ok: boolean }>(`/api/training-logs/${logId}`, { method: 'DELETE' });
+  }
+
+  async getTrainingStats(period?: number) {
+    const qs = period ? `?period=${period}` : '';
+    return this.request<{ ok: boolean; stats: TrainingStats; by_sport: { sport: string; sessions: number; minutes: number }[]; by_type: { session_type: string; sessions: number; minutes: number }[]; weekly: { week: string; sessions: number; minutes: number; avg_intensity: number }[] }>(`/api/training-logs/stats${qs}`);
+  }
+
+  // Leaderboard
+  async getLeaderboard(params?: { type?: string; period?: number; limit?: number; city?: string; sport?: string }) {
+    const query = new URLSearchParams();
+    if (params?.type) query.set('type', params.type);
+    if (params?.period) query.set('period', String(params.period));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.city) query.set('city', params.city);
+    if (params?.sport) query.set('sport', params.sport);
+    const qs = query.toString();
+    return this.request<{ ok: boolean; type: string; period_days: number; leaderboard: LeaderboardEntry[]; my_rank: number | null; my_score: number }>(`/api/leaderboard${qs ? '?' + qs : ''}`);
+  }
+
+  // Events
+  async createEvent(data: { title: string; description?: string; sport?: string; event_date: string; end_date?: string; location?: string; max_attendees?: number; gym_id?: number; is_public?: boolean }) {
+    return this.request<{ ok: boolean; event_id: number }>('/api/events', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getEvents(params?: { sport?: string; status?: string; mine?: boolean; gym_id?: number; limit?: number; offset?: number }) {
+    const query = new URLSearchParams();
+    if (params?.sport) query.set('sport', params.sport);
+    if (params?.status) query.set('status', params.status);
+    if (params?.mine) query.set('mine', 'true');
+    if (params?.gym_id) query.set('gym_id', String(params.gym_id));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; events: AppEvent[]; total: number }>(`/api/events${qs ? '?' + qs : ''}`);
+  }
+
+  async getEvent(eventId: number) {
+    return this.request<{ ok: boolean; event: AppEvent; attendees: EventAttendee[] }>(`/api/events/${eventId}`);
+  }
+
+  async rsvpEvent(eventId: number, status: 'going' | 'interested' | 'not_going') {
+    return this.request<{ ok: boolean; status: string; attendee_count: number }>(`/api/events/${eventId}/rsvp`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async deleteEvent(eventId: number) {
+    return this.request<{ ok: boolean }>(`/api/events/${eventId}`, { method: 'DELETE' });
+  }
+
   // Gym Promotions
   async createPromotion(data: { gym_id: number; title: string; description?: string; type?: string; start_date?: string; end_date?: string }) {
     return this.request<{ ok: boolean; promotion_id: number }>('/api/promotions', {
@@ -1184,6 +1262,79 @@ export interface BlockedUser {
   id: number;
   user_id: number;
   name: string;
+  created_at: string;
+}
+
+export interface TrainingLog {
+  id: number;
+  user_id: number;
+  gym_id: number | null;
+  checkin_id: number | null;
+  partner_id: number | null;
+  sport: string;
+  session_type: string;
+  duration_minutes: number;
+  intensity: number;
+  notes: string;
+  techniques: string[];
+  rounds: number;
+  gym_name: string | null;
+  gym_city: string | null;
+  partner_name: string | null;
+  partner_avatar: string | null;
+  created_at: string;
+}
+
+export interface TrainingStats {
+  total_sessions: number;
+  total_minutes: number;
+  avg_duration: number;
+  avg_intensity: number;
+  total_rounds: number;
+  sports_trained: number;
+  gyms_visited: number;
+  training_partners: number;
+  streak: number;
+  period_days: number;
+}
+
+export interface LeaderboardEntry {
+  id: number;
+  rank: number;
+  name: string;
+  avatar_url: string;
+  city: string;
+  score: number;
+  unique_gyms?: number;
+}
+
+export interface AppEvent {
+  id: number;
+  creator_id: number;
+  gym_id: number | null;
+  title: string;
+  description: string;
+  sport: string;
+  event_date: string;
+  end_date: string | null;
+  location: string;
+  max_attendees: number;
+  is_public: number;
+  status: string;
+  creator_name: string;
+  creator_avatar: string;
+  gym_name: string | null;
+  gym_city: string | null;
+  attendee_count: number;
+  my_rsvp: string | null;
+  created_at: string;
+}
+
+export interface EventAttendee {
+  user_id: number;
+  name: string;
+  avatar_url: string;
+  status: string;
   created_at: string;
 }
 

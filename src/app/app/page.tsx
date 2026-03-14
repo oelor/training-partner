@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown, AlertCircle, RefreshCw } from 'lucide-react'
+import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown, AlertCircle, RefreshCw, Dumbbell, Loader2, Flame, Clock } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api, { Partner, Gym, Booking, isPremiumPlan } from '@/lib/api'
+import api, { Partner, Gym, Booking, TrainingLog, TrainingStats, isPremiumPlan } from '@/lib/api'
 import { CardSkeleton } from '@/components/skeleton'
 import TrainingStatsChart from '@/components/training-stats-chart'
 
@@ -17,6 +17,9 @@ export default function DashboardPage() {
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [weeklyStats, setWeeklyStats] = useState<TrainingStats | null>(null)
+  const [recentLogs, setRecentLogs] = useState<TrainingLog[]>([])
+  const [statsLoading, setStatsLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
@@ -39,6 +42,40 @@ export default function DashboardPage() {
     }
     load()
   }, [])
+
+  const loadTrainingData = useCallback(async () => {
+    setStatsLoading(true)
+    try {
+      const [statsData, logsData] = await Promise.all([
+        api.getTrainingStats(7).catch(() => null),
+        api.getTrainingLogs({ limit: 3 }).catch(() => ({ logs: [], total: 0 })),
+      ])
+      if (statsData?.stats) setWeeklyStats(statsData.stats)
+      setRecentLogs(logsData.logs || [])
+    } catch {
+      // non-critical — don't block the dashboard
+    } finally {
+      setStatsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadTrainingData()
+  }, [loadTrainingData])
+
+  // Greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
+  const todayFormatted = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
 
   const profileComplete = profile?.profile_complete || 0
   const isProfileIncomplete = !profile || profileComplete < 50
@@ -65,6 +102,7 @@ export default function DashboardPage() {
       }
     }
     reload()
+    loadTrainingData()
   }
 
   return (
@@ -87,10 +125,72 @@ export default function DashboardPage() {
       <div className="space-y-8">
       {/* Welcome Header */}
       <div className="animate-slide-up">
+        <p className="text-text-secondary text-sm mb-1">{todayFormatted}</p>
         <h1 className="font-heading text-3xl text-white mb-2">
-          WELCOME <span className="gradient-text">BACK</span>, {user?.display_name?.split(' ')[0]?.toUpperCase() || 'ATHLETE'}!
+          {getGreeting()}, <span className="gradient-text">{user?.display_name?.split(' ')[0] || 'Athlete'}</span>
         </h1>
         <p className="text-text-secondary">Here&apos;s what&apos;s happening in your training network</p>
+      </div>
+
+      {/* Weekly Activity Summary */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h2 className="font-heading text-lg text-white mb-4">THIS WEEK</h2>
+        {statsLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-background rounded-lg p-4 text-center">
+              <Dumbbell className="w-5 h-5 text-primary mx-auto mb-2" />
+              <div className="font-heading text-2xl text-white">{weeklyStats?.total_sessions ?? 0}</div>
+              <div className="text-text-secondary text-xs mt-1">Sessions</div>
+            </div>
+            <div className="bg-background rounded-lg p-4 text-center">
+              <MapPin className="w-5 h-5 text-accent mx-auto mb-2" />
+              <div className="font-heading text-2xl text-white">{weeklyStats?.gyms_visited ?? 0}</div>
+              <div className="text-text-secondary text-xs mt-1">Check-ins</div>
+            </div>
+            <div className="bg-background rounded-lg p-4 text-center">
+              <Clock className="w-5 h-5 text-blue-400 mx-auto mb-2" />
+              <div className="font-heading text-2xl text-white">{weeklyStats?.total_minutes ? (weeklyStats.total_minutes / 60).toFixed(1) : '0'}</div>
+              <div className="text-text-secondary text-xs mt-1">Hours Trained</div>
+            </div>
+            <div className="bg-background rounded-lg p-4 text-center">
+              <Flame className="w-5 h-5 text-orange-400 mx-auto mb-2" />
+              <div className="font-heading text-2xl text-white">{weeklyStats?.streak ?? 0}</div>
+              <div className="text-text-secondary text-xs mt-1">Day Streak</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Link href="/app/training-log" className="bg-surface border border-border rounded-xl p-4 hover:border-primary transition-colors group text-center card-hover">
+          <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center mx-auto mb-2 group-hover:bg-primary/30 transition-colors">
+            <Dumbbell className="w-5 h-5 text-primary" />
+          </div>
+          <span className="text-white text-sm font-medium">Log Training</span>
+        </Link>
+        <Link href="/app/partners" className="bg-surface border border-border rounded-xl p-4 hover:border-primary transition-colors group text-center card-hover">
+          <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-2 group-hover:bg-blue-500/30 transition-colors">
+            <Users className="w-5 h-5 text-blue-400" />
+          </div>
+          <span className="text-white text-sm font-medium">Find Partners</span>
+        </Link>
+        <Link href="/app/passport" className="bg-surface border border-border rounded-xl p-4 hover:border-primary transition-colors group text-center card-hover">
+          <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center mx-auto mb-2 group-hover:bg-green-500/30 transition-colors">
+            <MapPin className="w-5 h-5 text-green-400" />
+          </div>
+          <span className="text-white text-sm font-medium">Check In</span>
+        </Link>
+        <Link href="/app/leaderboard" className="bg-surface border border-border rounded-xl p-4 hover:border-primary transition-colors group text-center card-hover">
+          <div className="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center mx-auto mb-2 group-hover:bg-yellow-500/30 transition-colors">
+            <Trophy className="w-5 h-5 text-yellow-400" />
+          </div>
+          <span className="text-white text-sm font-medium">Leaderboard</span>
+        </Link>
       </div>
 
       {/* Profile Completion Banner */}
@@ -199,6 +299,74 @@ export default function DashboardPage() {
             <ArrowRight className="w-6 h-6 text-accent group-hover:translate-x-1 transition-transform" />
           </div>
         </Link>
+      </div>
+
+      {/* Recent Training Sessions */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-heading text-2xl text-white">RECENT SESSIONS</h2>
+          <Link href="/app/training-log" className="text-primary text-sm hover:underline flex items-center gap-1">
+            View All <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+        {statsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          </div>
+        ) : recentLogs.length === 0 ? (
+          <div className="bg-surface border border-border rounded-xl p-8 text-center">
+            <div className="w-16 h-16 bg-surface/50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Dumbbell className="w-8 h-8 text-text-secondary animate-float" />
+            </div>
+            <p className="text-white font-heading text-lg mb-2">No Sessions Yet</p>
+            <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Start tracking your training to see progress over time</p>
+            <Link href="/app/training-log" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
+              Log Your First Session <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {recentLogs.map((log) => (
+              <Link key={log.id} href={`/app/training-log`} className="block bg-surface border border-border rounded-xl p-4 card-hover group">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Dumbbell className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-white font-medium truncate group-hover:text-primary transition-colors">
+                          {log.sport}{log.session_type ? ` — ${log.session_type}` : ''}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-3 text-text-secondary text-xs mt-1">
+                        <span>{log.duration_minutes}min</span>
+                        {log.rounds > 0 && <span>{log.rounds} rounds</span>}
+                        {log.gym_name && (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {log.gym_name}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-4">
+                    <div className="text-text-secondary text-xs">
+                      {new Date(log.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </div>
+                    {log.intensity > 0 && (
+                      <div className="flex items-center gap-1 mt-1 justify-end">
+                        <Flame className="w-3 h-3 text-orange-400" />
+                        <span className="text-orange-400 text-xs font-medium">{log.intensity}/10</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Training Activity Chart */}
