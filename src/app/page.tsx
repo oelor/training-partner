@@ -22,7 +22,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     // Check if user has a token (lightweight check, no API call)
-    setIsLoggedIn(!!localStorage.getItem('token'))
+    setIsLoggedIn(!!localStorage.getItem('tp_token'))
   }, [])
 
   return (
