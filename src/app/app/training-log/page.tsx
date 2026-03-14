@@ -273,8 +273,8 @@ export default function TrainingLogPage() {
     )
   }
 
-  const totalHours = stats ? (stats.total_minutes / 60).toFixed(1) : '0'
-  const avgIntensity = stats ? stats.avg_intensity.toFixed(1) : '0'
+  const totalHours = stats?.total_minutes ? (stats.total_minutes / 60).toFixed(1) : '0'
+  const avgIntensity = stats?.avg_intensity ? stats.avg_intensity.toFixed(1) : '0'
   const streak = stats?.streak ?? 0
   const sessionsThisMonth = stats?.total_sessions ?? 0
 
