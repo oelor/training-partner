@@ -9,7 +9,7 @@ import {
   Shield, Newspaper, Heart, Sparkles
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api from '@/lib/api'
+import api, { isPremiumPlan } from '@/lib/api'
 import ErrorBoundary from '@/components/error-boundary'
 import FeedbackWidget from '@/components/feedback-widget'
 
@@ -180,7 +180,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Subscription badge */}
-          {subscription?.plan === 'premium' ? (
+          {isPremiumPlan(subscription?.plan) ? (
             <div className="mx-4 mb-3 p-3 bg-primary/10 border border-primary/30 rounded-lg">
               <div className="flex items-center gap-2 text-primary text-sm font-medium">
                 <Crown className="w-4 h-4" />

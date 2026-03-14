@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api from '@/lib/api'
+import api, { isPremiumPlan } from '@/lib/api'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -27,7 +27,7 @@ export default function SettingsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
-  const isPremium = subscription?.plan === 'premium' || subscription?.plan === 'premium_athlete' || subscription?.plan === 'premium_gym'
+  const isPremium = isPremiumPlan(subscription?.plan)
   const [upgrading, setUpgrading] = useState(false)
 
   const handleUpgrade = async (plan: 'premium_athlete' | 'premium_gym' = 'premium_athlete') => {

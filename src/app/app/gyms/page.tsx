@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { MapPin, Shield, Star, Search } from 'lucide-react'
-import api, { Gym } from '@/lib/api'
+import api, { Gym, isPremiumPlan } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { GymCardSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
@@ -14,7 +14,7 @@ export default function GymsPage() {
   const [gyms, setGyms] = useState<Gym[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const isPremium = subscription?.plan === 'premium'
+  const isPremium = isPremiumPlan(subscription?.plan)
 
   useEffect(() => {
     async function load() {

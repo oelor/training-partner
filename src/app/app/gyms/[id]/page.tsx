@@ -7,7 +7,7 @@ import {
   ArrowLeft, MapPin, Clock, Shield, Phone, Mail, Calendar, Star,
   Lock, Loader2, CheckCircle, Dumbbell, Globe, ChevronDown, ChevronUp
 } from 'lucide-react'
-import api, { GymDetail, GymSession } from '@/lib/api'
+import api, { GymDetail, GymSession, isPremiumPlan } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 
@@ -25,7 +25,7 @@ export default function GymDetailPage() {
   const [submittingReview, setSubmittingReview] = useState(false)
 
   const gymId = Number(params.id)
-  const isPremium = subscription?.plan === 'premium'
+  const isPremium = isPremiumPlan(subscription?.plan)
 
   useEffect(() => {
     async function load() {

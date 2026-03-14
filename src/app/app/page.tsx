@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api, { Partner, Gym, Booking } from '@/lib/api'
+import api, { Partner, Gym, Booking, isPremiumPlan } from '@/lib/api'
 import { CardSkeleton } from '@/components/skeleton'
 
 export default function DashboardPage() {
@@ -288,7 +288,7 @@ export default function DashboardPage() {
             </div>
             <p className="text-white font-heading text-lg mb-2">Discover Partner Gyms</p>
             <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Explore our network of partner gyms with verified open mat hours and facilities in your area</p>
-            {subscription?.plan === 'premium' ? (
+            {isPremiumPlan(subscription?.plan) ? (
               <Link href="/app/gyms" className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary/90 transition-colors">
                 View All Gyms <ArrowRight className="w-4 h-4" />
               </Link>

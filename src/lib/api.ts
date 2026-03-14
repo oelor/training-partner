@@ -807,5 +807,10 @@ export interface GymOwnerDetail extends Gym {
   documents: GymDocument[];
 }
 
+/** Check if a subscription plan grants premium access */
+export function isPremiumPlan(plan?: string | null): boolean {
+  return plan === 'premium' || plan === 'premium_athlete' || plan === 'premium_gym';
+}
+
 export const api = new ApiClient();
 export default api;
