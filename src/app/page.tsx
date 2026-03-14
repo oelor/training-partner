@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import {
   Users,
   MapPin,
@@ -12,15 +11,25 @@ import {
   Menu,
   X,
   Target,
-  Clock,
-  Heart,
   CheckCircle,
   ArrowRight,
-  Crown
+  Crown,
+  Heart
 } from 'lucide-react'
+import {
+  MuayThaiKickSilhouette,
+  BoxerSilhouette,
+  JudoThrowSilhouette,
+  MMAFighterSilhouette
+} from '@/components/silhouettes'
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem('tp_token'))
+  }, [])
 
   return (
     <div className="min-h-screen bg-background bg-pattern">
@@ -28,7 +37,6 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
             <Link href="/" className="flex items-center gap-2">
               <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                 <Users className="w-6 h-6 text-white" />
@@ -36,7 +44,6 @@ export default function LandingPage() {
               <span className="font-heading text-2xl text-white">TRAINING PARTNER</span>
             </Link>
 
-            {/* Desktop Nav */}
             <div className="hidden md:flex items-center gap-8">
               <Link href="#features" className="text-text-secondary hover:text-primary transition-colors">
                 Features
@@ -47,22 +54,32 @@ export default function LandingPage() {
               <Link href="#pricing" className="text-text-secondary hover:text-primary transition-colors">
                 Pricing
               </Link>
-              <Link 
-                href="/auth/signin" 
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link 
-                href="/auth/signup" 
-                className="bg-primary text-white px-5 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors btn-glow"
-              >
-                Get Started
-              </Link>
+              {isLoggedIn ? (
+                <Link
+                  href="/app"
+                  className="bg-primary text-white px-5 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors btn-glow"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/auth/signin"
+                    className="text-text-secondary hover:text-primary transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="bg-primary text-white px-5 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors btn-glow"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <button 
+            <button
               className="md:hidden text-white"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
@@ -71,28 +88,38 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden bg-surface border-t border-border">
             <div className="px-4 py-4 space-y-3">
-              <Link href="#features" className="block text-text-secondary hover:text-primary">
+              <Link href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-text-secondary hover:text-primary">
                 Features
               </Link>
-              <Link href="#how-it-works" className="block text-text-secondary hover:text-primary">
+              <Link href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="block text-text-secondary hover:text-primary">
                 How It Works
               </Link>
-              <Link href="#pricing" className="block text-text-secondary hover:text-primary">
+              <Link href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-text-secondary hover:text-primary">
                 Pricing
               </Link>
-              <Link href="/auth/signin" className="block text-text-secondary hover:text-primary">
-                Sign In
-              </Link>
-              <Link 
-                href="/auth/signup" 
-                className="block bg-primary text-white px-5 py-2 rounded-md font-medium text-center"
-              >
-                Get Started
-              </Link>
+              {isLoggedIn ? (
+                <Link
+                  href="/app"
+                  className="block bg-primary text-white px-5 py-2 rounded-md font-medium text-center"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/auth/signin" className="block text-text-secondary hover:text-primary">
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="block bg-primary text-white px-5 py-2 rounded-md font-medium text-center"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -100,16 +127,15 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Hero background image */}
+        {/* Hero background — subtle atmospheric glow (heavily faded for text prominence) */}
         <div className="absolute inset-0 z-0">
-          <Image
-            src="/images/hero-banner.png"
-            alt=""
-            fill
-            className="object-cover object-center opacity-20"
-            priority
+          <div
+            className="absolute inset-0 bg-cover bg-no-repeat opacity-[0.10]"
+            style={{ backgroundImage: 'url(/hero-banner.png)', backgroundPosition: 'center 65%' }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
+          {/* Strong gradient overlays: keep the abstract glow, suppress detail */}
+          <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/70 to-background" />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/70 via-transparent to-background/70" />
         </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center">
@@ -117,25 +143,26 @@ export default function LandingPage() {
               <Zap className="w-4 h-4 text-accent" />
               <span className="text-sm text-text-secondary">Find your perfect training match</span>
             </div>
-            
+
             <h1 className="font-heading text-5xl sm:text-6xl lg:text-7xl text-white mb-6 animate-slide-up">
               NEVER TRAIN <span className="gradient-text">ALONE</span> AGAIN
             </h1>
-            
+
             <p className="text-xl text-text-secondary max-w-2xl mx-auto mb-10 animate-slide-up delay-100">
-              Connect with compatible training partners based on skill level, weight class, 
-              and training goals. Plus access exclusive open mat hours at partner gyms.
+              Connect with compatible training partners based on skill level, goals,
+              and schedule. Whether you&apos;re into combat sports, lifting, running, or just
+              need a gym buddy — find your match.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up delay-200">
-              <Link 
-                href="/auth/signup" 
+              <Link
+                href="/auth/signup"
                 className="w-full sm:w-auto bg-primary text-white px-8 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105"
               >
                 START TRAINING FREE
               </Link>
-              <Link 
-                href="#how-it-works" 
+              <Link
+                href="#how-it-works"
                 className="w-full sm:w-auto flex items-center justify-center gap-2 text-text-secondary hover:text-white transition-colors px-8 py-4"
               >
                 See How It Works <ChevronRight className="w-5 h-5" />
@@ -149,8 +176,8 @@ export default function LandingPage() {
                 <div className="text-text-secondary text-sm">To Get Started</div>
               </div>
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">BJJ</div>
-                <div className="text-text-secondary text-sm">Wrestling · MMA</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">50+</div>
+                <div className="text-text-secondary text-sm">Sports &amp; Activities</div>
               </div>
               <div>
                 <div className="font-heading text-3xl sm:text-4xl text-primary">24/7</div>
@@ -158,36 +185,39 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Hero Visual - App Preview */}
+            {/* Hero Visual — abstract match visualization (no fake profiles) */}
             <div className="mt-16 animate-slide-up delay-400 relative max-w-3xl mx-auto">
               <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
               <div className="bg-surface border border-border rounded-2xl p-6 shadow-2xl shadow-primary/10">
-                {/* App preview header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                       <Users className="w-4 h-4 text-white" />
                     </div>
-                    <span className="font-heading text-sm text-white">YOUR MATCHES</span>
+                    <span className="font-heading text-sm text-white">SMART MATCHING</span>
                   </div>
-                  <span className="text-text-secondary text-xs">Preview</span>
+                  <span className="text-accent font-mono text-xs font-bold">LIVE</span>
                 </div>
-                {/* Example match cards */}
+                {/* Abstract matching visualization */}
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { name: 'Alex R.', sport: 'BJJ', match: 94, skill: 'Purple Belt' },
-                    { name: 'Jordan M.', sport: 'Wrestling', match: 91, skill: 'Advanced' },
-                    { name: 'Sam K.', sport: 'MMA', match: 87, skill: 'Intermediate' },
-                  ].map((p) => (
-                    <div key={p.name} className="bg-background rounded-xl p-4 border border-border">
+                    { sport: 'BJJ', level: 'Purple Belt', match: 94, color: 'primary' },
+                    { sport: 'Weightlifting', level: 'Intermediate', match: 91, color: 'accent' },
+                    { sport: 'Rucking', level: 'Advanced', match: 87, color: 'primary' },
+                  ].map((p, i) => (
+                    <div key={i} className="bg-background rounded-xl p-4 border border-border">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold text-sm">
-                          {p.name.charAt(0)}
+                        <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                          <Target className="w-5 h-5 text-primary" />
                         </div>
                         <span className="text-accent font-mono text-sm font-bold">{p.match}%</span>
                       </div>
-                      <div className="text-white text-sm font-medium">{p.name}</div>
-                      <div className="text-text-secondary text-xs">{p.sport} · {p.skill}</div>
+                      <div className="text-white text-sm font-medium">{p.sport}</div>
+                      <div className="text-text-secondary text-xs">{p.level} · Near you</div>
+                      {/* Match bar */}
+                      <div className="mt-2 h-1 bg-border rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${p.match}%` }} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -198,8 +228,9 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
-        <div className="max-w-7xl mx-auto">
+      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface relative overflow-hidden">
+        <MuayThaiKickSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] text-white opacity-[0.04] z-0" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
               WHY ATHLETES <span className="gradient-text">CHOOSE US</span>
@@ -210,62 +241,43 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
             <div className="bg-background p-8 rounded-xl border border-border card-hover">
               <div className="w-14 h-14 bg-primary/20 rounded-lg flex items-center justify-center mb-6">
                 <Target className="w-7 h-7 text-primary" />
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">SMART MATCHING</h3>
               <p className="text-text-secondary">
-                Our algorithm matches you with partners based on skill level, weight class, 
+                Our algorithm matches you with partners based on skill level, weight class,
                 experience, and training goals. Find someone who pushes you.
               </p>
             </div>
 
-            {/* Feature 2 */}
             <div className="bg-background p-8 rounded-xl border border-border card-hover">
               <div className="w-14 h-14 bg-accent/20 rounded-lg flex items-center justify-center mb-6">
                 <MapPin className="w-7 h-7 text-accent" />
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">LOCAL GYM ACCESS</h3>
               <p className="text-text-secondary">
-                Get exclusive access to open mat hours at partner gyms. Train anywhere 
+                Get exclusive access to open mat hours at partner gyms. Train anywhere
                 with your subscription - we handle the logistics.
               </p>
             </div>
 
-            {/* Feature 3 */}
             <div className="bg-background p-8 rounded-xl border border-border card-hover">
               <div className="w-14 h-14 bg-primary/20 rounded-lg flex items-center justify-center mb-6">
                 <Shield className="w-7 h-7 text-primary" />
               </div>
-              <h3 className="font-heading text-2xl text-white mb-3">VERIFIED & SAFE</h3>
+              <h3 className="font-heading text-2xl text-white mb-3">VERIFIED ATHLETES</h3>
               <p className="text-text-secondary">
-                All partner gyms are vetted for safety and insurance. Train with 
-                confidence knowing everyone is verified.
+                Every profile is verified. Train with confidence knowing everyone on the platform
+                is serious about their craft.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Visual break - feature showcase */}
-      <section className="relative py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        <div className="max-w-5xl mx-auto">
-          <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10">
-            <Image
-              src="/images/feature-cards.png"
-              alt="Training Partner app features - dynamic wrestling silhouettes with neon accents"
-              width={1920}
-              height={1080}
-              className="w-full h-auto"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/80" />
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
+      {/* How It Works — 3 bold steps */}
       <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -273,43 +285,40 @@ export default function LandingPage() {
               HOW IT <span className="gradient-text">WORKS</span>
             </h2>
             <p className="text-text-secondary text-lg max-w-2xl mx-auto">
-              Get started in minutes - no complicated setup
+              Get matched with your perfect training partner in minutes
             </p>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Step 1 */}
             <div className="text-center">
               <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-6 font-heading text-3xl text-white">
                 1
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">CREATE PROFILE</h3>
               <p className="text-text-secondary">
-                Sign up free and tell us about your sport, skill level, weight class, 
+                Sign up free and tell us about your sport, skill level, weight class,
                 and training goals.
               </p>
             </div>
 
-            {/* Step 2 */}
             <div className="text-center">
               <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-6 font-heading text-3xl text-white">
                 2
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">GET MATCHED</h3>
               <p className="text-text-secondary">
-                Our algorithm finds compatible training partners in your area. 
+                Our algorithm finds compatible training partners in your area.
                 Connect and start training!
               </p>
             </div>
 
-            {/* Step 3 */}
             <div className="text-center">
               <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-6 font-heading text-3xl text-white">
                 3
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">TRAIN TOGETHER</h3>
               <p className="text-text-secondary">
-                Upgrade to access partner gyms with exclusive open mat hours. 
+                Upgrade to access partner gyms with exclusive open mat hours.
                 Train anywhere, anytime.
               </p>
             </div>
@@ -317,22 +326,23 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Sports Section */}
+      {/* Supported Sports */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
-              SUPPORTED <span className="gradient-text">SPORTS</span>
+              SUPPORTED <span className="gradient-text">ACTIVITIES</span>
             </h2>
           </div>
 
           <div className="flex flex-wrap justify-center gap-4">
             {[
-              'Wrestling', 'MMA', 'Brazilian Jiu-Jitsu', 'Boxing', 
-              'Kickboxing', 'Judo', 'Taekwondo', 'Karate', 
-              'Sambo', 'Muay Thai', 'Capoeira', 'Sifu'
+              'Wrestling', 'MMA', 'Brazilian Jiu-Jitsu', 'Boxing',
+              'Weightlifting', 'Running', 'Rucking', 'CrossFit',
+              'Kickboxing', 'Judo', 'Muay Thai', 'Cycling',
+              'Yoga', 'Rock Climbing', 'Swimming', 'Calisthenics'
             ].map((sport) => (
-              <span 
+              <span
                 key={sport}
                 className="px-6 py-3 bg-background border border-border rounded-full text-text-secondary hover:text-primary hover:border-primary transition-colors cursor-default"
               >
@@ -343,7 +353,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* Pricing Section — detailed tiers */}
       <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -405,20 +415,20 @@ export default function LandingPage() {
               </div>
               <ul className="space-y-3 mb-8">
                 {[
-                  'Everything in Free',
-                  'Verified badge (background check)',
-                  'Ad-free experience',
-                  'Boosted profile in search',
-                  'Secure encrypted messaging',
-                  'Priority matching algorithm',
-                  'Discounts on clinics & events',
-                  'Advanced filters (distance, age, etc.)',
+                  { text: 'Everything in Free', icon: 'heart' },
+                  { text: 'Verified badge (ID verification)', icon: 'shield' },
+                  { text: 'Ad-free experience', icon: 'check' },
+                  { text: 'Boosted profile in search', icon: 'check' },
+                  { text: 'Secure encrypted messaging', icon: 'check' },
+                  { text: 'Priority matching algorithm', icon: 'check' },
+                  { text: 'Discounts on clinics & events', icon: 'check' },
+                  { text: 'Advanced filters (distance, age, etc.)', icon: 'check' },
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
-                    {i === 0 ? <Heart className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
-                     i === 1 ? <Shield className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
+                    {item.icon === 'heart' ? <Heart className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
+                     item.icon === 'shield' ? <Shield className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
                      <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />}
-                    {item}
+                    {item.text}
                   </li>
                 ))}
               </ul>
@@ -445,18 +455,18 @@ export default function LandingPage() {
               </div>
               <ul className="space-y-3 mb-8">
                 {[
-                  'Everything in Free (gym)',
-                  'Promoted listing in search',
-                  'Upload insurance & certifications',
-                  'Sell private lessons on platform',
-                  'Advanced analytics dashboard',
-                  'Featured gym badge',
-                  'Priority support',
+                  { text: 'Everything in Free (gym)', icon: 'crown' },
+                  { text: 'Promoted listing in search', icon: 'check' },
+                  { text: 'Upload insurance & certifications', icon: 'check' },
+                  { text: 'Sell private lessons on platform', icon: 'check' },
+                  { text: 'Advanced analytics dashboard', icon: 'check' },
+                  { text: 'Featured gym badge', icon: 'check' },
+                  { text: 'Priority support', icon: 'check' },
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
-                    {i === 0 ? <Crown className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" /> :
+                    {item.icon === 'crown' ? <Crown className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" /> :
                      <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />}
-                    {item}
+                    {item.text}
                   </li>
                 ))}
               </ul>
@@ -470,14 +480,16 @@ export default function LandingPage() {
           </div>
 
           <p className="text-center text-text-secondary text-sm mt-8">
-            All plans come with a 7-day free trial. Cancel anytime. Powered by Stripe.
+            All plans come with a 30-day free trial. Cancel anytime. No surprise charges.
           </p>
         </div>
       </section>
 
-      {/* Why Training Partner — Visual showcase */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      {/* Built For Athletes — Visual showcase */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <JudoThrowSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-80 text-primary opacity-[0.05] z-0 -rotate-3" />
+        <BoxerSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-72 text-primary opacity-[0.05] z-0 rotate-3" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
               BUILT FOR <span className="gradient-text">ATHLETES</span>
@@ -487,17 +499,30 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Gym showcase with overlay */}
-          <div className="relative rounded-2xl overflow-hidden mb-12 group">
-            <Image
-              src="/images/gym-interior.png"
-              alt="Modern combat sports gym with dramatic lighting"
-              width={1080}
-              height={600}
-              className="w-full h-[400px] object-cover transition-transform duration-700 group-hover:scale-105"
-            />
+          {/* Gym showcase — gradient with grid pattern */}
+          <div className="relative rounded-2xl overflow-hidden mb-12 group bg-gradient-to-br from-primary/20 via-background to-accent/10 border border-border h-[400px]">
+            {/* Accent shapes */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+
+            {/* Grid pattern overlay */}
+            <div className="absolute inset-0 opacity-5 pointer-events-none">
+              <div className="absolute inset-0" style={{
+                backgroundImage: 'linear-gradient(90deg, #FF4D00 1px, transparent 1px), linear-gradient(#FF4D00 1px, transparent 1px)',
+                backgroundSize: '40px 40px'
+              }} />
+            </div>
+
+            {/* Gradient overlay from bottom */}
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-8">
+
+            {/* Content positioned at bottom */}
+            <div className="absolute bottom-0 left-0 right-0 p-8 z-10">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
+                  <MapPin className="w-6 h-6 text-white" />
+                </div>
+              </div>
               <h3 className="font-heading text-3xl text-white mb-2">TRAIN AT THE BEST GYMS</h3>
               <p className="text-text-secondary max-w-lg">
                 Discover local gyms, check open mat schedules, and access exclusive training sessions — all in one place.
@@ -535,20 +560,49 @@ export default function LandingPage() {
 
       {/* CTA Section with app mockup */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
-        <div className="max-w-7xl mx-auto">
+        <MMAFighterSilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-96 text-white opacity-[0.04] z-0" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
-            {/* App mockup */}
+            {/* App mockup — CSS phone */}
             <div className="relative mx-auto md:mx-0 max-w-[280px] md:max-w-[320px]">
-              <div className="relative rounded-[2rem] overflow-hidden shadow-2xl shadow-primary/20 border-2 border-border">
-                <Image
-                  src="/images/app-mockup.png"
-                  alt="Training Partner mobile app preview"
-                  width={320}
-                  height={568}
-                  className="w-full h-auto"
-                />
+              <div className="relative rounded-[2rem] overflow-hidden shadow-2xl shadow-primary/20 border-8 border-gray-900 bg-black aspect-[9/16]">
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-40 h-7 bg-black rounded-b-3xl z-20" />
+
+                <div className="w-full h-full bg-gradient-to-b from-background to-surface p-4 flex flex-col">
+                  <div className="flex justify-between items-center text-white text-xs mb-4 mt-2">
+                    <span>9:41</span>
+                    <span>📶</span>
+                  </div>
+
+                  <div className="mb-4">
+                    <h3 className="font-heading text-white text-sm">TRAINING PARTNER</h3>
+                    <p className="text-text-secondary text-xs">Your matches</p>
+                  </div>
+
+                  <div className="space-y-2 flex-1">
+                    {[
+                      { sport: 'BJJ', level: 'Purple Belt', pct: 94 },
+                      { sport: 'Weightlifting', level: 'Intermediate', pct: 91 },
+                      { sport: 'Running', level: '10K Pacer', pct: 87 },
+                    ].map((m, i) => (
+                      <div key={i} className="bg-surface border border-border rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+                            <Target className="w-4 h-4 text-primary" />
+                          </div>
+                          <span className="text-accent text-xs font-mono">{m.pct}%</span>
+                        </div>
+                        <div className="text-white text-xs font-medium">{m.sport}</div>
+                        <div className="text-text-secondary text-xs">{m.level} · Nearby</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button className="w-full bg-primary text-white py-2 rounded-lg font-heading text-xs mt-4">
+                    CONNECT
+                  </button>
+                </div>
               </div>
-              {/* Glow effect behind phone */}
               <div className="absolute -inset-4 bg-primary/10 rounded-[3rem] blur-3xl -z-10" />
             </div>
 
@@ -594,7 +648,7 @@ export default function LandingPage() {
                 Connecting athletes with their perfect training partners since 2026.
               </p>
             </div>
-            
+
             <div>
               <h4 className="font-heading text-lg text-white mb-4">PLATFORM</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
@@ -606,27 +660,27 @@ export default function LandingPage() {
             </div>
 
             <div>
-              <h4 className="font-heading text-lg text-white mb-4">COMPANY</h4>
+              <h4 className="font-heading text-lg text-white mb-4">SPORTS</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
-                <li><Link href="/contact" className="hover:text-primary">Contact & Support</Link></li>
-                <li><Link href="/partners/wrestling" className="hover:text-primary">Wrestling</Link></li>
-                <li><Link href="/partners/mma" className="hover:text-primary">MMA</Link></li>
-                <li><Link href="/partners/bjj" className="hover:text-primary">BJJ</Link></li>
+                <li><Link href="/partners/wrestling" className="hover:text-primary">Wrestling Partners</Link></li>
+                <li><Link href="/partners/mma" className="hover:text-primary">MMA Partners</Link></li>
+                <li><Link href="/partners/bjj" className="hover:text-primary">BJJ Partners</Link></li>
+                <li><Link href="/partners/muay-thai" className="hover:text-primary">Muay Thai Partners</Link></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="font-heading text-lg text-white mb-4">LEGAL</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
                 <li><Link href="/privacy" className="hover:text-primary">Privacy Policy</Link></li>
                 <li><Link href="/terms" className="hover:text-primary">Terms of Service</Link></li>
-                <li><Link href="/waiver" className="hover:text-primary">Liability Waiver</Link></li>
+                <li><Link href="/contact" className="hover:text-primary">Contact Us</Link></li>
               </ul>
             </div>
           </div>
-          
+
           <div className="border-t border-border mt-12 pt-8 text-center text-text-secondary text-sm">
-            © 2026 Training Partner. All rights reserved.
+            &copy; 2026 Training Partner. All rights reserved.
           </div>
         </div>
       </footer>

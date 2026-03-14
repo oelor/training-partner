@@ -3,12 +3,22 @@ main = "worker/index.js"
 compatibility_date = "2026-03-09"
 workers_dev = true
 
+# Custom domain routes — commented out for alpha.
+# Vercel serves frontend on trainingpartner.app, Worker uses *.workers.dev URL.
+# For production: set up api.trainingpartner.app subdomain or use
+# Cloudflare route pattern "trainingpartner.app/api/*" with proxied DNS.
+# [[routes]]
+# pattern = "trainingpartner.app/api/*"
+# zone_name = "trainingpartner.app"
+
 [vars]
-FRONTEND_URL = "https://training-partner.vercel.app"
-# Stripe keys — set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET via `wrangler secret put`
+ENVIRONMENT = "production"
+FRONTEND_URL = "https://trainingpartner.app"
+# Stripe keys — STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET set via `wrangler secret put`
+STRIPE_PUBLISHABLE_KEY = "pk_test_51TAeSQ2z80SWtIbfnYmHKLturHUZfrJa4RXGN2W33jEFD3JBs0bVuJkKlN9rAMFq00BpZwq3stUwIBEhTMiLvGR900CBbCbDK2"
 # Create price IDs in Stripe Dashboard → Products → Add product
-STRIPE_PRICE_PREMIUM_ATHLETE = ""  # $9.99/mo athlete plan price ID
-STRIPE_PRICE_PREMIUM_GYM = ""     # $19.99/mo gym plan price ID
+STRIPE_PRICE_PREMIUM_ATHLETE = "price_1TAh2B2z80SWtIbfegR865xc"  # $9.99/mo athlete plan
+STRIPE_PRICE_PREMIUM_GYM = "price_1TAh2Q2z80SWtIbfltBaqgT6"     # $19.99/mo gym plan
 # Google OAuth — set GOOGLE_CLIENT_ID here, matching NEXT_PUBLIC_GOOGLE_CLIENT_ID on Vercel
 GOOGLE_CLIENT_ID = ""
 
@@ -17,9 +27,17 @@ GOOGLE_CLIENT_ID = ""
 
 [env.dev.vars]
 JWT_SECRET = "tp-dev-secret-local-only"
+ENVIRONMENT = "development"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "training-partner"
 database_id = "30d075cd-2994-4d08-8aef-7ed1a415d9bb"
 migrations_dir = "./migrations"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "training-partner-images"
+
+[triggers]
+crons = ["0 14 * * *"]

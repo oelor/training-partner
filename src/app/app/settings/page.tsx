@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink } from 'lucide-react'
+import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api from '@/lib/api'
+import api, { isPremiumPlan, IdentityVerification, BlockedUser } from '@/lib/api'
+import { useToast } from '@/components/toast'
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -27,7 +28,143 @@ export default function SettingsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
-  const isPremium = subscription?.plan === 'premium'
+  const isPremium = isPremiumPlan(subscription?.plan)
+  const [upgrading, setUpgrading] = useState(false)
+  const toast = useToast()
+
+  // Identity Verification state
+  const [identityStatus, setIdentityStatus] = useState<IdentityVerification | null>(null)
+  const [identityLoading, setIdentityLoading] = useState(true)
+  const [idPhoto, setIdPhoto] = useState<string | null>(null)
+  const [selfiePhoto, setSelfiePhoto] = useState<string | null>(null)
+  const [submittingIdentity, setSubmittingIdentity] = useState(false)
+  const [deletingIdentity, setDeletingIdentity] = useState(false)
+
+  // Emergency Contact state
+  const [emergencyContact, setEmergencyContact] = useState({
+    name: user?.emergency_contact_name || '',
+    phone: user?.emergency_contact_phone || '',
+    relation: user?.emergency_contact_relation || '',
+  })
+  const [savingEmergency, setSavingEmergency] = useState(false)
+
+  // Blocked Users state
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
+  const [blocksLoading, setBlocksLoading] = useState(true)
+  const [unblockingId, setUnblockingId] = useState<number | null>(null)
+
+  const loadIdentityStatus = useCallback(async () => {
+    try {
+      const res = await api.getIdentityStatus()
+      setIdentityStatus(res.verification)
+    } catch { /* */ }
+    finally { setIdentityLoading(false) }
+  }, [])
+
+  const loadBlocks = useCallback(async () => {
+    try {
+      const res = await api.getBlocks()
+      setBlockedUsers(res.blocks)
+    } catch { /* */ }
+    finally { setBlocksLoading(false) }
+  }, [])
+
+  useEffect(() => {
+    loadIdentityStatus()
+    loadBlocks()
+  }, [loadIdentityStatus, loadBlocks])
+
+  useEffect(() => {
+    if (user) {
+      setEmergencyContact({
+        name: user.emergency_contact_name || '',
+        phone: user.emergency_contact_phone || '',
+        relation: user.emergency_contact_relation || '',
+      })
+    }
+  }, [user])
+
+  const handleFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleSubmitIdentity = async () => {
+    if (!idPhoto || !selfiePhoto) {
+      toast.error('Please upload both an ID photo and a selfie')
+      return
+    }
+    setSubmittingIdentity(true)
+    try {
+      await api.submitIdentity({ id_photo: idPhoto, selfie_photo: selfiePhoto })
+      toast.success('Identity verification submitted for review')
+      setIdPhoto(null)
+      setSelfiePhoto(null)
+      await loadIdentityStatus()
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to submit verification')
+    } finally {
+      setSubmittingIdentity(false)
+    }
+  }
+
+  const handleDeleteIdentity = async () => {
+    if (!confirm('Are you sure you want to delete your identity verification data?')) return
+    setDeletingIdentity(true)
+    try {
+      await api.deleteIdentityData()
+      setIdentityStatus(null)
+      toast.success('Identity data deleted')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete identity data')
+    } finally {
+      setDeletingIdentity(false)
+    }
+  }
+
+  const handleSaveEmergencyContact = async () => {
+    setSavingEmergency(true)
+    try {
+      await api.updateEmergencyContact(emergencyContact)
+      toast.success('Emergency contact updated')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update emergency contact')
+    } finally {
+      setSavingEmergency(false)
+    }
+  }
+
+  const handleUnblock = async (userId: number) => {
+    setUnblockingId(userId)
+    try {
+      await api.unblockUser(userId)
+      setBlockedUsers(blockedUsers.filter(b => b.user_id !== userId))
+      toast.success('User unblocked')
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to unblock user')
+    } finally {
+      setUnblockingId(null)
+    }
+  }
+
+  const handleUpgrade = async (plan: 'premium_athlete' | 'premium_gym' = 'premium_athlete') => {
+    setUpgrading(true)
+    try {
+      const res = await api.createCheckout(plan)
+      if (res.url) {
+        window.location.href = res.url
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to start checkout'
+      alert(message)
+    } finally {
+      setUpgrading(false)
+    }
+  }
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmation !== 'DELETE') return
@@ -78,6 +215,9 @@ export default function SettingsPage() {
     { id: 'account', label: 'Account', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'subscription', label: 'Subscription', icon: Crown },
+    { id: 'identity', label: 'Verification', icon: Shield },
+    { id: 'emergency', label: 'Emergency Contact', icon: Heart },
+    { id: 'blocked', label: 'Blocked Users', icon: Ban },
     { id: 'privacy', label: 'Privacy', icon: Shield },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'help', label: 'Help', icon: HelpCircle },
@@ -91,7 +231,9 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="lg:w-64 space-y-2">
+        {/* Tab Navigation */}
+        <div className="overflow-x-auto lg:overflow-visible -mx-4 px-4 lg:mx-0 lg:px-0 lg:w-64 lg:space-y-2">
+          <div className="flex lg:flex-col gap-2 lg:gap-0 min-w-max lg:min-w-0">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -106,12 +248,13 @@ export default function SettingsPage() {
               {tab.label}
             </button>
           ))}
+          </div>
 
-          <hr className="border-border my-4" />
+          <hr className="border-border my-2 lg:my-4 hidden lg:block" />
 
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
+            className="hidden lg:flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
           >
             <LogOut className="w-5 h-5" />
             Sign Out
@@ -174,7 +317,9 @@ export default function SettingsPage() {
                       </div>
                       {editingInstagram ? (
                         <div className="flex items-center gap-2">
+                          <label htmlFor="instagramUsername" className="sr-only">Instagram Username</label>
                           <input
+                            id="instagramUsername"
                             type="text"
                             value={instagramUsername}
                             onChange={e => setInstagramUsername(e.target.value.replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, ''))}
@@ -317,7 +462,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <div className="text-text-secondary text-sm">Premium Plan</div>
-                      <div className="text-white font-heading text-3xl">$20<span className="text-lg text-text-secondary">/month</span></div>
+                      <div className="text-white font-heading text-3xl">$9.99<span className="text-lg text-text-secondary">/month</span></div>
                     </div>
                     <Crown className="w-10 h-10 text-accent" />
                   </div>
@@ -328,9 +473,276 @@ export default function SettingsPage() {
                     <li className="flex items-center gap-2 text-white text-sm"><Check className="w-4 h-4 text-accent" /> Priority messaging</li>
                     <li className="flex items-center gap-2 text-white text-sm"><Check className="w-4 h-4 text-accent" /> Verified gym access</li>
                   </ul>
-                  <button className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors">
-                    Upgrade Now
+                  <button
+                    onClick={() => handleUpgrade('premium_athlete')}
+                    disabled={upgrading}
+                    className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {upgrading ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : 'Upgrade Now'}
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'identity' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">IDENTITY VERIFICATION</h2>
+
+              {identityLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : identityStatus?.status === 'approved' ? (
+                <div className="bg-background border border-accent/30 rounded-xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 bg-accent/20 rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 text-accent" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">Verified</div>
+                      <div className="text-text-secondary text-sm">
+                        Your identity has been verified
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleDeleteIdentity}
+                    disabled={deletingIdentity}
+                    className="text-red-400 text-sm hover:underline disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {deletingIdentity && <Loader2 className="w-3 h-3 animate-spin" />}
+                    Delete verification data
+                  </button>
+                </div>
+              ) : identityStatus?.status === 'pending' ? (
+                <div className="bg-background border border-yellow-500/30 rounded-xl p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 text-yellow-400" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">Under Review</div>
+                      <div className="text-text-secondary text-sm">
+                        Submitted {new Date(identityStatus.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : identityStatus?.status === 'rejected' ? (
+                <div className="space-y-4">
+                  <div className="bg-background border border-red-500/30 rounded-xl p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">
+                        <X className="w-5 h-5 text-red-400" />
+                      </div>
+                      <div>
+                        <div className="text-white font-medium">Not Approved</div>
+                        <div className="text-text-secondary text-sm">Your verification was not approved</div>
+                      </div>
+                    </div>
+                    {identityStatus.reviewer_notes && (
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mt-3">
+                        <div className="text-text-secondary text-xs mb-1">Reviewer notes:</div>
+                        <div className="text-red-400 text-sm">{identityStatus.reviewer_notes}</div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Show resubmit form */}
+                  <div className="bg-background border border-border rounded-xl p-6 space-y-4">
+                    <h3 className="text-white font-medium">Resubmit Verification</h3>
+                    <div>
+                      <label htmlFor="idPhotoResubmit" className="block text-text-secondary text-sm mb-2">Photo ID (driver license, passport, etc.)</label>
+                      <input
+                        id="idPhotoResubmit"
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (file) setIdPhoto(await handleFileToBase64(file))
+                        }}
+                        className="w-full bg-surface border border-border rounded-lg py-2 px-3 text-white text-sm file:mr-3 file:bg-primary file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-sm file:cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="selfieResubmit" className="block text-text-secondary text-sm mb-2">Selfie for comparison</label>
+                      <input
+                        id="selfieResubmit"
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          if (file) setSelfiePhoto(await handleFileToBase64(file))
+                        }}
+                        className="w-full bg-surface border border-border rounded-lg py-2 px-3 text-white text-sm file:mr-3 file:bg-primary file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-sm file:cursor-pointer"
+                      />
+                    </div>
+                    <button
+                      onClick={handleSubmitIdentity}
+                      disabled={submittingIdentity || !idPhoto || !selfiePhoto}
+                      className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {submittingIdentity && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {submittingIdentity ? 'Submitting...' : 'Resubmit Verification'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* No verification yet */
+                <div className="bg-background border border-border rounded-xl p-6 space-y-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-white font-medium">Verify Your Identity</div>
+                      <div className="text-text-secondary text-sm">Get a verified badge on your profile to build trust with training partners</div>
+                    </div>
+                  </div>
+                  <p className="text-text-secondary text-sm">
+                    Upload a photo of your government-issued ID and a selfie. Our team will review and verify your identity within 24-48 hours. Your photos are encrypted and deleted after review.
+                  </p>
+                  <div>
+                    <label htmlFor="idPhoto" className="block text-text-secondary text-sm mb-2">Photo ID (driver license, passport, etc.)</label>
+                    <input
+                      id="idPhoto"
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (file) setIdPhoto(await handleFileToBase64(file))
+                      }}
+                      className="w-full bg-surface border border-border rounded-lg py-2 px-3 text-white text-sm file:mr-3 file:bg-primary file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-sm file:cursor-pointer"
+                    />
+                    {idPhoto && <div className="text-accent text-xs mt-1">ID photo selected</div>}
+                  </div>
+                  <div>
+                    <label htmlFor="selfie" className="block text-text-secondary text-sm mb-2">Selfie for comparison</label>
+                    <input
+                      id="selfie"
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        if (file) setSelfiePhoto(await handleFileToBase64(file))
+                      }}
+                      className="w-full bg-surface border border-border rounded-lg py-2 px-3 text-white text-sm file:mr-3 file:bg-primary file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:text-sm file:cursor-pointer"
+                    />
+                    {selfiePhoto && <div className="text-accent text-xs mt-1">Selfie selected</div>}
+                  </div>
+                  <button
+                    onClick={handleSubmitIdentity}
+                    disabled={submittingIdentity || !idPhoto || !selfiePhoto}
+                    className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submittingIdentity && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <Upload className="w-4 h-4" />
+                    {submittingIdentity ? 'Submitting...' : 'Submit for Verification'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'emergency' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">EMERGENCY CONTACT</h2>
+              <p className="text-text-secondary text-sm">
+                Your emergency contact information is kept private and only shared in safety-critical situations.
+              </p>
+              <div className="bg-background border border-border rounded-xl p-6 space-y-4">
+                <div>
+                  <label htmlFor="emergencyName" className="block text-text-secondary text-sm mb-2">Contact Name</label>
+                  <input
+                    id="emergencyName"
+                    type="text"
+                    value={emergencyContact.name}
+                    onChange={(e) => setEmergencyContact({ ...emergencyContact, name: e.target.value })}
+                    placeholder="Jane Doe"
+                    className="w-full bg-surface border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="emergencyPhone" className="block text-text-secondary text-sm mb-2">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                    <input
+                      id="emergencyPhone"
+                      type="tel"
+                      value={emergencyContact.phone}
+                      onChange={(e) => setEmergencyContact({ ...emergencyContact, phone: e.target.value })}
+                      placeholder="+1 (555) 123-4567"
+                      className="w-full bg-surface border border-border rounded-lg py-3 pl-10 pr-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="emergencyRelation" className="block text-text-secondary text-sm mb-2">Relationship</label>
+                  <select
+                    id="emergencyRelation"
+                    value={emergencyContact.relation}
+                    onChange={(e) => setEmergencyContact({ ...emergencyContact, relation: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
+                  >
+                    <option value="">Select relationship</option>
+                    <option value="spouse">Spouse</option>
+                    <option value="parent">Parent</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="friend">Friend</option>
+                    <option value="coach">Coach</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleSaveEmergencyContact}
+                  disabled={savingEmergency}
+                  className="bg-primary text-white px-6 py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {savingEmergency && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {savingEmergency ? 'Saving...' : 'Save Emergency Contact'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'blocked' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">BLOCKED USERS</h2>
+              {blocksLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : blockedUsers.length === 0 ? (
+                <div className="text-center py-12 bg-background border border-border rounded-xl">
+                  <Ban className="w-12 h-12 text-text-secondary mx-auto mb-4" />
+                  <div className="text-white font-medium mb-1">No Blocked Users</div>
+                  <div className="text-text-secondary text-sm">You haven&apos;t blocked anyone</div>
+                </div>
+              ) : (
+                <div className="bg-background border border-border rounded-xl overflow-hidden">
+                  {blockedUsers.map((blocked, i) => (
+                    <div
+                      key={blocked.id}
+                      className={`flex items-center justify-between px-4 py-3 ${
+                        i < blockedUsers.length - 1 ? 'border-b border-border' : ''
+                      }`}
+                    >
+                      <div>
+                        <div className="text-white text-sm">{blocked.name}</div>
+                        <div className="text-text-secondary text-xs">
+                          Blocked {new Date(blocked.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleUnblock(blocked.user_id)}
+                        disabled={unblockingId === blocked.user_id}
+                        className="text-primary text-sm hover:underline disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {unblockingId === blocked.user_id && <Loader2 className="w-3 h-3 animate-spin" />}
+                        Unblock
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -345,7 +757,8 @@ export default function SettingsPage() {
                     <div className="text-white font-medium">Profile Visibility</div>
                     <div className="text-text-secondary text-sm">Who can see your profile</div>
                   </div>
-                  <select className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm">
+                  <label htmlFor="profileVisibility" className="sr-only">Profile Visibility</label>
+                  <select id="profileVisibility" className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm">
                     <option>All Members</option>
                     <option>Partners Only</option>
                   </select>
@@ -477,10 +890,11 @@ export default function SettingsPage() {
               <li>• Subscription and payment history</li>
             </ul>
 
-            <label className="block text-text-secondary text-sm mb-2">
+            <label htmlFor="deleteConfirmation" className="block text-text-secondary text-sm mb-2">
               Type <span className="text-red-400 font-mono font-bold">DELETE</span> to confirm
             </label>
             <input
+              id="deleteConfirmation"
               type="text"
               value={deleteConfirmation}
               onChange={(e) => setDeleteConfirmation(e.target.value)}

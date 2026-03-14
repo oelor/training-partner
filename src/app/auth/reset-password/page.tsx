@@ -36,8 +36,12 @@ function ResetPasswordContent() {
     e.preventDefault()
     if (!password || !confirmPassword) return
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters with uppercase, lowercase, and a number')
+      return
+    }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must include uppercase, lowercase, and a number')
       return
     }
     if (password !== confirmPassword) {
@@ -61,17 +65,17 @@ function ResetPasswordContent() {
   if (success) {
     return (
       <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md text-center">
-          <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="w-full max-w-md text-center animate-slide-up">
+          <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6 animate-float">
             <CheckCircle className="w-8 h-8 text-accent" />
           </div>
-          <h1 className="font-heading text-3xl text-white mb-3">PASSWORD RESET!</h1>
-          <p className="text-text-secondary mb-8">
+          <h1 className="font-heading text-3xl text-white mb-3 animate-fade-in">PASSWORD RESET!</h1>
+          <p className="text-text-secondary mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
             Your password has been successfully updated. You can now sign in with your new password.
           </p>
           <Link
             href="/auth/signin"
-            className="inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors btn-glow"
           >
             Sign In
           </Link>
@@ -82,32 +86,33 @@ function ResetPasswordContent() {
 
   return (
     <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
-        <Link href="/auth/signin" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors">
+      <div className="w-full max-w-md animate-slide-up">
+        <Link href="/auth/signin" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors animate-fade-in">
           <ArrowLeft className="w-4 h-4" />
           Back to Sign In
         </Link>
 
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-2 mb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
           <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
             <Users className="w-7 h-7 text-white" />
           </div>
           <span className="font-heading text-2xl text-white">TRAINING PARTNER</span>
         </div>
 
-        <div className="mb-8">
+        <div className="mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
           <h1 className="font-heading text-4xl text-white mb-2">SET NEW PASSWORD</h1>
           <p className="text-text-secondary">
             Enter your new password below.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
           <div>
-            <label className="block text-text-secondary text-sm mb-2">New Password</label>
+            <label htmlFor="newPassword" className="block text-text-secondary text-sm mb-2">New Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="newPassword"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -120,10 +125,11 @@ function ResetPasswordContent() {
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Confirm Password</label>
+            <label htmlFor="confirmPassword" className="block text-text-secondary text-sm mb-2">Confirm Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
               <input
+                id="confirmPassword"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -145,7 +151,7 @@ function ResetPasswordContent() {
           <button
             type="submit"
             disabled={loading || !password || !confirmPassword || !token}
-            className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 btn-glow flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
             {loading ? 'Resetting...' : 'Reset Password'}

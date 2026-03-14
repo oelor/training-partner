@@ -71,9 +71,9 @@ export default function CreatePostPage() {
         Back to Community
       </Link>
 
-      <h1 className="font-heading text-3xl text-white mb-6">CREATE POST</h1>
+      <h1 className="font-heading text-3xl text-white mb-6 animate-slide-up">CREATE POST</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 animate-slide-up">
         {/* Post Type */}
         <div>
           <label className="block text-white text-sm font-medium mb-3">Post Type</label>
@@ -83,7 +83,7 @@ export default function CreatePostPage() {
                 key={t.value}
                 type="button"
                 onClick={() => setType(t.value)}
-                className={`p-4 rounded-xl border text-left transition-colors ${
+                className={`p-4 rounded-xl border text-left transition-colors card-hover ${
                   type === t.value
                     ? 'border-primary bg-primary/10'
                     : 'border-border bg-surface hover:border-border/80'
@@ -99,9 +99,10 @@ export default function CreatePostPage() {
         </div>
 
         {/* Sport */}
-        <div>
-          <label className="block text-white text-sm font-medium mb-2">Sport (optional)</label>
+        <div className="animate-fade-in">
+          <label htmlFor="sport" className="block text-white text-sm font-medium mb-2">Sport (optional)</label>
           <select
+            id="sport"
             value={sport}
             onChange={e => setSport(e.target.value)}
             className="w-full bg-surface border border-border text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary"
@@ -113,9 +114,10 @@ export default function CreatePostPage() {
         </div>
 
         {/* Title */}
-        <div>
-          <label className="block text-white text-sm font-medium mb-2">Title</label>
+        <div className="animate-fade-in">
+          <label htmlFor="title" className="block text-white text-sm font-medium mb-2">Title</label>
           <input
+            id="title"
             type="text"
             value={title}
             onChange={e => setTitle(e.target.value)}
@@ -126,9 +128,10 @@ export default function CreatePostPage() {
         </div>
 
         {/* Body */}
-        <div>
-          <label className="block text-white text-sm font-medium mb-2">Content</label>
+        <div className="animate-fade-in">
+          <label htmlFor="content" className="block text-white text-sm font-medium mb-2">Content</label>
           <textarea
+            id="content"
             value={body}
             onChange={e => setBody(e.target.value)}
             placeholder="Share your thoughts, tips, questions, or event details..."
@@ -147,7 +150,7 @@ export default function CreatePostPage() {
           <button
             type="submit"
             disabled={loading || !title.trim() || !body.trim()}
-            className="flex-1 bg-primary text-white py-3 rounded-xl font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 bg-primary text-white py-3 rounded-xl font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 btn-glow"
           >
             {loading ? (
               <>

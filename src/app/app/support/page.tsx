@@ -85,11 +85,11 @@ export default function SupportPage() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Hero */}
-      <div className="text-center mb-10">
+      <div className="text-center mb-10 animate-slide-up">
         <div className="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <Heart className="w-8 h-8 text-primary" />
         </div>
-        <h1 className="font-heading text-4xl text-white mb-3">SUPPORT THE MISSION</h1>
+        <h1 className="font-heading text-4xl text-white mb-3">SUPPORT THE <span className="gradient-text">MISSION</span></h1>
         <p className="text-text-secondary max-w-xl mx-auto">
           Training Partner is built by athletes, for athletes. Your support helps us keep the
           platform free and fund The Mat Association&apos;s programs for underserved communities.
@@ -123,7 +123,7 @@ export default function SupportPage() {
       </div>
 
       {activeTab === 'donate' && (
-        <div className="grid md:grid-cols-5 gap-8">
+        <div className="grid md:grid-cols-5 gap-8 animate-fade-in">
           {/* Donation form - 3 cols */}
           <div className="md:col-span-3">
             <div className="bg-surface border border-border rounded-xl p-6">
@@ -197,7 +197,7 @@ export default function SupportPage() {
                   <button
                     onClick={handleDonate}
                     disabled={!effectiveAmount || effectiveAmount < 1 || donating}
-                    className="w-full bg-primary text-white py-3.5 rounded-lg font-heading text-sm hover:bg-primary/90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full bg-primary text-white py-3.5 rounded-lg font-heading text-sm hover:bg-primary/90 transition-all disabled:opacity-50 flex items-center justify-center gap-2 btn-glow"
                   >
                     {donating ? (
                       <>
@@ -226,10 +226,10 @@ export default function SupportPage() {
           <div className="md:col-span-2 space-y-4">
             <h3 className="font-heading text-lg text-white">YOUR IMPACT</h3>
             {impactItems.map((item) => (
-              <div key={item.title} className="bg-surface border border-border rounded-xl p-4">
+              <div key={item.title} className="bg-surface border border-border rounded-xl p-4 card-hover">
                 <div className="flex items-start gap-3">
                   <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
-                    <item.icon className="w-4 h-4 text-primary" />
+                    <item.icon className="w-4 h-4 text-primary animate-float" />
                   </div>
                   <div>
                     <h4 className="text-white text-sm font-medium mb-1">{item.title}</h4>
@@ -243,7 +243,7 @@ export default function SupportPage() {
       )}
 
       {activeTab === 'about' && (
-        <div className="space-y-8">
+        <div className="space-y-8 animate-fade-in">
           {/* TMA Overview */}
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
             <div className="w-14 h-14 bg-accent/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -271,7 +271,7 @@ export default function SupportPage() {
             <h3 className="font-heading text-xl text-white mb-4">OUR PROGRAMS</h3>
             <div className="grid md:grid-cols-3 gap-4">
               {tmaPrograms.map((prog) => (
-                <div key={prog.title} className="bg-surface border border-border rounded-xl p-5">
+                <div key={prog.title} className="bg-surface border border-border rounded-xl p-5 card-hover">
                   <div className="flex items-center gap-2 mb-3">
                     <Star className="w-4 h-4 text-primary" />
                     <h4 className="text-white font-medium text-sm">{prog.title}</h4>
@@ -298,7 +298,7 @@ export default function SupportPage() {
                 </p>
                 <Link
                   href="/app/gyms"
-                  className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+                  className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors btn-glow"
                 >
                   Learn More
                   <ArrowRight className="w-4 h-4" />

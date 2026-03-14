@@ -133,7 +133,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex flex-col max-w-2xl mx-auto">
+    <div className="min-h-[70vh] flex flex-col">
       {/* Progress */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -184,8 +184,9 @@ export default function OnboardingPage() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Full Name *</label>
+                <label htmlFor="fullName" className="block text-text-secondary text-sm mb-2">Full Name *</label>
                 <input
+                  id="fullName"
                   type="text"
                   value={profile.name}
                   onChange={(e) => setProfile({ ...profile, name: e.target.value })}
@@ -195,8 +196,9 @@ export default function OnboardingPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-text-secondary text-sm mb-2">Age</label>
+                  <label htmlFor="age" className="block text-text-secondary text-sm mb-2">Age</label>
                   <input
+                    id="age"
                     type="number"
                     value={profile.age}
                     onChange={(e) => setProfile({ ...profile, age: e.target.value })}
@@ -205,10 +207,11 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-text-secondary text-sm mb-2">Location *</label>
+                  <label htmlFor="location" className="block text-text-secondary text-sm mb-2">Location *</label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
                     <input
+                      id="location"
                       type="text"
                       value={profile.location}
                       onChange={(e) => setProfile({ ...profile, location: e.target.value })}
@@ -219,8 +222,9 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Short Bio</label>
+                <label htmlFor="bio" className="block text-text-secondary text-sm mb-2">Short Bio</label>
                 <textarea
+                  id="bio"
                   value={profile.bio}
                   onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
                   placeholder="Tell partners about yourself and your training style..."
@@ -247,7 +251,7 @@ export default function OnboardingPage() {
                   <button
                     key={sport}
                     onClick={() => toggleSport(sport)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    className={`p-4 rounded-xl border-2 text-left transition-all duration-300 card-hover hover:scale-105 ${
                       selected
                         ? 'border-primary bg-primary/10 text-white'
                         : 'border-border bg-surface text-text-secondary hover:border-primary/50'
@@ -278,7 +282,7 @@ export default function OnboardingPage() {
                     <button
                       key={level}
                       onClick={() => setProfile({ ...profile, skillLevel: level })}
-                      className={`p-3 rounded-xl border-2 text-center transition-all ${
+                      className={`p-3 rounded-xl border-2 text-center transition-all duration-300 card-hover hover:scale-105 ${
                         profile.skillLevel === level
                           ? 'border-primary bg-primary/10 text-white'
                           : 'border-border bg-surface text-text-secondary hover:border-primary/50'
@@ -291,8 +295,9 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Weight Class</label>
+                <label htmlFor="weightClass" className="block text-text-secondary text-sm mb-2">Weight Class</label>
                 <select
+                  id="weightClass"
                   value={profile.weightClass}
                   onChange={(e) => setProfile({ ...profile, weightClass: e.target.value })}
                   className="w-full bg-surface border border-border rounded-lg py-3 px-4 text-white focus:border-primary transition-colors"
@@ -305,8 +310,9 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-text-secondary text-sm mb-2">Years of Experience</label>
+                <label htmlFor="experience" className="block text-text-secondary text-sm mb-2">Years of Experience</label>
                 <input
+                  id="experience"
                   type="number"
                   value={profile.experienceYears}
                   onChange={(e) => setProfile({ ...profile, experienceYears: e.target.value })}
@@ -322,7 +328,7 @@ export default function OnboardingPage() {
                     <button
                       key={goal}
                       onClick={() => toggleGoal(goal)}
-                      className={`px-4 py-2 rounded-full border-2 transition-all ${
+                      className={`px-4 py-2 rounded-full border-2 transition-all duration-300 hover:scale-105 ${
                         profile.trainingGoals.includes(goal)
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border text-text-secondary hover:border-accent/50'
@@ -403,7 +409,7 @@ export default function OnboardingPage() {
           <button
             onClick={() => setStep(step + 1)}
             disabled={!canProceed()}
-            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors btn-glow"
           >
             Continue <ChevronRight className="w-5 h-5" />
           </button>
@@ -411,7 +417,7 @@ export default function OnboardingPage() {
           <button
             onClick={handleFinish}
             disabled={saving}
-            className="flex items-center gap-2 bg-accent text-background px-8 py-3 rounded-lg font-bold hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 bg-accent text-background px-8 py-3 rounded-lg font-bold hover:bg-accent/90 disabled:opacity-50 transition-colors animate-pulse-glow btn-glow"
           >
             {saving ? (
               <>

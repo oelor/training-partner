@@ -95,7 +95,7 @@ function MessagesContent() {
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col">
-      <div className="mb-4">
+      <div className="mb-4 animate-slide-up">
         <h1 className="font-heading text-3xl text-white">MESSAGES</h1>
       </div>
 
@@ -119,17 +119,18 @@ function MessagesContent() {
                 ))}
               </div>
             ) : conversations.length === 0 ? (
-              <div className="p-8 text-center">
-                <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-                <p className="text-text-secondary text-sm">No conversations yet</p>
-                <p className="text-text-secondary text-xs mt-1">Start a conversation from a partner&apos;s profile</p>
+              <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-3 animate-float" />
+                <p className="text-text-secondary text-sm font-medium">No conversations yet</p>
+                <p className="text-text-secondary text-xs mt-1 mb-4">Find a training partner and send them a message</p>
+                <a href="/app/partners" className="text-primary text-xs font-medium hover:underline">Browse Partners</a>
               </div>
             ) : (
               conversations.map(convo => (
                 <button
                   key={convo.user_id}
                   onClick={() => setActiveUserId(convo.user_id)}
-                  className={`w-full flex items-center gap-3 p-4 hover:bg-background transition-colors text-left ${
+                  className={`w-full flex items-center gap-3 p-4 hover:bg-background transition-colors text-left animate-fade-in card-hover ${
                     activeUserId === convo.user_id ? 'bg-background border-l-2 border-primary' : ''
                   }`}
                 >
@@ -211,13 +212,14 @@ function MessagesContent() {
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="Type a message..."
+                    aria-label="Type a message"
                     rows={1}
                     className="flex-1 bg-background border border-border rounded-xl py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
                   />
                   <button
                     onClick={handleSend}
                     disabled={!newMessage.trim() || sending}
-                    className="w-11 h-11 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    className="w-11 h-11 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary/90 transition-colors disabled:opacity-50 btn-glow"
                   >
                     {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                   </button>
@@ -227,7 +229,7 @@ function MessagesContent() {
           ) : (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <MessageCircle className="w-16 h-16 text-text-secondary mx-auto mb-4" />
+                <MessageCircle className="w-16 h-16 text-text-secondary mx-auto mb-4 animate-float" />
                 <p className="text-white font-medium mb-1">Select a conversation</p>
                 <p className="text-text-secondary text-sm">Choose a conversation from the sidebar to start chatting</p>
               </div>

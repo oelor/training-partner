@@ -1,212 +1,128 @@
-# Training Partner - Setup & Deployment Guide
+# Training Partner — Setup & Deployment Guide
 
-## Overview
-
-Training Partner is a two-sided marketplace platform connecting combat sports athletes with compatible training partners and partner gyms offering open mat hours.
-
-## Tech Stack
+## Architecture
 
 | Component | Technology |
 |-----------|------------|
-| Frontend | React + Next.js 14 |
-| Styling | Tailwind CSS |
-| Icons | Lucide React |
-| Data Storage | LocalStorage (MVP) / Supabase (Production) |
-| Hosting | Vercel (Free) |
-| Payments | Lemon Squeezy (Ready for integration) |
+| Frontend | Next.js 14 + React 18, Tailwind CSS |
+| Backend API | Cloudflare Worker (69 endpoints) |
+| Database | Cloudflare D1 (SQLite) |
+| Auth | JWT + Google OAuth, email/password |
+| Payments | Stripe (subscriptions) |
+| Email | Resend (transactional) |
+| Hosting | Vercel (frontend) + Cloudflare Workers (API) |
 
-## Project Structure
+## Production URLs
 
-```
-training-partner/
-├── src/
-│   └── app/
-│       ├── page.tsx              # Landing page
-│       ├── layout.tsx            # Root layout
-│       ├── globals.css           # Global styles
-│       ├── auth/
-│       │   ├── signup/page.tsx   # Sign up page
-│       │   └── signin/page.tsx   # Sign in page
-│       ├── app/
-│       │   ├── layout.tsx        # App layout with sidebar
-│       │   ├── page.tsx          # Dashboard
-│       │   ├── profile/page.tsx  # Profile editing
-│       │   ├── partners/page.tsx # Partner matching
-│       │   ├── gyms/page.tsx     # Gym listings
-│       │   └── settings/page.tsx # Settings
-│       ├── terms/page.tsx        # Terms of Service
-│       └── privacy/page.tsx      # Privacy Policy
-├── package.json
-├── tailwind.config.ts
-├── tsconfig.json
-├── next.config.js
-└── SPEC.md
+| Service | URL |
+|---------|-----|
+| API (Worker) | `https://training-partner-app.elor-orry.workers.dev` |
+| Frontend | `https://training-partner.vercel.app` (after Vercel deploy) |
+| Health Check | `GET /api/health` |
+| Admin Panel | `/admin` (requires admin role) |
+
+## Local Development
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start the API (Cloudflare Worker + D1)
+npx wrangler dev --local
+
+# 3. In a separate terminal, start the frontend
+npm run dev
+
+# 4. Open http://localhost:3000
 ```
 
-## Features Implemented
+Local env vars are in `.env.local` (frontend) and `wrangler.toml [env.dev.vars]` (worker).
 
-### ✅ Completed Features
+## Environment Variables
 
-1. **Landing Page**
-   - Hero section with stats
-   - Features section
-   - How it works
-   - Sports showcase
-   - Pricing tiers (Free + $20 Premium)
-   - Call-to-action sections
-   - Footer with navigation
+### Frontend (Vercel / .env.local)
 
-2. **Authentication**
-   - Sign up with email, password, sport selection
-   - Sign in with validation
-   - Terms acceptance
-   - LocalStorage session management
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Worker API URL |
+| `NEXT_PUBLIC_SITE_URL` | Frontend URL (for metadata/redirects) |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth Client ID |
+| `NEXT_PUBLIC_CF_BEACON_TOKEN` | Cloudflare Web Analytics (optional) |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile CAPTCHA (optional) |
 
-3. **User Profile**
-   - Basic info (name, email, age, location)
-   - Multi-sport selection
-   - Skill level selection
-   - Weight class selection
-   - Training goals (multi-select)
-   - Weekly availability grid
-   - Bio section
+### Worker (wrangler.toml vars + secrets)
 
-4. **Partner Matching**
-   - Searchable partner list
-   - Filter by sport and skill level
-   - Match score algorithm (visual)
-   - Partner detail modal
-   - Message button (UI ready)
+**Vars** (in `wrangler.toml [vars]`):
+| Variable | Description |
+|----------|-------------|
+| `FRONTEND_URL` | Frontend URL for CORS |
+| `GOOGLE_CLIENT_ID` | Must match NEXT_PUBLIC_GOOGLE_CLIENT_ID |
+| `STRIPE_PRICE_PREMIUM_ATHLETE` | Stripe price ID for $9.99/mo plan |
+| `STRIPE_PRICE_PREMIUM_GYM` | Stripe price ID for $19.99/mo plan |
 
-5. **Gym Listings**
-   - Partner gym cards
-   - Verified gym badges
-   - Open mat hours display
-   - Premium gym locking
-   - Gym detail modal
-   - Booking UI
+**Secrets** (set via `wrangler secret put <NAME>`):
+| Secret | Description |
+|--------|-------------|
+| `JWT_SECRET` | 256-bit hex string for JWT signing |
+| `STRIPE_SECRET_KEY` | Stripe API secret key |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `RESEND_API_KEY` | Resend email API key |
 
-6. **Settings**
-   - Account settings
-   - Notification preferences
-   - Subscription management (UI)
-   - Privacy controls
-   - Billing section
+## Deployment
 
-7. **Legal Pages**
-   - Terms of Service (with liability waiver)
-   - Privacy Policy
+### Deploy Worker (API)
+```bash
+npx wrangler deploy --env=""
+```
+
+### Deploy Frontend (Vercel)
+```bash
+vercel --prod
+```
+
+Or push to `main` branch — Vercel auto-deploys on push.
+
+### Run D1 Migrations
+```bash
+npx wrangler d1 migrations apply training-partner
+```
+
+## Monitoring
+
+See [OBSERVABILITY.md](./OBSERVABILITY.md) for the full monitoring setup.
+
+Quick health check:
+```bash
+curl https://training-partner-app.elor-orry.workers.dev/api/health
+```
 
 ## Design System
 
-### Colors
-- Primary: `#FF4D00` (Fierce Orange)
-- Secondary: `#1A1A1A` (Dark Gray)
-- Accent: `#00FF88` (Electric Green)
-- Background: `#0D0D0D` (Deep Black)
-- Surface: `#1F1F1F` (Card backgrounds)
+| Token | Value |
+|-------|-------|
+| Primary | `#FF4D00` (Fierce Orange) |
+| Background | `#0D0D0D` (Deep Black) |
+| Surface | `#1F1F1F` (Card BG) |
+| Accent | `#00FF88` (Electric Green) |
+| Heading Font | Bebas Neue |
+| Body Font | DM Sans |
 
-### Typography
-- Headings: Bebas Neue
-- Body: DM Sans
-- Mono: JetBrains Mono
+## Third-Party Setup
 
-## Deployment Instructions
+### Stripe
+1. Create account at stripe.com
+2. Add 2 products: Premium Athlete ($9.99/mo), Premium Gym ($19.99/mo)
+3. Set secret key + webhook secret via `wrangler secret put`
+4. Add webhook endpoint: `<worker-url>/api/webhooks/stripe`
+5. Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 
-### Option 1: Vercel (Recommended - Free)
+### Resend
+1. Create account at resend.com
+2. Generate API key
+3. Set via `wrangler secret put RESEND_API_KEY`
 
-1. **Push code to GitHub**
-   ```bash
-   cd training-partner
-   git init
-   git add .
-   git commit -m "Initial commit: Training Partner platform"
-   # Create a new repository on GitHub and push
-   ```
-
-2. **Deploy to Vercel**
-   - Go to [vercel.com](https://vercel.com)
-   - Sign up/Login with GitHub
-   - Click "Add New..." → "Project"
-   - Import your GitHub repository
-   - Click "Deploy"
-
-3. **Your site will be live at** `https://your-project.vercel.app`
-
-### Option 2: Local Development
-
-1. **Install dependencies**
-   ```bash
-   cd training-partner
-   npm install
-   ```
-
-2. **Run development server**
-   ```bash
-   npm run dev
-   ```
-
-3. **Open** `http://localhost:3000`
-
-### Option 3: Build for Production
-
-```bash
-npm run build
-npm start
-```
-
-## Future Enhancements (For Milo to Implement)
-
-### Phase 2: Real Backend
-- [ ] Set up Supabase account (free tier)
-- [ ] Create PostgreSQL database
-- [ ] Add user authentication with Supabase Auth
-- [ ] Replace localStorage with Supabase database
-
-### Phase 3: Payments
-- [ ] Create Lemon Squeezy account
-- [ ] Add payment integration
-- [ ] Implement subscription management
-
-### Phase 4: Mobile Apps
-- [ ] Use React Native or Expo
-- [ ] Build iOS and Android apps
-- [ ] Push notifications
-
-### Phase 5: Gym Revenue Share
-- [ ] Gym dashboard for managing open mat
-- [ ] Revenue tracking system
-- [ ] Automated payouts
-
-## User Flows
-
-### Athlete Flow
-1. Visit landing page → Click "Get Started"
-2. Sign up with email → Create profile
-3. Complete profile (sports, skill, goals)
-4. Browse/search partners
-5. View partner details → Send message
-6. (Premium) Access gym open mat hours
-7. Book gym session
-
-### Gym Owner Flow
-1. Contact us to add gym
-2. Create gym profile
-3. List open mat hours
-4. Receive member bookings
-5. Get revenue share
-
-## Support & Maintenance
-
-- **Bug Reports**: Create issues on GitHub
-- **Features**: Prioritize based on user feedback
-- **Analytics**: Add Google Analytics or Plausible
-
-## License
-
-This is a proprietary project. All rights reserved.
-
----
-
-**Built by OpenClo AI Assistant for Milo**
-*February 28, 2026*
+### Google OAuth
+1. Go to Google Cloud Console → APIs & Services → Credentials
+2. Create OAuth 2.0 Client ID (Web application)
+3. Add authorized origins: production URL + `http://localhost:3000`
+4. Set `GOOGLE_CLIENT_ID` in `wrangler.toml` and `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in Vercel env vars

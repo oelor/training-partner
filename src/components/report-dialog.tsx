@@ -79,8 +79,9 @@ export default function ReportDialog({ userId, userName, onClose }: ReportDialog
           </div>
 
           <div>
-            <label className="block text-text-secondary text-sm mb-2">Additional details (optional)</label>
+            <label htmlFor="report-details" className="block text-text-secondary text-sm mb-2">Additional details (optional)</label>
             <textarea
+              id="report-details"
               value={details}
               onChange={(e) => setDetails(e.target.value)}
               placeholder="Provide any additional context..."

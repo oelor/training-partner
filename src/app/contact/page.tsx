@@ -18,7 +18,7 @@ export default function ContactPage() {
             </div>
             <span className="font-heading text-xl text-white">TRAINING PARTNER</span>
           </Link>
-          <Link href="/auth/signup" className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors">
+          <Link href="/auth/signup" className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors btn-glow">
             Sign Up Free
           </Link>
         </div>
@@ -26,13 +26,13 @@ export default function ContactPage() {
 
       <main className="py-16 px-6">
         <div className="max-w-3xl mx-auto">
-          <h1 className="font-heading text-4xl lg:text-5xl text-white mb-4 text-center">CONTACT & SUPPORT</h1>
+          <h1 className="font-heading text-4xl lg:text-5xl text-white mb-4 text-center animate-slide-up">CONTACT & <span className="gradient-text">SUPPORT</span></h1>
           <p className="text-text-secondary text-lg text-center mb-12">
             Have a question or need help? We&apos;re here for you.
           </p>
 
-          <div className="grid md:grid-cols-2 gap-6 mb-12">
-            <div className="bg-surface border border-border rounded-xl p-6">
+          <div className="grid md:grid-cols-2 gap-6 mb-12 stagger-children">
+            <div className="bg-surface border border-border rounded-xl p-6 card-hover">
               <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center mb-4">
                 <Mail className="w-6 h-6 text-primary" />
               </div>
@@ -48,7 +48,7 @@ export default function ContactPage() {
               </a>
             </div>
 
-            <div className="bg-surface border border-border rounded-xl p-6">
+            <div className="bg-surface border border-border rounded-xl p-6 card-hover">
               <div className="w-12 h-12 bg-accent/20 rounded-xl flex items-center justify-center mb-4">
                 <Shield className="w-6 h-6 text-accent" />
               </div>
@@ -69,7 +69,7 @@ export default function ContactPage() {
           <div className="bg-surface border border-border rounded-xl p-8">
             <h2 className="font-heading text-2xl text-white mb-8 text-center">FREQUENTLY ASKED QUESTIONS</h2>
 
-            <div className="space-y-6">
+            <div className="space-y-6 stagger-children">
               {[
                 {
                   q: 'Is Training Partner free to use?',
@@ -106,7 +106,7 @@ export default function ContactPage() {
 
           {/* Response time */}
           <div className="mt-8 flex items-center justify-center gap-2 text-text-secondary text-sm">
-            <Clock className="w-4 h-4" />
+            <Clock className="w-4 h-4 animate-float" />
             <span>We typically respond within 24 hours</span>
           </div>
         </div>

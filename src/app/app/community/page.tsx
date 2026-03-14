@@ -72,7 +72,7 @@ export default function CommunityPage() {
       }
       setTotal(res.total)
     } catch (e) {
-      console.error('Failed to load posts:', e)
+      if (process.env.NODE_ENV !== 'production') console.error('Failed to load posts:', e)
       toast.error('Failed to load posts. Please check your connection and try again.')
     } finally {
       setLoading(false)
@@ -96,7 +96,7 @@ export default function CommunityPage() {
           : p
       ))
     } catch (e) {
-      console.error('Like failed:', e)
+      if (process.env.NODE_ENV !== 'production') console.error('Like failed:', e)
     } finally {
       likingRef.current.delete(postId)
     }
@@ -109,7 +109,7 @@ export default function CommunityPage() {
       setPosts(prev => prev.filter(p => p.id !== postId))
       setTotal(prev => prev - 1)
     } catch (e) {
-      console.error('Delete failed:', e)
+      if (process.env.NODE_ENV !== 'production') console.error('Delete failed:', e)
     }
   }
 
@@ -122,16 +122,16 @@ export default function CommunityPage() {
   return (
     <div className="max-w-3xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 animate-slide-up">
         <div>
-          <h1 className="font-heading text-3xl text-white">COMMUNITY</h1>
+          <h1 className="font-heading text-3xl text-white"><span className="gradient-text">COMMUNITY</span></h1>
           <p className="text-text-secondary text-sm mt-1">
             Tips, articles, questions &amp; events from the combat sports community
           </p>
         </div>
         <Link
           href="/app/community/create"
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors btn-glow"
         >
           <Plus className="w-4 h-4" />
           New Post
@@ -179,9 +179,9 @@ export default function CommunityPage() {
         </div>
       ) : posts.length === 0 ? (
         <div className="text-center py-20 bg-surface border border-border rounded-xl">
-          <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-4" />
-          <h2 className="font-heading text-xl text-white mb-2">NO POSTS YET</h2>
-          <p className="text-text-secondary text-sm mb-6">Be the first to share with the community!</p>
+          <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-4 animate-float" />
+          <h2 className="font-heading text-xl text-white mb-2">No posts yet</h2>
+          <p className="text-text-secondary text-sm mb-6">Be the first to share something with the community</p>
           <Link
             href="/app/community/create"
             className="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
@@ -191,9 +191,9 @@ export default function CommunityPage() {
           </Link>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 stagger-children">
           {posts.map(post => (
-            <article key={post.id} className="bg-surface border border-border rounded-xl p-6 hover:border-border/80 transition-colors">
+            <article key={post.id} className="bg-surface border border-border rounded-xl p-6 hover:border-border/80 transition-colors card-hover">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center overflow-hidden">
