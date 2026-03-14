@@ -12,8 +12,6 @@ import {
   Menu,
   X,
   Target,
-  Clock,
-  Heart,
   CheckCircle,
   ArrowRight,
   Crown
