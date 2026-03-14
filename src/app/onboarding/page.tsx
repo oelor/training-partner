@@ -136,39 +136,45 @@ export default function OnboardingPage() {
     <div className="min-h-[70vh] flex flex-col">
       {/* Progress */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-text-secondary text-sm">Step {step + 1} of {STEPS.length}</span>
+          <span className="text-primary text-sm font-medium">{Math.round(((step + 1) / STEPS.length) * 100)}%</span>
+        </div>
+        <div className="h-1.5 bg-surface rounded-full overflow-hidden mb-6">
+          <div
+            className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+          />
+        </div>
+        <div className="flex items-center justify-between">
           {STEPS.map((s, i) => {
             const Icon = s.icon
             const done = i < step
             const active = i === step
             return (
               <div key={s.id} className="flex items-center gap-2">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                <button
+                  onClick={() => { if (done) setStep(i) }}
+                  disabled={!done}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
                     done
-                      ? 'bg-accent text-background'
+                      ? 'bg-accent text-background cursor-pointer hover:scale-105'
                       : active
-                        ? 'bg-primary text-white'
+                        ? 'bg-primary text-white ring-2 ring-primary/30 ring-offset-2 ring-offset-background'
                         : 'bg-surface border border-border text-text-secondary'
                   }`}
                 >
                   {done ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
-                </div>
-                <span className={`text-sm hidden sm:block ${active ? 'text-white font-medium' : 'text-text-secondary'}`}>
+                </button>
+                <span className={`text-sm hidden sm:block ${active ? 'text-white font-medium' : done ? 'text-accent' : 'text-text-secondary'}`}>
                   {s.label}
                 </span>
                 {i < STEPS.length - 1 && (
-                  <div className={`w-8 sm:w-16 h-0.5 mx-2 ${i < step ? 'bg-accent' : 'bg-border'}`} />
+                  <div className={`w-8 sm:w-16 h-0.5 mx-2 transition-colors duration-300 ${i < step ? 'bg-accent' : 'bg-border'}`} />
                 )}
               </div>
             )
           })}
-        </div>
-        <div className="h-1 bg-surface rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-500"
-            style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-          />
         </div>
       </div>
 

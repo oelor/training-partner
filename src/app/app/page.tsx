@@ -545,6 +545,30 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Alpha Feedback Prompt */}
+      <div className="bg-surface border border-accent/30 rounded-xl p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-accent/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Star className="w-5 h-5 text-accent" />
+            </div>
+            <div>
+              <h3 className="font-heading text-lg text-white mb-1">ALPHA TESTER</h3>
+              <p className="text-text-secondary text-sm">
+                You&apos;re one of our first users. Your feedback shapes what we build next.
+              </p>
+            </div>
+          </div>
+          <a
+            href="mailto:feedback@trainingpartner.app?subject=Alpha%20Feedback"
+            className="inline-flex items-center gap-2 bg-accent/10 border border-accent/30 text-accent px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-accent/20 transition-colors whitespace-nowrap"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Send Feedback
+          </a>
+        </div>
+      </div>
     </div>
     </>
   )
