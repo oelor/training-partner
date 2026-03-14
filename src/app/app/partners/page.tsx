@@ -104,10 +104,13 @@ export default function PartnersPage() {
           {[...Array(6)].map((_, i) => <CardSkeleton key={i} />)}
         </div>
       ) : partners.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 bg-surface border border-border rounded-xl p-8">
           <Users className="w-16 h-16 text-text-secondary mx-auto mb-4" />
-          <h3 className="font-heading text-xl text-white mb-2">No partners found</h3>
-          <p className="text-text-secondary">Try adjusting your filters or complete your profile to see matches</p>
+          <h3 className="font-heading text-xl text-white mb-2">No training partners found yet</h3>
+          <p className="text-text-secondary mb-6">Complete your profile to get matched with training partners</p>
+          <Link href="/app/profile" className="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors">
+            Complete Profile
+          </Link>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">

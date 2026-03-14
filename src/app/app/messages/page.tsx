@@ -119,10 +119,11 @@ function MessagesContent() {
                 ))}
               </div>
             ) : conversations.length === 0 ? (
-              <div className="p-8 text-center">
+              <div className="p-8 text-center flex flex-col items-center justify-center h-full">
                 <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-                <p className="text-text-secondary text-sm">No conversations yet</p>
-                <p className="text-text-secondary text-xs mt-1">Start a conversation from a partner&apos;s profile</p>
+                <p className="text-text-secondary text-sm font-medium">No conversations yet</p>
+                <p className="text-text-secondary text-xs mt-1 mb-4">Find a training partner and send them a message</p>
+                <a href="/app/partners" className="text-primary text-xs font-medium hover:underline">Browse Partners</a>
               </div>
             ) : (
               conversations.map(convo => (

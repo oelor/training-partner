@@ -142,11 +142,11 @@ export default function NotificationsPage() {
           ))}
         </div>
       ) : notifications.length === 0 ? (
-        <div className="text-center py-16">
+        <div className="text-center py-16 bg-surface border border-border rounded-xl p-8">
           <BellOff className="w-16 h-16 text-text-secondary mx-auto mb-4" />
-          <h3 className="font-heading text-xl text-white mb-2">No notifications</h3>
+          <h3 className="font-heading text-xl text-white mb-2">All caught up!</h3>
           <p className="text-text-secondary">
-            When you get new matches, messages, or booking updates, they&apos;ll show up here.
+            You'll see notifications here when something happens
           </p>
         </div>
       ) : (

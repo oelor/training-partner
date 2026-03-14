@@ -180,8 +180,8 @@ export default function CommunityPage() {
       ) : posts.length === 0 ? (
         <div className="text-center py-20 bg-surface border border-border rounded-xl">
           <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-4" />
-          <h2 className="font-heading text-xl text-white mb-2">NO POSTS YET</h2>
-          <p className="text-text-secondary text-sm mb-6">Be the first to share with the community!</p>
+          <h2 className="font-heading text-xl text-white mb-2">No posts yet</h2>
+          <p className="text-text-secondary text-sm mb-6">Be the first to share something with the community</p>
           <Link
             href="/app/community/create"
             className="inline-flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
