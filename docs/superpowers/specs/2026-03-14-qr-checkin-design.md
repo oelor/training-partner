@@ -12,8 +12,8 @@ Athletes scan a QR code posted at a gym to check in. GPS verification confirms t
 - `checkin_code TEXT UNIQUE` — random 16-char alphanumeric string. Generated on gym creation or first QR access. Encodes into URL: `https://trainingpartner.app/checkin/{checkin_code}`
 - `checkin_radius_m INTEGER DEFAULT 200` — GPS radius in meters (configurable 50–1000m)
 
-**`checkins`** — add one column:
-- `checkin_source TEXT DEFAULT 'app'` — values: `app` (existing dashboard button), `qr` (scanned QR code)
+**`checkins`** — existing `method` column reused:
+- The `method TEXT NOT NULL DEFAULT 'manual'` column already exists. QR check-ins set `method = 'qr'`. No schema change needed for this table.
 
 ### New table
 
@@ -28,13 +28,18 @@ Athletes scan a QR code posted at a gym to check in. GPS verification confirms t
 
 ### Migration
 
-One D1 migration file. Backfills existing gyms with generated `checkin_code` values using `hex(randomblob(8))`.
+One D1 migration file:
+1. Add `checkin_code` and `checkin_radius_m` columns to `gyms`
+2. Create `guest_checkins` table
+3. Backfill existing gyms with generated `checkin_code` values using `hex(randomblob(8))`
+
+No changes to `checkins` table — the existing `method` column is reused.
 
 ## API Endpoints
 
 ### `GET /api/checkin/:code` (public)
 
-Resolves a `checkin_code` to gym info. Returns: `{ ok, gym: { id, name, city, state, lat, lng, radius_m } }`. Returns 404 if code is invalid.
+Resolves a `checkin_code` to gym info. Returns: `{ ok, gym: { id, name, city, state, lat, lng } }`. Note: `radius_m` is NOT returned to the client — it stays server-side to avoid exposing the exact boundary to potential abusers. Returns 404 if code is invalid.
 
 ### `POST /api/checkin/:code/verify` (auth required)
 
@@ -43,9 +48,9 @@ Accepts: `{ lat: number, lng: number }`
 Flow:
 1. Resolve code to gym
 2. Calculate Haversine distance between `(lat, lng)` and `(gym.lat, gym.lng)`
-3. If distance > `gym.checkin_radius_m`, reject with `{ ok: false, error: "too_far", distance_m, radius_m, gym_name, gym_address }`
-4. Check rate limit: one check-in per user per gym per 4 hours
-5. Insert into `checkins` with `checkin_source = 'qr'`
+3. If distance > `gym.checkin_radius_m`, reject with `{ ok: false, error: "too_far", distance_m, gym_name, address }`
+4. Check rate limit: one check-in per user per gym per 2 hours (matches existing `handleCheckin` behavior)
+5. Insert into `checkins` with `method = 'qr'`
 6. Award points (same logic as existing check-in)
 7. Return `{ ok, gym_name, points_earned, total_points }`
 
@@ -63,7 +68,7 @@ Flow:
 
 ### `POST /api/gym-dashboard/regenerate-code` (auth: gym_owner)
 
-Generates a new `checkin_code` for the authenticated owner's gym, invalidating the previous code. Returns `{ ok, checkin_code }`.
+Generates a new `checkin_code` for the authenticated owner's gym, invalidating the previous code. Rate limited to 1 per gym per hour using the existing `rate_limits` table (key: `regen:{gym_id}`). Returns `{ ok, checkin_code }`.
 
 ### `PUT /api/gym-dashboard/settings` (existing, auth: gym_owner)
 
@@ -80,7 +85,7 @@ Public page (outside `/app` layout — no sidebar). Renders based on state:
 3. **Logged in** — Shows gym name/city, requests GPS permission, auto-submits check-in. Displays success animation with points earned and link to `/app/passport`. On GPS error or too-far, shows friendly message with gym address.
 4. **Not logged in** — Shows two paths:
    - "Sign in to check in and earn points" button → `/auth/signin?return=/checkin/[code]`
-   - Guest form: name + email fields → submits to guest endpoint. On success, shows "Create your free account to earn points and badges" CTA linking to `/auth/signup`
+   - Guest form: name + email fields → submits to guest endpoint. On success, shows "Create your free account to earn points and badges" CTA linking to `/auth/signup?return=/checkin/[code]` (preserves return URL so new user can complete a real check-in after registration)
 
 Design: dark theme consistent with app. Gym branding (name, city) prominent. Minimal — focused on completing the check-in action.
 
@@ -129,16 +134,16 @@ Use `navigator.geolocation.getCurrentPosition()` with `{ enableHighAccuracy: tru
 |----------|----------|
 | Invalid/expired code | 404: "This check-in code is no longer valid" |
 | GPS permission denied | Client-side: "Please enable location access to check in" with browser-specific instructions |
-| Too far from gym | 403: "You're {X}m away from {gym_name}. Check-ins require being within {radius}m." Includes gym address. |
+| Too far from gym | 403: "You're {X}m away from {gym_name}. You need to be closer to check in." Includes gym `address`. (Exact radius not disclosed to user.) |
 | Already checked in | 429: "You already checked in at {gym_name} {time} ago" |
 | Guest rate limited | 429: "This email was already used to check in today" |
 | Gym has no coordinates | 500: "This gym hasn't set up location-based check-in yet" (edge case for legacy gyms without lat/lng) |
 
 ## Rate Limiting
 
-- Authenticated users: 1 check-in per user per gym per 4 hours (matches existing behavior)
-- Guest check-ins: 1 per email per gym per 24 hours
-- Code regeneration: 1 per gym per hour (prevent accidental rapid regeneration)
+- Authenticated users: 1 check-in per user per gym per 2 hours (matches existing `handleCheckin` which uses a 2-hour window)
+- Guest check-ins: 1 per email per gym per 24 hours. **Known V1 limitation:** email-only rate limiting is trivially bypassable with different email addresses. An IP-based secondary limit (max 10 guest check-ins per IP per day across all gyms) provides a backstop.
+- Code regeneration: 1 per gym per hour via existing `rate_limits` table (key: `regen:{gym_id}`)
 
 ## Security
 
