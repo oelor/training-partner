@@ -1,223 +1,211 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MessageSquarePlus, X, Star, Loader2, Bug, Lightbulb, MessageCircle, Send, ChevronDown } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import { usePathname } from 'next/navigation'
-import api from '@/lib/api'
-import { useToast } from './toast'
+import { trackFeedbackSubmitted } from '@/lib/analytics'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || ''
+
+const MOODS = [
+  { emoji: '\u{1F62B}', rating: 1 },
+  { emoji: '\u{1F615}', rating: 2 },
+  { emoji: '\u{1F610}', rating: 3 },
+  { emoji: '\u{1F642}', rating: 4 },
+  { emoji: '\u{1F60D}', rating: 5 },
+]
 
 const FEEDBACK_TYPES = [
-  { value: 'bug', label: 'Bug Report', icon: Bug, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30' },
-  { value: 'feature', label: 'Feature Request', icon: Lightbulb, color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30' },
-  { value: 'general', label: 'General Feedback', icon: MessageCircle, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/30' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'suggestion', label: 'Suggestion' },
+  { value: 'frustration', label: 'Frustration' },
+  { value: 'praise', label: 'Praise' },
 ]
 
 export default function FeedbackWidget() {
-  const toast = useToast()
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
-  const [minimized, setMinimized] = useState(false)
-  const [type, setType] = useState('general')
+  const [type, setType] = useState('suggestion')
   const [rating, setRating] = useState<number | null>(null)
-  const [hoverRating, setHoverRating] = useState<number | null>(null)
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
+  const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
   // Reset form when opened
   useEffect(() => {
     if (open) {
-      setType('general')
+      setType('suggestion')
       setRating(null)
-      setTitle('')
-      setBody('')
+      setMessage('')
       setSubmitted(false)
     }
   }, [open])
 
+  // Auto-close after submission
+  useEffect(() => {
+    if (submitted) {
+      const timer = setTimeout(() => setOpen(false), 1500)
+      return () => clearTimeout(timer)
+    }
+  }, [submitted])
+
   const handleSubmit = async () => {
-    if (!body.trim()) return
+    const trimmed = message.trim()
+    if (!trimmed || trimmed.length > 2000) return
+
     setSubmitting(true)
     try {
-      await api.submitFeedback({
-        type,
-        rating: rating ?? undefined,
-        title: title.trim() || undefined,
-        body: body.trim(),
-        page: pathname,
+      const token = typeof window !== 'undefined' ? localStorage.getItem('tp_token') : null
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const res = await fetch(`${API_URL}/api/feedback`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          page: pathname,
+          type,
+          rating: rating ?? undefined,
+          message: trimmed,
+        }),
       })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        console.error('Feedback submit failed:', data)
+      }
+
+      // Link feedback to PostHog session for cross-referencing
+      trackFeedbackSubmitted(type, rating, pathname || '/')
       setSubmitted(true)
-      toast.success('Thanks for your feedback!')
-      setTimeout(() => setOpen(false), 1500)
-    } catch {
-      toast.error('Failed to submit feedback. Please try again.')
+    } catch (err) {
+      console.error('Feedback submit error:', err)
     } finally {
       setSubmitting(false)
     }
   }
 
-  // Don't show on auth pages
-  if (pathname.startsWith('/auth')) return null
+  // Don't render on auth pages
+  if (pathname?.startsWith('/auth')) return null
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Floating trigger — bottom-left, above mobile nav */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-20 lg:bottom-6 right-6 z-40 bg-primary hover:bg-primary/90 text-white rounded-full p-3.5 shadow-lg shadow-primary/25 transition-all hover:scale-105 active:scale-95 group"
+          className="fixed bottom-20 lg:bottom-6 left-4 z-40 bg-surface hover:bg-surface/90 border border-border text-white rounded-full w-11 h-11 flex items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95"
           aria-label="Send feedback"
         >
-          <MessageSquarePlus className="w-5 h-5" />
-          <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-surface border border-border text-sm text-white px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            Send Feedback
+          <span className="text-lg" role="img" aria-label="feedback">
+            {'\u{1F4AC}'}
           </span>
         </button>
       )}
 
-      {/* Feedback panel */}
+      {/* Feedback card */}
       {open && (
-        <div className="fixed bottom-20 lg:bottom-6 right-6 z-40 w-[360px] max-w-[calc(100vw-3rem)] max-h-[70vh] overflow-hidden">
-          <div className={`bg-surface border border-border rounded-xl shadow-2xl transition-all ${minimized ? '' : 'animate-slide-up'}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <MessageSquarePlus className="w-4 h-4 text-primary" />
-                <span className="font-heading text-sm text-white">FEEDBACK</span>
-                <span className="text-xs text-text-secondary bg-primary/10 px-2 py-0.5 rounded-full">Alpha</span>
+        <div className="fixed bottom-20 lg:bottom-6 left-4 z-40 w-[340px] max-w-[calc(100vw-2rem)]">
+          <div className="bg-surface border border-border rounded-xl shadow-2xl animate-slide-up">
+            {submitted ? (
+              /* Thank-you state */
+              <div className="py-10 text-center">
+                <p className="text-2xl mb-2">{'\u{1F64F}'}</p>
+                <p className="font-heading text-white text-sm">THANKS!</p>
               </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setMinimized(!minimized)}
-                  className="p-1 text-text-secondary hover:text-white transition-colors"
-                  aria-label={minimized ? 'Expand' : 'Minimize'}
-                >
-                  <ChevronDown className={`w-4 h-4 transition-transform ${minimized ? 'rotate-180' : ''}`} />
-                </button>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="p-1 text-text-secondary hover:text-white transition-colors"
-                  aria-label="Close feedback"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <span className="font-heading text-sm text-white tracking-wide">FEEDBACK</span>
+                  <button
+                    onClick={() => setOpen(false)}
+                    className="p-1 text-text-secondary hover:text-white transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-            {/* Body */}
-            {!minimized && (
-              <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
-                {submitted ? (
-                  <div className="py-8 text-center">
-                    <div className="w-12 h-12 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <Send className="w-6 h-6 text-accent" />
+                <div className="p-4 space-y-4">
+                  {/* Mood selector */}
+                  <div>
+                    <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
+                      How do you feel?
+                    </label>
+                    <div className="flex gap-2 justify-between">
+                      {MOODS.map((mood) => (
+                        <button
+                          key={mood.rating}
+                          onClick={() => setRating(rating === mood.rating ? null : mood.rating)}
+                          className={`text-2xl p-1.5 rounded-lg transition-all ${
+                            rating === mood.rating
+                              ? 'bg-primary/20 scale-110 ring-1 ring-primary/50'
+                              : 'opacity-60 hover:opacity-100 hover:scale-105'
+                          }`}
+                          aria-label={`Rate ${mood.rating} out of 5`}
+                        >
+                          {mood.emoji}
+                        </button>
+                      ))}
                     </div>
-                    <h3 className="font-heading text-lg text-white mb-1">THANK YOU!</h3>
-                    <p className="text-text-secondary text-sm">Your feedback helps us improve Training Partner.</p>
                   </div>
-                ) : (
-                  <>
-                    {/* Type selector */}
-                    <div>
-                      <label id="feedback-type-label" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">Type</label>
-                      <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="feedback-type-label">
-                        {FEEDBACK_TYPES.map((ft) => (
-                          <button
-                            key={ft.value}
-                            onClick={() => setType(ft.value)}
-                            className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border transition-all text-xs ${
-                              type === ft.value
-                                ? ft.bg + ' ' + ft.color
-                                : 'border-border text-text-secondary hover:border-primary/30'
-                            }`}
-                          >
-                            <ft.icon className="w-4 h-4" />
-                            <span>{ft.label.split(' ')[0]}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
 
-                    {/* Rating */}
-                    <div>
-                      <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
-                        How&apos;s your experience? <span className="text-text-secondary/50">(optional)</span>
-                      </label>
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button
-                            key={star}
-                            onClick={() => setRating(rating === star ? null : star)}
-                            onMouseEnter={() => setHoverRating(star)}
-                            onMouseLeave={() => setHoverRating(null)}
-                            className="p-0.5 transition-transform hover:scale-110"
-                          >
-                            <Star
-                              className={`w-6 h-6 transition-colors ${
-                                (hoverRating ?? rating ?? 0) >= star
-                                  ? 'text-yellow-400 fill-yellow-400'
-                                  : 'text-border'
-                              }`}
-                            />
-                          </button>
-                        ))}
-                      </div>
+                  {/* Type chips */}
+                  <div>
+                    <label className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
+                      Type
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {FEEDBACK_TYPES.map((ft) => (
+                        <button
+                          key={ft.value}
+                          onClick={() => setType(ft.value)}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                            type === ft.value
+                              ? 'bg-primary/20 border-primary/50 text-primary'
+                              : 'border-border text-text-secondary hover:border-primary/30 hover:text-white'
+                          }`}
+                        >
+                          {ft.label}
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
-                    {/* Title */}
-                    <div>
-                      <label htmlFor="feedback-title" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
-                        Title <span className="text-text-secondary/50">(optional)</span>
-                      </label>
-                      <input
-                        id="feedback-title"
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder={type === 'bug' ? 'What went wrong?' : type === 'feature' ? 'What would you like?' : 'Summary'}
-                        className="w-full bg-background border border-border rounded-lg py-2 px-3 text-sm text-white placeholder-text-secondary focus:border-primary transition-colors"
-                      />
-                    </div>
+                  {/* Message */}
+                  <div>
+                    <textarea
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder="What's on your mind? Bug reports, suggestions, frustrations — all welcome!"
+                      rows={3}
+                      maxLength={2000}
+                      className="w-full bg-background border border-border rounded-lg py-2 px-3 text-sm text-white placeholder-text-secondary focus:border-primary focus:outline-none transition-colors resize-none"
+                    />
+                    {message.length > 1800 && (
+                      <p className="text-xs text-text-secondary mt-1 text-right">
+                        {message.length}/2000
+                      </p>
+                    )}
+                  </div>
 
-                    {/* Body */}
-                    <div>
-                      <label htmlFor="feedback-details" className="block text-text-secondary text-xs mb-2 uppercase tracking-wider">
-                        Details *
-                      </label>
-                      <textarea
-                        id="feedback-details"
-                        value={body}
-                        onChange={(e) => setBody(e.target.value)}
-                        placeholder={
-                          type === 'bug'
-                            ? 'Steps to reproduce, what happened vs expected...'
-                            : type === 'feature'
-                            ? 'Describe the feature and why it would help...'
-                            : 'Share your thoughts...'
-                        }
-                        rows={3}
-                        className="w-full bg-background border border-border rounded-lg py-2 px-3 text-sm text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
-                      />
-                    </div>
-
-                    {/* Page context */}
-                    <div className="text-xs text-text-secondary/50">
-                      Page: {pathname}
-                    </div>
-
-                    {/* Submit */}
-                    <button
-                      onClick={handleSubmit}
-                      disabled={!body.trim() || submitting}
-                      className="w-full bg-primary text-white py-2.5 rounded-lg font-heading text-sm hover:bg-primary/90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      {submitting ? 'Sending...' : 'SEND FEEDBACK'}
-                    </button>
-                  </>
-                )}
-              </div>
+                  {/* Submit */}
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!message.trim() || submitting}
+                    className="w-full bg-primary text-white py-2.5 rounded-lg font-heading text-sm hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {submitting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      'SEND'
+                    )}
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>

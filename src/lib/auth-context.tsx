@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import api, { User, UserProfile, Subscription } from './api'
+import { identifyUser, resetUser, trackLogin, trackSignup, trackLogout } from './analytics'
 
 // Cookie helpers for middleware-based route protection
 function setAuthCookie() {
@@ -50,6 +51,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.getMe()
       setAuthCookie()
+      // Identify user in analytics on every session restore
+      if (data.user?.id) {
+        identifyUser(String(data.user.id), {
+          name: data.user.display_name,
+          email: data.user.email,
+          sport: data.profile?.sports?.[0] || undefined,
+          plan: data.subscription?.plan || 'free',
+        })
+      }
       setState({
         user: data.user,
         profile: data.profile,
@@ -73,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.login({ email, password })
       setAuthCookie()
+      trackLogin('email')
       setState({
         user: data.user,
         profile: null,
@@ -93,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.register({ name, email, password, sport, turnstile_token: turnstileToken })
       setAuthCookie()
+      trackSignup('email', sport)
       setState({
         user: data.user,
         profile: null,
@@ -113,6 +125,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.googleAuth(credential)
       setAuthCookie()
+      if (data.isNewUser) {
+        trackSignup('google')
+      } else {
+        trackLogin('google')
+      }
       setState({
         user: data.user,
         profile: null,
@@ -130,8 +147,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = () => {
+    trackLogout()
     api.logout()
     clearAuthCookie()
+    resetUser()
     setState({ user: null, profile: null, subscription: null, loading: false, error: null })
   }
 

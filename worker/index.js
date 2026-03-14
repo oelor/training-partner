@@ -3215,9 +3215,29 @@ async function handleDeletePostComment(request, env, commentId) {
 // ─── Feedback System ─────────────────────────────────────────────────────────
 
 async function handleSubmitFeedback(request, env) {
-  const user = await requireAuth(request, env).catch(() => null);
+  // Rate limit: 10 feedback submissions per hour per IP
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(ip, 'feedback', 10, 3_600_000)) {
+    return corsJson({ ok: false, error: 'Too many feedback submissions. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  const user = await getUser(request, env);
   const body = await readJson(request);
-  if (!body || !body.body?.trim()) return corsJson({ ok: false, error: 'Feedback body required' }, { status: 400 }, request, env);
+  if (!body) return corsJson({ ok: false, error: 'Invalid request body' }, { status: 400 }, request, env);
+
+  // Accept both 'body' and 'message' field names for the feedback text
+  const message = (body.message || body.body || '').trim();
+  if (!message) return corsJson({ ok: false, error: 'Feedback message required' }, { status: 400 }, request, env);
+  if (message.length < 1 || message.length > 2000) {
+    return corsJson({ ok: false, error: 'Message must be between 1 and 2000 characters' }, { status: 400 }, request, env);
+  }
+
+  // Validate rating if provided (1-5)
+  const rating = body.rating != null ? parseInt(body.rating) : null;
+  if (rating != null && (isNaN(rating) || rating < 1 || rating > 5)) {
+    return corsJson({ ok: false, error: 'Rating must be between 1 and 5' }, { status: 400 }, request, env);
+  }
+
   const now = isoNow();
   const result = await env.DB.prepare(`
     INSERT INTO feedback (user_id, type, rating, title, body, page, user_agent, created_at)
@@ -3225,9 +3245,9 @@ async function handleSubmitFeedback(request, env) {
   `).bind(
     user?.id || null,
     sanitize(body.type || 'general'),
-    body.rating || null,
+    rating,
     sanitize(body.title || '').slice(0, 200),
-    sanitize(body.body).slice(0, 5000),
+    sanitize(message).slice(0, 2000),
     sanitize(body.page || ''),
     request.headers.get('User-Agent') || '',
     now
@@ -3236,17 +3256,140 @@ async function handleSubmitFeedback(request, env) {
 }
 
 async function handleGetFeedback(request, env) {
-  const user = await requireAuth(request, env);
-  if (!user || user.role !== 'admin') return corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env);
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  // Admin check: user must have admin role OR email containing 'elor'
+  const isAdmin = user.role === 'admin' || (user.email && user.email.toLowerCase().includes('elor'));
+  if (!isAdmin) return corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env);
+
   const url = new URL(request.url);
-  const status = url.searchParams.get('status') || 'new';
-  const limit = Math.min(parseInt(url.searchParams.get('limit')) || 50, 200);
-  const feedback = await env.DB.prepare(`
-    SELECT f.*, u.display_name as user_name, u.email as user_email
-    FROM feedback f LEFT JOIN users u ON f.user_id = u.id
-    WHERE f.status = ? ORDER BY f.created_at DESC LIMIT ?
-  `).bind(status, limit).all();
+  const pageFilter = url.searchParams.get('page');
+  const statusFilter = url.searchParams.get('status');
+  const limit = Math.min(parseInt(url.searchParams.get('limit')) || 100, 200);
+
+  let query = 'SELECT f.*, u.display_name as user_name, u.email as user_email FROM feedback f LEFT JOIN users u ON f.user_id = u.id';
+  const conditions = [];
+  const binds = [];
+
+  if (pageFilter) {
+    conditions.push('f.page = ?');
+    binds.push(pageFilter);
+  }
+  if (statusFilter) {
+    conditions.push('f.status = ?');
+    binds.push(statusFilter);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+  query += ' ORDER BY f.created_at DESC LIMIT ?';
+  binds.push(limit);
+
+  const feedback = await env.DB.prepare(query).bind(...binds).all();
   return corsJson({ ok: true, feedback: feedback.results || [] }, {}, request, env);
+}
+
+// ─── Analytics Summary (for Claude to query and analyze) ─────────────────────
+
+async function handleGetAnalyticsSummary(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const isAdmin = user.role === 'admin' || (user.email && user.email.toLowerCase().includes('elor'));
+  if (!isAdmin) return corsJson({ ok: false, error: 'Forbidden' }, { status: 403 }, request, env);
+
+  const url = new URL(request.url);
+  const days = Math.min(parseInt(url.searchParams.get('days')) || 7, 90);
+  const since = new Date(Date.now() - days * 86400000).toISOString();
+
+  // Run all queries in parallel for speed
+  const [
+    feedbackByPage,
+    feedbackByType,
+    avgRatingByPage,
+    recentFrustrations,
+    userGrowth,
+    activeUsers,
+    topPages,
+    storageUsage,
+  ] = await Promise.all([
+    // Feedback volume by page (which pages generate the most feedback?)
+    env.DB.prepare(`
+      SELECT page, COUNT(*) as count FROM feedback
+      WHERE created_at >= ? GROUP BY page ORDER BY count DESC LIMIT 20
+    `).bind(since).all(),
+
+    // Feedback by type (what kind of feedback are we getting?)
+    env.DB.prepare(`
+      SELECT type, COUNT(*) as count, ROUND(AVG(rating), 1) as avg_rating
+      FROM feedback WHERE created_at >= ?
+      GROUP BY type ORDER BY count DESC
+    `).bind(since).all(),
+
+    // Average mood rating by page (which pages make users happiest/unhappiest?)
+    env.DB.prepare(`
+      SELECT page, ROUND(AVG(rating), 1) as avg_rating, COUNT(*) as ratings_count
+      FROM feedback WHERE rating IS NOT NULL AND created_at >= ?
+      GROUP BY page HAVING ratings_count >= 2 ORDER BY avg_rating ASC LIMIT 20
+    `).bind(since).all(),
+
+    // Recent frustration/bug reports (immediate action items)
+    env.DB.prepare(`
+      SELECT f.message, f.page, f.rating, f.created_at, u.display_name as user_name
+      FROM feedback f LEFT JOIN users u ON f.user_id = u.id
+      WHERE f.type IN ('frustration', 'bug') AND f.created_at >= ?
+      ORDER BY f.created_at DESC LIMIT 25
+    `).bind(since).all(),
+
+    // User signups over time (growth trend)
+    env.DB.prepare(`
+      SELECT DATE(created_at) as day, COUNT(*) as signups
+      FROM users WHERE created_at >= ?
+      GROUP BY DATE(created_at) ORDER BY day DESC
+    `).bind(since).all(),
+
+    // Active users (users who did anything in the period)
+    env.DB.prepare(`
+      SELECT COUNT(DISTINCT user_id) as active_users FROM (
+        SELECT user_id FROM feedback WHERE user_id IS NOT NULL AND created_at >= ?
+        UNION SELECT sender_id as user_id FROM messages WHERE created_at >= ?
+        UNION SELECT user_id FROM training_logs WHERE created_at >= ?
+        UNION SELECT user_id FROM posts WHERE created_at >= ?
+      )
+    `).bind(since, since, since, since).all().catch(() => ({ results: [{ active_users: 0 }] })),
+
+    // Most visited pages (from feedback submissions — proxy for page popularity)
+    env.DB.prepare(`
+      SELECT page, COUNT(DISTINCT user_id) as unique_users, COUNT(*) as feedback_count
+      FROM feedback WHERE created_at >= ? AND user_id IS NOT NULL
+      GROUP BY page ORDER BY unique_users DESC LIMIT 15
+    `).bind(since).all(),
+
+    // Storage usage estimate
+    env.DB.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(*) FROM messages) as total_messages,
+        (SELECT COUNT(*) FROM posts) as total_posts,
+        (SELECT COUNT(*) FROM training_logs) as total_workouts,
+        (SELECT COUNT(*) FROM feedback) as total_feedback
+    `).all().catch(() => ({ results: [] })),
+  ]);
+
+  return corsJson({
+    ok: true,
+    period: { days, since },
+    summary: {
+      feedback_by_page: feedbackByPage.results || [],
+      feedback_by_type: feedbackByType.results || [],
+      unhappiest_pages: avgRatingByPage.results || [],
+      recent_issues: recentFrustrations.results || [],
+      user_growth: userGrowth.results || [],
+      active_users: (activeUsers.results || [])[0]?.active_users || 0,
+      top_pages: topPages.results || [],
+      storage: (storageUsage.results || [])[0] || {},
+    },
+  }, {}, request, env);
 }
 
 // ─── Invite Codes (Alpha Launch) ─────────────────────────────────────────────
@@ -5485,6 +5628,7 @@ export default {
       // Feedback
       if (path === '/api/feedback' && method === 'POST') return handleSubmitFeedback(request, env);
       if (path === '/api/admin/feedback' && method === 'GET') return handleGetFeedback(request, env);
+      if (path === '/api/admin/analytics' && method === 'GET') return handleGetAnalyticsSummary(request, env);
 
       // Invite Codes (Alpha)
       if (path === '/api/invite/validate' && method === 'POST') return handleValidateInviteCode(request, env);

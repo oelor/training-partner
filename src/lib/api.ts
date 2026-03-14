@@ -1,4 +1,6 @@
 // API Client for Training Partner Cloudflare Worker
+import { trackApiError } from './analytics';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://trainingpartner.app';
 
 // Retry configuration
@@ -44,6 +46,8 @@ class ApiClient {
 
         if (!res.ok) {
           const errorMessage = this.formatErrorMessage(data, res.status);
+          // Auto-track every API error for alpha diagnostics
+          trackApiError(path, res.status, errorMessage);
           throw new ApiError(errorMessage, res.status, data);
         }
 
