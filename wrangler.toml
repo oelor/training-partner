@@ -22,6 +22,9 @@ STRIPE_PRICE_PREMIUM_GYM = "price_1TAh2Q2z80SWtIbfltBaqgT6"     # $19.99/mo gym 
 # Google OAuth — set GOOGLE_CLIENT_ID here, matching NEXT_PUBLIC_GOOGLE_CLIENT_ID on Vercel
 GOOGLE_CLIENT_ID = "267258478260-1g7iqhdfrbgchg8ripp46l80senqscav.apps.googleusercontent.com"
 
+# GOOGLE_PLACES_API_KEY — set via `wrangler secret put GOOGLE_PLACES_API_KEY`
+# Enables external gym search via Google Places API ($200/mo free credit)
+
 # JWT_SECRET must be set via `wrangler secret put JWT_SECRET` for production.
 # For local dev, wrangler dev injects it from [env.dev.vars] below.
 

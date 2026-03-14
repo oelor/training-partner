@@ -1352,6 +1352,14 @@ async function handleGetGyms(request, env) {
     gyms = gyms.filter(g => g.sports.some(s => s.toLowerCase().includes(sport.toLowerCase())));
   }
 
+  // Fallback to Google Places when no local results and search was provided
+  if (gyms.length === 0 && search && env.GOOGLE_PLACES_API_KEY) {
+    const externalGyms = await searchGooglePlaces(env, search, 0, 0, 10000);
+    if (externalGyms && externalGyms.length > 0) {
+      return corsJson({ ok: true, gyms: externalGyms, total: externalGyms.length, source: 'google_places' }, {}, request, env);
+    }
+  }
+
   return corsJson({ ok: true, gyms, total: gyms.length }, {}, request, env);
 }
 
@@ -5147,6 +5155,124 @@ async function handleDiscoverGyms(request, env) {
   return corsJson({ ok: true, gyms: results, total: results.length }, {}, request, env);
 }
 
+// ─── Google Places External Gym Search ───────────────────────────────────────
+
+async function searchGooglePlaces(env, query, lat, lng, radius) {
+  const apiKey = env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) return null;
+
+  // Check cache first
+  const cacheKey = `places:${query}:${lat}:${lng}:${radius}`;
+  try {
+    const cached = await env.DB.prepare(
+      'SELECT results_json FROM places_cache WHERE cache_key = ? AND expires_at > datetime(?)'
+    ).bind(cacheKey, isoNow()).first();
+    if (cached) return JSON.parse(cached.results_json);
+  } catch { /* cache miss or table not ready */ }
+
+  // Call Google Places Text Search (New) API
+  const searchQuery = query || 'martial arts gym boxing MMA wrestling jiu jitsu';
+  const body = {
+    textQuery: searchQuery,
+    maxResultCount: 20,
+  };
+  if (lat && lng) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: lat, longitude: lng },
+        radius: radius,
+      },
+    };
+  }
+
+  let resp;
+  try {
+    resp = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.nationalPhoneNumber,places.websiteUri',
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return null;
+  }
+
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const places = data.places || [];
+
+  // Map to our gym schema
+  const gyms = places.map((p, i) => {
+    // Parse address parts (best-effort from formattedAddress)
+    const addrParts = (p.formattedAddress || '').split(',').map(s => s.trim());
+    const city = addrParts.length >= 3 ? addrParts[addrParts.length - 3] : '';
+    const stateZip = addrParts.length >= 2 ? addrParts[addrParts.length - 2] : '';
+    const state = stateZip.split(/\s+/)[0] || '';
+
+    // Infer sports from types
+    const sports = [];
+    const types = p.types || [];
+    if (types.some(t => t.includes('gym') || t.includes('fitness'))) sports.push('Fitness');
+    // Default combat sports since we searched for them
+    if (sports.length === 0) sports.push('Martial Arts');
+
+    return {
+      id: `gp_${p.id || i}`,
+      name: p.displayName?.text || 'Unknown',
+      address: p.formattedAddress || '',
+      city,
+      state,
+      lat: p.location?.latitude || 0,
+      lng: p.location?.longitude || 0,
+      phone: p.nationalPhoneNumber || null,
+      email: null,
+      description: null,
+      sports,
+      amenities: [],
+      verified: false,
+      premium: false,
+      rating: p.rating || 0,
+      review_count: p.userRatingCount || 0,
+      price: null,
+      website: p.websiteUri || null,
+      source: 'google_places',
+    };
+  });
+
+  // Cache for 24 hours
+  try {
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    await env.DB.prepare(
+      'INSERT OR REPLACE INTO places_cache (cache_key, results_json, created_at, expires_at) VALUES (?, ?, datetime(?), datetime(?))'
+    ).bind(cacheKey, JSON.stringify(gyms), isoNow(), expiresAt).run();
+  } catch { /* cache write failure is non-fatal */ }
+
+  return gyms;
+}
+
+async function handleSearchExternalGyms(request, env) {
+  const apiKey = env.GOOGLE_PLACES_API_KEY;
+  if (!apiKey) {
+    return corsJson({ ok: false, error: 'External search not configured' }, { status: 501 }, request, env);
+  }
+
+  const url = new URL(request.url);
+  const query = url.searchParams.get('query') || '';
+  const lat = parseFloat(url.searchParams.get('lat') || '0');
+  const lng = parseFloat(url.searchParams.get('lng') || '0');
+  const radius = Math.min(parseFloat(url.searchParams.get('radius') || '10000'), 50000);
+
+  const gyms = await searchGooglePlaces(env, query, lat, lng, radius);
+  if (!gyms) {
+    return corsJson({ ok: false, error: 'External search failed' }, { status: 502 }, request, env);
+  }
+
+  return corsJson({ ok: true, gyms, total: gyms.length, source: 'google_places' }, {}, request, env);
+}
+
 // ─── Gym Sessions Management (for gym owners) ───────────────────────────────
 
 async function handleCreateGymSession(request, env) {
@@ -5466,6 +5592,7 @@ export default {
       }
 
       // Gyms
+      if (path === '/api/gyms/search-external' && method === 'GET') return handleSearchExternalGyms(request, env);
       if (path === '/api/gyms' && method === 'GET') return handleGetGyms(request, env);
       if (path.match(/^\/api\/gyms\/(\d+)$/) && method === 'GET') {
         const id = parseInt(path.split('/')[3]);
