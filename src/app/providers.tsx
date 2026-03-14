@@ -9,6 +9,7 @@ import FeedbackWidget from '@/components/feedback-widget'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import PageTimeTracker from '@/components/PageTimeTracker'
 import PostHogPageView from './PostHogPageView'
+import { registerServiceWorker } from '@/lib/sw-register'
 
 function PostHogInit() {
   useEffect(() => {
@@ -30,6 +31,10 @@ function PostHogInit() {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
 
   const content = (

@@ -6,11 +6,56 @@
   "display": "standalone",
   "background_color": "#0D0D0D",
   "theme_color": "#FF4D00",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "id": "/",
+  "prefer_related_applications": false,
+  "categories": ["sports", "social", "fitness"],
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Find Partners",
+      "short_name": "Partners",
+      "url": "/app/partners",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Messages",
+      "short_name": "Messages",
+      "url": "/app/messages",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Training Log",
+      "short_name": "Log",
+      "url": "/app/training-log",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Community",
+      "short_name": "Community",
+      "url": "/app/community",
+      "icons": [{ "src": "/icon.svg", "sizes": "96x96", "type": "image/svg+xml" }]
+    }
+  ],
+  "screenshots": []
 }
