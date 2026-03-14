@@ -256,6 +256,18 @@ export default function GymDetailPage() {
         >
           <Globe className="w-4 h-4" /> Training Passport
         </Link>
+        <Link
+          href={`/app/events?gym_id=${gymId}`}
+          className="flex items-center gap-2 bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg text-sm hover:text-white hover:border-primary/30 transition-colors"
+        >
+          <Calendar className="w-4 h-4" /> Events
+        </Link>
+        <Link
+          href="/app/training-log"
+          className="flex items-center gap-2 bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg text-sm hover:text-white hover:border-primary/30 transition-colors"
+        >
+          <Dumbbell className="w-4 h-4" /> Log Training
+        </Link>
       </div>
 
       {/* Active Promotions */}

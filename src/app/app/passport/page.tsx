@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   Trophy, MapPin, Star, CheckCircle, Lock,
   Footprints, Flame, Zap, Shield, Crown,
-  Compass, Map, Globe, ChevronDown, Loader2, Calendar,
+  Compass, Map, Globe, ChevronDown, Loader2, Calendar, Dumbbell,
 } from 'lucide-react'
 import api, { PassportGym, Badge, Checkin, GymMembership } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
@@ -61,6 +61,7 @@ export default function PassportPage() {
   const [memberships, setMemberships] = useState<GymMembership[]>([])
   const [selectedGymId, setSelectedGymId] = useState<number | null>(null)
   const [checkinLoading, setCheckinLoading] = useState(false)
+  const [lastCheckinGym, setLastCheckinGym] = useState<{ id: number; name: string } | null>(null)
 
   const loadPassport = useCallback(async () => {
     try {
@@ -114,6 +115,7 @@ export default function PassportPage() {
       const result = await api.checkin(selectedGymId)
       toast.success(`Checked in at ${result.gym_name}! +${result.points_earned} pts`)
       setTotalPoints(result.total_points)
+      setLastCheckinGym({ id: selectedGymId, name: result.gym_name })
       loadPassport()
       loadCheckins()
     } catch {
@@ -232,6 +234,32 @@ export default function PassportPage() {
               CHECK IN
             </button>
           </div>
+        </section>
+      )}
+
+      {/* Log Training Prompt (appears after check-in) */}
+      {lastCheckinGym && (
+        <section className="bg-accent/10 border border-accent/30 rounded-xl p-5 flex items-center gap-4">
+          <div className="w-10 h-10 bg-accent/20 rounded-full flex items-center justify-center flex-shrink-0">
+            <Dumbbell className="w-5 h-5 text-accent" />
+          </div>
+          <div className="flex-1">
+            <p className="text-white font-medium">Log your training at {lastCheckinGym.name}?</p>
+            <p className="text-text-secondary text-sm">Track what you trained to build your stats</p>
+          </div>
+          <Link
+            href={`/app/training-log?gym_id=${lastCheckinGym.id}`}
+            className="bg-accent text-background px-4 py-2 rounded-lg font-heading text-sm hover:bg-accent/90 transition-colors flex-shrink-0"
+          >
+            LOG SESSION
+          </Link>
+          <button
+            onClick={() => setLastCheckinGym(null)}
+            className="text-text-secondary hover:text-white p-1"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
         </section>
       )}
 
