@@ -20,7 +20,7 @@ STRIPE_PUBLISHABLE_KEY = "pk_test_51TAeSQ2z80SWtIbfnYmHKLturHUZfrJa4RXGN2W33jEFD
 STRIPE_PRICE_PREMIUM_ATHLETE = "price_1TAh2B2z80SWtIbfegR865xc"  # $9.99/mo athlete plan
 STRIPE_PRICE_PREMIUM_GYM = "price_1TAh2Q2z80SWtIbfltBaqgT6"     # $19.99/mo gym plan
 # Google OAuth — set GOOGLE_CLIENT_ID here, matching NEXT_PUBLIC_GOOGLE_CLIENT_ID on Vercel
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "267258478260-1g7iqhdfrbgchg8ripp46l80senqscav.apps.googleusercontent.com"
 
 # JWT_SECRET must be set via `wrangler secret put JWT_SECRET` for production.
 # For local dev, wrangler dev injects it from [env.dev.vars] below.
@@ -35,10 +35,9 @@ database_name = "training-partner"
 database_id = "30d075cd-2994-4d08-8aef-7ed1a415d9bb"
 migrations_dir = "./migrations"
 
-# R2 bucket for image storage (enable R2 in Cloudflare dashboard first)
-# [[r2_buckets]]
-# binding = "IMAGES"
-# bucket_name = "training-partner-images"
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "training-partner-images"
 
 [triggers]
 crons = ["0 14 * * *"]

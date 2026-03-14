@@ -1,6 +1,52 @@
 // Training Partner — Cloudflare Worker API
 // Full-featured backend: Auth, Profiles, Partners, Gyms, Messaging, Bookings, Subscriptions
 
+// ─── Bot & Abuse Protection ─────────────────────────────────────────────────
+
+// In-memory IP-based rate limiter (resets on worker restart / new isolate)
+const ipRateLimits = new Map();
+
+function checkIpRateLimit(ip, action, limit, windowMs) {
+  const key = `${action}:${ip}`;
+  const now = Date.now();
+  const entry = ipRateLimits.get(key);
+  if (!entry || now > entry.resetTime) {
+    ipRateLimits.set(key, { count: 1, resetTime: now + windowMs });
+    return false; // not rate limited
+  }
+  entry.count++;
+  if (entry.count > limit) {
+    return true; // rate limited
+  }
+  return false;
+}
+
+// Periodic cleanup of expired entries (called probabilistically)
+function cleanupIpRateLimits() {
+  const now = Date.now();
+  for (const [key, entry] of ipRateLimits) {
+    if (now > entry.resetTime) ipRateLimits.delete(key);
+  }
+}
+
+// Disposable / temporary email domains — block on registration
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  'tempmail.com', 'guerrillamail.com', 'mailinator.com', 'throwaway.email',
+  'guerrillamail.info', 'grr.la', 'guerrillamail.net', 'guerrillamail.org',
+  'guerrillamail.de', 'sharklasers.com', 'guerrillamailblock.com', 'yopmail.com',
+  'yopmail.fr', 'cool.fr.nf', 'jetable.fr.nf', 'nospam.ze.tc', 'nomail.xl.cx',
+  'mega.zik.dj', 'speed.1s.fr', 'courriel.fr.nf', 'moncourrier.fr.nf',
+  'temp-mail.org', 'temp-mail.io', 'tempail.com', 'fakeinbox.com',
+  'dispostable.com', 'maildrop.cc', 'mailnesia.com', 'guerrillamailblock.com',
+  'trashmail.com', 'trashmail.me', 'trashmail.net', 'trashmail.org',
+  'discard.email', 'discardmail.com', 'discardmail.de', 'disposableemailaddresses.emailmiser.com',
+  'mailcatch.com', 'throwawaymail.com', 'tempr.email', 'tempmailo.com',
+  'mohmal.com', 'burnermail.io', 'inboxbear.com', 'mintemail.com',
+  'getnada.com', 'emailondeck.com', 'spamgourmet.com',
+  '10minutemail.com', '10minutemail.net', 'minutemail.com',
+  'harakirimail.com', 'mailexpire.com', 'tempinbox.com',
+]);
+
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
 function json(data, init = {}) {
@@ -136,7 +182,7 @@ function verificationEmailHtml(verifyUrl) {
 }
 
 // ── R2 Image Storage ──────────────────────────────────────────
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_IMAGE_SIZE = 50 * 1024; // 50KB — strict limit for storage cost protection
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 async function uploadImageToR2(env, key, data, contentType) {
@@ -544,6 +590,12 @@ async function handleRegister(request, env) {
   const body = await readJson(request);
   if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
 
+  // ── Bot detection: require non-empty User-Agent ──
+  const userAgent = request.headers.get('User-Agent') || '';
+  if (!userAgent || userAgent.length < 5) {
+    return corsJson({ ok: false, error: 'Registration unavailable' }, { status: 403 }, request, env);
+  }
+
   const name = sanitize(normalizeText(body.name));
   const email = sanitize(normalizeText(body.email)).toLowerCase();
   const password = body.password || '';
@@ -553,6 +605,12 @@ async function handleRegister(request, env) {
   if (!name || !email || !password) {
     return corsJson({ ok: false, error: 'Name, email, and password are required' }, { status: 400 }, request, env);
   }
+
+  // ── Minimum name length ──
+  if (name.length < 2) {
+    return corsJson({ ok: false, error: 'Name must be at least 2 characters' }, { status: 400 }, request, env);
+  }
+
   if (password.length < 8 || password.length > 128) {
     return corsJson({ ok: false, error: 'Password must be 8-128 characters' }, { status: 400 }, request, env);
   }
@@ -561,6 +619,12 @@ async function handleRegister(request, env) {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return corsJson({ ok: false, error: 'Invalid email address' }, { status: 400 }, request, env);
+  }
+
+  // ── Disposable email domain blocking ──
+  const emailDomain = email.split('@')[1];
+  if (emailDomain && DISPOSABLE_EMAIL_DOMAINS.has(emailDomain)) {
+    return corsJson({ ok: false, error: 'Please use a permanent email address. Disposable emails are not allowed.' }, { status: 400 }, request, env);
   }
 
   // Validate date of birth (age gate)
@@ -578,11 +642,35 @@ async function handleRegister(request, env) {
     }
   }
 
-  // Rate limit: 5 registrations per IP per hour
+  // ── In-memory IP rate limit: 3 registrations per hour ──
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(ip, 'register', 3, 3_600_000)) {
+    return corsJson({ ok: false, error: 'Too many registration attempts. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // D1-backed rate limit (persists across isolates): 5 registrations per IP per hour
   const allowed = await checkRateLimit(env, `register:${ip}`, 5, 3600);
   if (!allowed) {
     return corsJson({ ok: false, error: 'Too many registration attempts. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // ── Daily account creation monitoring ──
+  try {
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayCount = await env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM users WHERE created_at >= ?"
+    ).bind(todayStart.toISOString()).first();
+    const dailyRegistrations = todayCount?.cnt || 0;
+    if (dailyRegistrations > 500) {
+      return corsJson({ ok: false, error: 'Registration temporarily unavailable. Please try again later.' }, { status: 503 }, request, env);
+    }
+    if (dailyRegistrations > 100) {
+      console.warn(`HIGH ALERT: Over 100 accounts created today (${dailyRegistrations})`);
+    }
+  } catch (e) {
+    console.error('Daily registration check failed:', e);
+    // Don't block registration if the check itself fails
   }
 
   // Verify Cloudflare Turnstile token (if configured)
@@ -769,8 +857,13 @@ async function handleLogin(request, env) {
     return corsJson({ ok: false, error: 'Email and password are required' }, { status: 400 }, request, env);
   }
 
-  // Rate limit: 10 login attempts per IP per 15 minutes
+  // In-memory IP rate limit: 10 logins per hour
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(ip, 'login', 10, 3_600_000)) {
+    return corsJson({ ok: false, error: 'Too many login attempts. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // D1-backed rate limit: 10 login attempts per IP per 15 minutes
   const allowed = await checkRateLimit(env, `login:${ip}`, 10, 900);
   if (!allowed) {
     return corsJson({ ok: false, error: 'Too many login attempts. Try again later.' }, { status: 429 }, request, env);
@@ -1519,7 +1612,13 @@ async function handleSendMessage(request, env, receiverId) {
     return corsJson({ ok: false, error: 'Cannot send message to this user' }, { status: 403 }, request, env);
   }
 
-  // Rate limit: 30 messages per user per 5 minutes
+  // In-memory IP rate limit: 60 messages per hour
+  const msgIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(msgIp, 'message', 60, 3_600_000)) {
+    return corsJson({ ok: false, error: 'You are sending messages too quickly. Please wait.' }, { status: 429 }, request, env);
+  }
+
+  // D1-backed rate limit: 30 messages per user per 5 minutes
   const msgAllowed = await checkRateLimit(env, `msg:${user.id}`, 30, 300);
   if (!msgAllowed) {
     return corsJson({ ok: false, error: 'You are sending messages too quickly. Please wait.' }, { status: 429 }, request, env);
@@ -1841,8 +1940,14 @@ async function handleForgotPassword(request, env) {
   const email = sanitize(normalizeText(body.email)).toLowerCase();
   if (!email) return corsJson({ ok: false, error: 'Email is required' }, { status: 400 }, request, env);
 
-  // Rate limit: 3 reset requests per email per hour
+  // In-memory IP rate limit: 3 password resets per hour
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(ip, 'forgot', 3, 3_600_000)) {
+    // Always return success to prevent enumeration
+    return corsJson({ ok: true }, {}, request, env);
+  }
+
+  // D1-backed rate limit: 3 reset requests per email per hour
   const allowed = await checkRateLimit(env, `forgot:${ip}`, 3, 3600);
   if (!allowed) {
     // Always return success to prevent enumeration
@@ -2091,10 +2196,33 @@ async function handleUploadAvatar(request, env) {
     return corsJson({ ok: false, error: 'Image too large. Maximum ~50KB.' }, { status: 400 }, request, env);
   }
 
-  // Rate limit: 10 uploads per user per hour
+  // In-memory IP rate limit: 10 image uploads per hour
+  const avatarIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(avatarIp, 'upload', 10, 3_600_000)) {
+    return corsJson({ ok: false, error: 'Too many uploads. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // D1-backed rate limit: 10 uploads per user per hour
   const allowed = await checkRateLimit(env, `avatar:${user.id}`, 10, 3600);
   if (!allowed) {
     return corsJson({ ok: false, error: 'Too many uploads. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // Per-user daily upload limit: max 5 uploads per day
+  try {
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayCount = await env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM rate_limits WHERE key = ? AND window_start >= ?"
+    ).bind(`daily-upload:${user.id}`, dayStart.toISOString()).first();
+    if (dayCount && dayCount.cnt >= 5) {
+      return corsJson({ ok: false, error: 'Daily upload limit reached (5 per day). Try again tomorrow.' }, { status: 429 }, request, env);
+    }
+    await env.DB.prepare(
+      'INSERT INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)'
+    ).bind(`daily-upload:${user.id}`, new Date().toISOString()).run();
+  } catch (e) {
+    console.error('Daily upload limit check failed:', e);
   }
 
   await env.DB.prepare(
@@ -2109,6 +2237,26 @@ async function handleImageUpload(request, env) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
+  // In-memory IP rate limit: 10 image uploads per hour
+  const uploadIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(uploadIp, 'upload', 10, 3_600_000)) {
+    return corsJson({ ok: false, error: 'Too many uploads. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // Per-user daily upload limit: max 5 uploads per day
+  try {
+    const dayStart = new Date();
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayCount = await env.DB.prepare(
+      "SELECT COUNT(*) as cnt FROM rate_limits WHERE key = ? AND window_start >= ?"
+    ).bind(`daily-upload:${user.id}`, dayStart.toISOString()).first();
+    if (dayCount && dayCount.cnt >= 5) {
+      return corsJson({ ok: false, error: 'Daily upload limit reached (5 per day). Try again tomorrow.' }, { status: 429 }, request, env);
+    }
+  } catch (e) {
+    console.error('Daily upload limit check failed:', e);
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get('file');
@@ -2120,14 +2268,24 @@ async function handleImageUpload(request, env) {
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       return corsJson({ ok: false, error: 'Unsupported image type' }, { status: 400 }, request, env);
     }
-    if (file.size > MAX_IMAGE_SIZE) {
-      return corsJson({ ok: false, error: 'Image too large (max 5MB)' }, { status: 400 }, request, env);
+    // Strict 50KB limit for storage protection
+    if (file.size > 50 * 1024) {
+      return corsJson({ ok: false, error: 'Image too large. Maximum 50KB.' }, { status: 400 }, request, env);
     }
 
     const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
     const key = `${purpose}/${user.id}/${Date.now()}.${ext}`;
     const data = await file.arrayBuffer();
     const url = await uploadImageToR2(env, key, data, file.type);
+
+    // Track daily upload count
+    try {
+      await env.DB.prepare(
+        'INSERT INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)'
+      ).bind(`daily-upload:${user.id}`, new Date().toISOString()).run();
+    } catch (e) {
+      console.error('Upload tracking failed:', e);
+    }
 
     // Log for moderation review
     await env.DB.prepare(
@@ -2830,7 +2988,13 @@ async function handleCreatePost(request, env) {
     return corsJson({ ok: false, error: 'Title must be at least 3 characters' }, { status: 400 }, request, env);
   }
 
-  // Rate limit: 10 posts per user per hour
+  // In-memory IP rate limit: 20 posts per hour
+  const postIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(postIp, 'post', 20, 3_600_000)) {
+    return corsJson({ ok: false, error: 'Too many posts. Try again later.' }, { status: 429 }, request, env);
+  }
+
+  // D1-backed rate limit: 10 posts per user per hour
   const allowed = await checkRateLimit(env, `post:${user.id}`, 10, 3600);
   if (!allowed) return corsJson({ ok: false, error: 'Too many posts. Try again later.' }, { status: 429 }, request, env);
 
@@ -5088,6 +5252,17 @@ export default {
     if (method === 'OPTIONS') {
       return handleCors(request, env);
     }
+
+    // ── In-memory IP rate limiting (general API protection) ──
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+
+    // General API: 100 requests per minute per IP
+    if (checkIpRateLimit(clientIp, 'api', 100, 60_000)) {
+      return corsJson({ ok: false, error: 'Too many requests. Please slow down.' }, { status: 429 }, request, env);
+    }
+
+    // Probabilistic cleanup of expired rate limit entries (~1% of requests)
+    if (Math.random() < 0.01) cleanupIpRateLimits();
 
     let tracked = false;
     try {

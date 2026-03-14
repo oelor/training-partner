@@ -242,30 +242,35 @@ export default function SignUpPage() {
           </button>
         </form>
 
-        <div className="flex items-center gap-4 my-6">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-text-secondary text-sm">or</span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
+        {/* Google OAuth: hidden until NEXT_PUBLIC_GOOGLE_CLIENT_ID is configured */}
+        {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+          <>
+            <div className="flex items-center gap-4 my-6">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-text-secondary text-sm">or</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
 
-        <GoogleSignIn
-          onCredential={async (credential) => {
-            setLoading(true)
-            setError('')
-            try {
-              const result = await googleLogin(credential)
-              toast.success(result.isNewUser ? 'Account created!' : 'Welcome back!')
-              router.push(result.isNewUser ? '/onboarding' : '/app')
-            } catch (err: unknown) {
-              const message = err instanceof Error ? err.message : 'Google sign-up failed'
-              setError(message)
-              toast.error(message)
-            } finally {
-              setLoading(false)
-            }
-          }}
-          disabled={loading}
-        />
+            <GoogleSignIn
+              onCredential={async (credential) => {
+                setLoading(true)
+                setError('')
+                try {
+                  const result = await googleLogin(credential)
+                  toast.success(result.isNewUser ? 'Account created!' : 'Welcome back!')
+                  router.push(result.isNewUser ? '/onboarding' : '/app')
+                } catch (err: unknown) {
+                  const message = err instanceof Error ? err.message : 'Google sign-up failed'
+                  setError(message)
+                  toast.error(message)
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              disabled={loading}
+            />
+          </>
+        )}
 
         <p className="text-center text-text-secondary mt-8">
           Already have an account?{' '}
