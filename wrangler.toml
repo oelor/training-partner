@@ -34,3 +34,10 @@ binding = "DB"
 database_name = "training-partner"
 database_id = "30d075cd-2994-4d08-8aef-7ed1a415d9bb"
 migrations_dir = "./migrations"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "training-partner-images"
+
+[triggers]
+crons = ["0 14 * * *"]

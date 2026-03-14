@@ -28,7 +28,7 @@ function isAllowedOrigin(origin, env) {
   // Allow Vercel preview deployments
   if (origin.match(/^https:\/\/training-partner-[\w-]+\.vercel\.app$/)) return true;
   // Only allow localhost in non-production environments
-  if (env.ENVIRONMENT !== 'production' && DEV_ORIGINS.includes(origin)) return true;
+  if (env.ENVIRONMENT !== 'production' && (DEV_ORIGINS.includes(origin) || origin.startsWith('http://localhost:'))) return true;
   return false;
 }
 
@@ -133,6 +133,47 @@ function verificationEmailHtml(verifyUrl) {
       <p style="color: #999; font-size: 12px;">Training Partner &mdash; Never Train Alone Again</p>
     </div>
   `;
+}
+
+// ── R2 Image Storage ──────────────────────────────────────────
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+async function uploadImageToR2(env, key, data, contentType) {
+  if (!env.IMAGES) {
+    throw new Error('R2 bucket not configured');
+  }
+  if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
+    throw new Error('Unsupported image type. Use JPEG, PNG, WebP, or GIF.');
+  }
+  if (data.byteLength > MAX_IMAGE_SIZE) {
+    throw new Error('Image too large. Maximum 5MB.');
+  }
+  await env.IMAGES.put(key, data, {
+    httpMetadata: { contentType },
+    customMetadata: { uploadedAt: new Date().toISOString() },
+  });
+  return `/api/images/${key}`;
+}
+
+async function serveImageFromR2(env, key) {
+  if (!env.IMAGES) return new Response('R2 not configured', { status: 503 });
+  const object = await env.IMAGES.get(key);
+  if (!object) return new Response('Not found', { status: 404 });
+  const headers = new Headers();
+  headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
+  headers.set('Cache-Control', 'public, max-age=86400');
+  return new Response(object.body, { headers });
+}
+
+// ── Moderator Role Check ──────────────────────────────────────
+async function isModeratorOrAdmin(env, userId) {
+  const user = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first();
+  if (user?.role === 'admin') return true;
+  const grant = await env.DB.prepare(
+    "SELECT id FROM moderator_grants WHERE user_id = ? AND status = 'active' AND expires_at > datetime('now')"
+  ).bind(userId).first();
+  return !!grant;
 }
 
 // ─── CORS ───────────────────────────────────────────────────────────────────
@@ -344,6 +385,10 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS training_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, gym_id INTEGER, checkin_id INTEGER, partner_id INTEGER, sport TEXT NOT NULL, session_type TEXT NOT NULL DEFAULT 'drilling', duration_minutes INTEGER NOT NULL DEFAULT 60, intensity INTEGER NOT NULL DEFAULT 5, notes TEXT DEFAULT '', techniques TEXT DEFAULT '[]', rounds INTEGER DEFAULT 0, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, creator_id INTEGER NOT NULL, gym_id INTEGER, title TEXT NOT NULL, description TEXT DEFAULT '', sport TEXT DEFAULT '', event_date TEXT NOT NULL, end_date TEXT, location TEXT DEFAULT '', max_attendees INTEGER DEFAULT 0, is_public INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'upcoming', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS event_rsvps (id INTEGER PRIMARY KEY AUTOINCREMENT, event_id INTEGER NOT NULL, user_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'going', created_at TEXT NOT NULL, UNIQUE(event_id, user_id))`,
+      // Moderation & image review tables
+      `CREATE TABLE IF NOT EXISTS moderator_grants (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, granted_by INTEGER NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', notes TEXT DEFAULT '', granted_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS image_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, image_key TEXT NOT NULL, uploader_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'approved', reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      `CREATE TABLE IF NOT EXISTS email_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, email_type TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -1528,16 +1573,28 @@ async function handleGetSubscriptionStatus(request, env) {
 
   const sub = await env.DB.prepare('SELECT * FROM subscriptions WHERE user_id = ?').bind(user.id).first();
 
-  return corsJson({
-    ok: true,
-    subscription: sub ? {
-      plan: sub.plan,
-      status: sub.status,
-      current_period_start: sub.current_period_start,
-      current_period_end: sub.current_period_end,
-      trial_ends_at: sub.trial_ends_at,
-    } : { plan: 'free', status: 'active' }
-  }, {}, request, env);
+  if (sub) {
+    return corsJson({
+      ok: true,
+      subscription: {
+        plan: sub.plan,
+        status: sub.status,
+        current_period_start: sub.current_period_start,
+        current_period_end: sub.current_period_end,
+        trial_ends_at: sub.trial_ends_at,
+      }
+    }, {}, request, env);
+  }
+
+  // Check for active moderator grant as fallback
+  const modGrant = await env.DB.prepare(
+    "SELECT expires_at FROM moderator_grants WHERE user_id = ? AND status = 'active' AND expires_at > datetime('now')"
+  ).bind(user.id).first();
+  if (modGrant) {
+    return corsJson({ ok: true, subscription: { active: true, plan: 'moderator', expires_at: modGrant.expires_at, source: 'moderator_grant', status: 'active' } }, {}, request, env);
+  }
+
+  return corsJson({ ok: true, subscription: { plan: 'free', status: 'active' } }, {}, request, env);
 }
 
 // ─── Stripe Integration ───────────────────────────────────────────────────
@@ -1674,6 +1731,7 @@ async function handleCreateCheckout(request, env) {
       'customer_email': user.email,
       'metadata[user_id]': String(user.id),
       'metadata[plan]': plan,
+      'subscription_data[trial_period_days]': '30',
     }),
   });
 
@@ -2042,6 +2100,110 @@ async function handleUploadAvatar(request, env) {
   ).bind(avatar, isoNow(), user.id).run()
 
   return corsJson({ ok: true, avatar_url: avatar }, {}, request, env);
+}
+
+// POST /api/upload-image — generic image upload to R2
+async function handleImageUpload(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  try {
+    const formData = await request.formData();
+    const file = formData.get('file');
+    const purpose = formData.get('purpose') || 'general';
+
+    if (!file || !file.size) {
+      return corsJson({ ok: false, error: 'No file provided' }, { status: 400 }, request, env);
+    }
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      return corsJson({ ok: false, error: 'Unsupported image type' }, { status: 400 }, request, env);
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      return corsJson({ ok: false, error: 'Image too large (max 5MB)' }, { status: 400 }, request, env);
+    }
+
+    const ext = file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1];
+    const key = `${purpose}/${user.id}/${Date.now()}.${ext}`;
+    const data = await file.arrayBuffer();
+    const url = await uploadImageToR2(env, key, data, file.type);
+
+    // Log for moderation review
+    await env.DB.prepare(
+      'INSERT INTO image_reviews (image_key, uploader_id, status) VALUES (?, ?, ?)'
+    ).bind(key, user.id, 'approved').run();
+
+    return corsJson({ ok: true, url, key }, {}, request, env);
+  } catch (err) {
+    return corsJson({ ok: false, error: err.message }, { status: 500 }, request, env);
+  }
+}
+
+// ─── Moderator Admin Endpoints ──────────────────────────────────────────────
+
+// GET /api/admin/moderators — list all moderators
+async function handleListModerators(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'admin') return corsJson({ ok: false, error: 'Admin only' }, { status: 403 }, request, env);
+  const mods = await env.DB.prepare(
+    "SELECT mg.*, u.display_name, u.email FROM moderator_grants mg JOIN users u ON u.id = mg.user_id ORDER BY mg.granted_at DESC"
+  ).all();
+  return corsJson({ ok: true, moderators: mods.results }, {}, request, env);
+}
+
+// POST /api/admin/moderators/grant — grant moderator status
+async function handleGrantModerator(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'admin') return corsJson({ ok: false, error: 'Admin only' }, { status: 403 }, request, env);
+  const { user_id, months, notes } = await readJson(request);
+  if (!user_id || !months) return corsJson({ ok: false, error: 'user_id and months required' }, { status: 400 }, request, env);
+  const expires = new Date();
+  expires.setMonth(expires.getMonth() + months);
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO moderator_grants (user_id, granted_by, expires_at, status, notes) VALUES (?, ?, ?, 'active', ?)"
+  ).bind(user_id, user.id, expires.toISOString(), notes || '').run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// POST /api/admin/moderators/revoke — revoke moderator status
+async function handleRevokeModerator(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'admin') return corsJson({ ok: false, error: 'Admin only' }, { status: 403 }, request, env);
+  const { user_id } = await readJson(request);
+  await env.DB.prepare("UPDATE moderator_grants SET status = 'revoked' WHERE user_id = ?").bind(user_id).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Moderation Queue Endpoints ─────────────────────────────────────────────
+
+// GET /api/moderation/queue — flagged images for review
+async function handleModerationQueue(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const isMod = await isModeratorOrAdmin(env, user.id);
+  if (!isMod) return corsJson({ ok: false, error: 'Moderator access required' }, { status: 403 }, request, env);
+  const flagged = await env.DB.prepare(
+    "SELECT ir.*, u.display_name, u.email FROM image_reviews ir JOIN users u ON u.id = ir.uploader_id WHERE ir.status = 'flagged' ORDER BY ir.created_at DESC LIMIT 50"
+  ).all();
+  return corsJson({ ok: true, items: flagged.results }, {}, request, env);
+}
+
+// POST /api/moderation/review — approve or reject an image
+async function handleModerationReview(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const isMod = await isModeratorOrAdmin(env, user.id);
+  if (!isMod) return corsJson({ ok: false, error: 'Moderator access required' }, { status: 403 }, request, env);
+  const { image_id, action } = await readJson(request);
+  if (!['approved', 'rejected'].includes(action)) {
+    return corsJson({ ok: false, error: 'action must be approved or rejected' }, { status: 400 }, request, env);
+  }
+  await env.DB.prepare(
+    "UPDATE image_reviews SET status = ?, reviewed_by = ?, reviewed_at = datetime('now') WHERE id = ?"
+  ).bind(action, user.id, image_id).run();
+  return corsJson({ ok: true }, {}, request, env);
 }
 
 // ─── Block User Route ────────────────────────────────────────────────────────
@@ -4981,6 +5143,24 @@ export default {
       if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
       if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
 
+      // R2 image serving
+      if (method === 'GET' && path.startsWith('/api/images/')) {
+        const key = path.replace('/api/images/', '');
+        return serveImageFromR2(env, key);
+      }
+
+      // Image upload
+      if (path === '/api/upload-image' && method === 'POST') return handleImageUpload(request, env);
+
+      // Moderation
+      if (path === '/api/moderation/queue' && method === 'GET') return handleModerationQueue(request, env);
+      if (path === '/api/moderation/review' && method === 'POST') return handleModerationReview(request, env);
+
+      // Moderator management
+      if (path === '/api/admin/moderators' && method === 'GET') return handleListModerators(request, env);
+      if (path === '/api/admin/moderators/grant' && method === 'POST') return handleGrantModerator(request, env);
+      if (path === '/api/admin/moderators/revoke' && method === 'POST') return handleRevokeModerator(request, env);
+
       // Trust & Safety: Identity Verification
       if (path === '/api/identity/submit' && method === 'POST') return handleSubmitIdentity(request, env);
       if (path === '/api/identity/status' && method === 'GET') return handleGetIdentityStatus(request, env);
@@ -5251,5 +5431,52 @@ export default {
         trackRequest(env, ctx, { method, path, status: 200, durationMs: Date.now() - startTime, request });
       }
     }
-  }
+  },
+
+  async scheduled(event, env) {
+    // Day 20: Feedback request email
+    const day20Users = await env.DB.prepare(`
+      SELECT u.id, u.email, u.display_name FROM users u
+      LEFT JOIN email_log el ON el.user_id = u.id AND el.email_type = 'trial_feedback_day20'
+      WHERE u.created_at <= datetime('now', '-20 days')
+        AND u.created_at > datetime('now', '-21 days')
+        AND el.id IS NULL AND u.role != 'admin'
+    `).all();
+
+    for (const user of day20Users.results || []) {
+      await sendEmail(env, {
+        to: user.email,
+        subject: "How's your Training Partner experience? (Day 20)",
+        html: `<p>Hi ${user.display_name || 'there'},</p>
+          <p>You've been using Training Partner for 20 days! We'd love to hear how it's going.</p>
+          <p>Reply to this email with any feedback — what's working, what could be better.</p>
+          <p>Your trial continues for 10 more days.</p>
+          <p>— The Training Partner Team</p>`
+      });
+      await env.DB.prepare('INSERT INTO email_log (user_id, email_type) VALUES (?, ?)').bind(user.id, 'trial_feedback_day20').run();
+    }
+
+    // Day 29: Trial ending reminder
+    const day29Users = await env.DB.prepare(`
+      SELECT u.id, u.email, u.display_name FROM users u
+      LEFT JOIN email_log el ON el.user_id = u.id AND el.email_type = 'trial_ending_day29'
+      WHERE u.created_at <= datetime('now', '-29 days')
+        AND u.created_at > datetime('now', '-30 days')
+        AND el.id IS NULL AND u.role != 'admin'
+    `).all();
+
+    for (const user of day29Users.results || []) {
+      await sendEmail(env, {
+        to: user.email,
+        subject: "Your Training Partner trial ends tomorrow",
+        html: `<p>Hi ${user.display_name || 'there'},</p>
+          <p>We hope you've enjoyed your 30-day trial!</p>
+          <p>Your trial ends tomorrow. If you'd like to continue, no action needed.</p>
+          <p><strong>If you'd like to cancel</strong>, visit your <a href="https://trainingpartner.app/app/settings">account settings</a>. We never want to charge anyone who isn't getting value.</p>
+          <p>Thanks for giving us a try!</p>
+          <p>— The Training Partner Team</p>`
+      });
+      await env.DB.prepare('INSERT INTO email_log (user_id, email_type) VALUES (?, ?)').bind(user.id, 'trial_ending_day29').run();
+    }
+  },
 };

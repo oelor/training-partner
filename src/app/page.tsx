@@ -17,8 +17,6 @@ import {
   Heart
 } from 'lucide-react'
 import {
-  WrestlerSilhouette,
-  BJJGuardSilhouette,
   MuayThaiKickSilhouette,
   BoxerSilhouette,
   JudoThrowSilhouette,
@@ -129,15 +127,16 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Hero background — subtle atmospheric glow (heavily faded for text prominence) */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
-          <div className="absolute inset-0 opacity-10" style={{
-            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, #FF4D00 10px, #FF4D00 20px)',
-          }} />
+          <div
+            className="absolute inset-0 bg-cover bg-no-repeat opacity-[0.10]"
+            style={{ backgroundImage: 'url(/hero-banner.png)', backgroundPosition: 'center 65%' }}
+          />
+          {/* Strong gradient overlays: keep the abstract glow, suppress detail */}
+          <div className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/70 to-background" />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/70 via-transparent to-background/70" />
         </div>
-        {/* Decorative silhouettes */}
-        <WrestlerSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-32 w-72 lg:w-80 text-primary opacity-[0.06] z-0 -rotate-6" />
-        <BJJGuardSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-48 w-64 lg:w-80 text-primary opacity-[0.06] z-0 rotate-6" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center">
             <div className="inline-flex items-center gap-2 bg-surface px-4 py-2 rounded-full border border-border mb-8 animate-fade-in">
@@ -150,8 +149,9 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-xl text-text-secondary max-w-2xl mx-auto mb-10 animate-slide-up delay-100">
-              Connect with compatible training partners based on skill level, weight class,
-              and training goals. Plus access exclusive open mat hours at partner gyms.
+              Connect with compatible training partners based on skill level, goals,
+              and schedule. Whether you&apos;re into combat sports, lifting, running, or just
+              need a gym buddy — find your match.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up delay-200">
@@ -176,8 +176,8 @@ export default function LandingPage() {
                 <div className="text-text-secondary text-sm">To Get Started</div>
               </div>
               <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">BJJ</div>
-                <div className="text-text-secondary text-sm">Wrestling · MMA</div>
+                <div className="font-heading text-3xl sm:text-4xl text-primary">50+</div>
+                <div className="text-text-secondary text-sm">Sports &amp; Activities</div>
               </div>
               <div>
                 <div className="font-heading text-3xl sm:text-4xl text-primary">24/7</div>
@@ -202,8 +202,8 @@ export default function LandingPage() {
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { sport: 'BJJ', level: 'Purple Belt', match: 94, color: 'primary' },
-                    { sport: 'Wrestling', level: 'Advanced', match: 91, color: 'accent' },
-                    { sport: 'MMA', level: 'Intermediate', match: 87, color: 'primary' },
+                    { sport: 'Weightlifting', level: 'Intermediate', match: 91, color: 'accent' },
+                    { sport: 'Rucking', level: 'Advanced', match: 87, color: 'primary' },
                   ].map((p, i) => (
                     <div key={i} className="bg-background rounded-xl p-4 border border-border">
                       <div className="flex items-center justify-between mb-3">
@@ -331,15 +331,16 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
-              SUPPORTED <span className="gradient-text">SPORTS</span>
+              SUPPORTED <span className="gradient-text">ACTIVITIES</span>
             </h2>
           </div>
 
           <div className="flex flex-wrap justify-center gap-4">
             {[
               'Wrestling', 'MMA', 'Brazilian Jiu-Jitsu', 'Boxing',
-              'Kickboxing', 'Judo', 'Taekwondo', 'Karate',
-              'Sambo', 'Muay Thai', 'Capoeira', 'Kung Fu'
+              'Weightlifting', 'Running', 'Rucking', 'CrossFit',
+              'Kickboxing', 'Judo', 'Muay Thai', 'Cycling',
+              'Yoga', 'Rock Climbing', 'Swimming', 'Calisthenics'
             ].map((sport) => (
               <span
                 key={sport}
@@ -479,7 +480,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-center text-text-secondary text-sm mt-8">
-            All plans come with a 7-day free trial. Cancel anytime. Powered by Stripe.
+            All plans come with a 30-day free trial. Cancel anytime. No surprise charges.
           </p>
         </div>
       </section>
@@ -581,8 +582,8 @@ export default function LandingPage() {
                   <div className="space-y-2 flex-1">
                     {[
                       { sport: 'BJJ', level: 'Purple Belt', pct: 94 },
-                      { sport: 'Wrestling', level: 'Advanced', pct: 91 },
-                      { sport: 'MMA', level: 'Blue Belt', pct: 87 },
+                      { sport: 'Weightlifting', level: 'Intermediate', pct: 91 },
+                      { sport: 'Running', level: '10K Pacer', pct: 87 },
                     ].map((m, i) => (
                       <div key={i} className="bg-surface border border-border rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">

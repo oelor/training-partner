@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { MapPin, Shield, Star, Search, Filter, Megaphone, Tag, Navigation, X } from 'lucide-react'
 import api, { Gym, DiscoverGym, isPremiumPlan } from '@/lib/api'
@@ -13,6 +13,8 @@ const SPORTS = ['BJJ', 'MMA', 'Wrestling', 'Muay Thai', 'Boxing', 'Judo', 'Karat
 export default function GymsPage() {
   const { subscription } = useAuth()
   const toast = useToast()
+  const toastRef = useRef(toast)
+  toastRef.current = toast
   const [gyms, setGyms] = useState<DiscoverGym[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -45,14 +47,15 @@ export default function GymsPage() {
           setGyms(data.gyms || [])
         }
       } catch {
-        toast.error('Failed to load gyms')
+        toastRef.current.error('Failed to load gyms')
       } finally {
         setLoading(false)
       }
     }
     const timer = setTimeout(load, 300)
     return () => clearTimeout(timer)
-  }, [search, sportFilter, showPromotions, showOpenMats, useLocation, userLat, userLng, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, sportFilter, showPromotions, showOpenMats, useLocation, userLat, userLng])
 
   const handleUseLocation = () => {
     if (useLocation) {

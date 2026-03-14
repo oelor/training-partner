@@ -84,11 +84,10 @@ function AvatarUpload({ currentUrl, userName, onUploaded }: { currentUrl?: strin
   )
 }
 
-const sportsList = [
-  'Wrestling', 'MMA', 'BJJ', 'Boxing',
-  'Kickboxing', 'Judo', 'Muay Thai', 'Karate', 'Sambo'
-]
-const skillLevels = ['Beginner', 'Intermediate', 'Advanced', 'Pro']
+import { ACTIVITIES, ACTIVITY_CATEGORIES, SKILL_LEVELS } from '@/lib/constants'
+
+const sportsList = [...ACTIVITIES]
+const skillLevels = [...SKILL_LEVELS]
 const weightClasses = [
   'Flyweight (126 lbs)', 'Bantamweight (126-132 lbs)', 'Featherweight (132-145 lbs)',
   'Lightweight (145-155 lbs)', 'Welterweight (155-170 lbs)', 'Middleweight (170-185 lbs)',
@@ -293,22 +292,27 @@ function ProfileForm() {
 
       {/* Sports */}
       <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in" style={{ animationDelay: '0.1s' }}>
-        <h2 className="font-heading text-xl text-white mb-6">COMBAT SPORTS</h2>
-        <div className="flex flex-wrap gap-3">
-          {sportsList.map(sport => (
-            <button
-              key={sport}
-              onClick={() => toggleSport(sport)}
-              className={`px-4 py-2 rounded-full border transition-all card-hover hover:scale-105 ${
-                profile.sports.includes(sport)
-                  ? 'bg-primary border-primary text-white'
-                  : 'border-border text-text-secondary hover:border-primary hover:text-white'
-              }`}
-            >
-              {sport}
-            </button>
-          ))}
-        </div>
+        <h2 className="font-heading text-xl text-white mb-6">SPORTS & ACTIVITIES</h2>
+        {Object.entries(ACTIVITY_CATEGORIES).map(([category, activities]) => (
+          <div key={category} className="mb-4 last:mb-0">
+            <h3 className="text-text-secondary text-xs uppercase tracking-wider mb-2">{category}</h3>
+            <div className="flex flex-wrap gap-2">
+              {activities.map(sport => (
+                <button
+                  key={sport}
+                  onClick={() => toggleSport(sport)}
+                  className={`px-3 py-1.5 rounded-full border text-sm transition-all card-hover hover:scale-105 ${
+                    profile.sports.includes(sport)
+                      ? 'bg-primary border-primary text-white'
+                      : 'border-border text-text-secondary hover:border-primary hover:text-white'
+                  }`}
+                >
+                  {sport}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Skill Level & Weight Class */}

@@ -375,12 +375,25 @@ export default function PartnerDetailPage() {
             WHY YOU MATCH
           </h3>
           <div className="space-y-2">
-            {Object.entries(partner.explanation).map(([key, value]) => (
-              <div key={key} className="flex justify-between text-sm">
-                <span className="text-text-secondary capitalize">{key.replace(/_/g, ' ')}</span>
-                <span className="text-white">{String(value)}</span>
-              </div>
-            ))}
+            {Object.entries(partner.explanation).map(([key, value]) => {
+              const v = value as Record<string, unknown>
+              let display = ''
+              if (v.common && Array.isArray(v.common)) {
+                display = v.common.join(', ')
+              } else if (v.levelA && v.levelB) {
+                display = `${v.levelA} vs ${v.levelB}`
+              } else if (typeof v.score === 'number') {
+                display = `${v.score} pts`
+              } else {
+                display = String(value)
+              }
+              return (
+                <div key={key} className="flex justify-between text-sm">
+                  <span className="text-text-secondary capitalize">{key.replace(/_/g, ' ')}</span>
+                  <span className="text-white">{display}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
