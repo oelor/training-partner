@@ -44,3 +44,8 @@ next-env.d.ts
 # Manus build instructions (not app code)
 MANUS_INSTANCE_*.md
 MANUS_PROMPT.md
+
+# Capacitor native build artifacts
+ios/App/Pods/
+android/.gradle/
+android/app/build/
