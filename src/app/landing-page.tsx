@@ -38,9 +38,14 @@ const combatSportSlugs: Record<string, string> = {
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [heroSrc, setHeroSrc] = useState('/hero-banner.webp')
 
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem('tp_token'))
+    // Use mobile-optimized hero image on small screens
+    if (window.innerWidth < 768) {
+      setHeroSrc('/hero-banner-mobile.webp')
+    }
   }, [])
 
   return (
@@ -143,7 +148,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 z-0">
           <div
             className="absolute inset-0 bg-cover bg-no-repeat opacity-[0.30]"
-            style={{ backgroundImage: 'url(/hero-banner.png)', backgroundPosition: 'center 65%' }}
+            style={{ backgroundImage: `url(${heroSrc})`, backgroundPosition: 'center 65%' }}
           />
           {/* Gradient overlays: fade edges but let center show through */}
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/40 to-background" />
