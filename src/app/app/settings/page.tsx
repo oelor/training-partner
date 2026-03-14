@@ -27,7 +27,23 @@ export default function SettingsPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
-  const isPremium = subscription?.plan === 'premium'
+  const isPremium = subscription?.plan === 'premium' || subscription?.plan === 'premium_athlete' || subscription?.plan === 'premium_gym'
+  const [upgrading, setUpgrading] = useState(false)
+
+  const handleUpgrade = async (plan: 'premium_athlete' | 'premium_gym' = 'premium_athlete') => {
+    setUpgrading(true)
+    try {
+      const res = await api.createCheckout(plan)
+      if (res.url) {
+        window.location.href = res.url
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to start checkout'
+      alert(message)
+    } finally {
+      setUpgrading(false)
+    }
+  }
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmation !== 'DELETE') return
@@ -319,7 +335,7 @@ export default function SettingsPage() {
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <div className="text-text-secondary text-sm">Premium Plan</div>
-                      <div className="text-white font-heading text-3xl">$20<span className="text-lg text-text-secondary">/month</span></div>
+                      <div className="text-white font-heading text-3xl">$9.99<span className="text-lg text-text-secondary">/month</span></div>
                     </div>
                     <Crown className="w-10 h-10 text-accent" />
                   </div>
@@ -330,8 +346,12 @@ export default function SettingsPage() {
                     <li className="flex items-center gap-2 text-white text-sm"><Check className="w-4 h-4 text-accent" /> Priority messaging</li>
                     <li className="flex items-center gap-2 text-white text-sm"><Check className="w-4 h-4 text-accent" /> Verified gym access</li>
                   </ul>
-                  <button className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors">
-                    Upgrade Now
+                  <button
+                    onClick={() => handleUpgrade('premium_athlete')}
+                    disabled={upgrading}
+                    className="w-full bg-primary text-white py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {upgrading ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : 'Upgrade Now'}
                   </button>
                 </div>
               )}
