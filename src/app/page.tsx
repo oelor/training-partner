@@ -249,18 +249,28 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Visual break - feature showcase */}
+      {/* Visual break - stats showcase */}
       <section className="relative py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-5xl mx-auto">
-          <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10">
-            <Image
-              src="/images/feature-cards.png"
-              alt="Training Partner app features - dynamic wrestling silhouettes with neon accents"
-              width={1920}
-              height={1080}
-              className="w-full h-auto"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/80 via-transparent to-background/80" />
+          <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/10 bg-gradient-to-r from-primary/10 via-surface to-accent/10 border border-border p-12">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+              <div>
+                <div className="font-heading text-4xl sm:text-5xl text-primary mb-2">9+</div>
+                <div className="text-text-secondary text-sm">Combat Sports</div>
+              </div>
+              <div>
+                <div className="font-heading text-4xl sm:text-5xl text-accent mb-2">∞</div>
+                <div className="text-text-secondary text-sm">Training Partners</div>
+              </div>
+              <div>
+                <div className="font-heading text-4xl sm:text-5xl text-primary mb-2">24/7</div>
+                <div className="text-text-secondary text-sm">Partner Matching</div>
+              </div>
+              <div>
+                <div className="font-heading text-4xl sm:text-5xl text-accent mb-2">FREE</div>
+                <div className="text-text-secondary text-sm">To Get Started</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -330,7 +340,7 @@ export default function LandingPage() {
             {[
               'Wrestling', 'MMA', 'Brazilian Jiu-Jitsu', 'Boxing', 
               'Kickboxing', 'Judo', 'Taekwondo', 'Karate', 
-              'Sambo', 'Muay Thai', 'Capoeira', 'Sifu'
+              'Sambo', 'Muay Thai', 'Capoeira', 'Kung Fu'
             ].map((sport) => (
               <span 
                 key={sport}
