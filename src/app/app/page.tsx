@@ -42,17 +42,29 @@ export default function DashboardPage() {
   const profileComplete = profile?.profile_complete || 0
   const isProfileIncomplete = !profile || profileComplete < 50
 
-  const errorBanner = error ? (
-      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start justify-between gap-4 mb-4">
-        <div className="flex items-start gap-3 flex-1">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-        </div>
-        <button onClick={() => setError(null)} className="inline-flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
-          <RefreshCw className="w-4 h-4" />
-          Retry
-        </button>
-      </div>
-    ) : undefined;
+  const handleRetry = () => {
+    setError(null)
+    setLoading(true)
+    async function reload() {
+      try {
+        const [pData, gData, bData, mData] = await Promise.all([
+          api.getPartners({ limit: 3 }).catch(() => ({ partners: [], total: 0 })),
+          api.getGyms().catch(() => ({ gyms: [], total: 0 })),
+          api.getBookings().catch(() => ({ bookings: [] })),
+          api.getUnreadCount().catch(() => ({ unread: 0 })),
+        ])
+        setPartners(pData.partners || [])
+        setGyms(gData.gyms?.slice(0, 3) || [])
+        setBookings(bData.bookings || [])
+        setUnread(mData.unread || 0)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+      } finally {
+        setLoading(false)
+      }
+    }
+    reload()
+  }
 
   return (
     <>
@@ -65,7 +77,7 @@ export default function DashboardPage() {
               <p className="text-text-secondary text-xs mt-1">{error}</p>
             </div>
           </div>
-          <button onClick={() => setError(null)} className="inline-flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
+          <button onClick={handleRetry} className="inline-flex items-center gap-2 bg-red-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-600 transition-colors">
             <RefreshCw className="w-4 h-4" />
             Retry
           </button>
@@ -98,6 +110,20 @@ export default function DashboardPage() {
       )}
 
       {/* Stats Grid */}
+      {loading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-surface border border-border rounded-xl p-6 animate-pulse">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-border rounded-lg" />
+                <div className="h-4 w-16 bg-border rounded" />
+              </div>
+              <div className="h-8 w-12 bg-border rounded mb-1" />
+              <div className="h-4 w-20 bg-border rounded" />
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-surface border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-2">
@@ -143,6 +169,7 @@ export default function DashboardPage() {
           <div className="text-text-secondary text-sm">Partner gyms</div>
         </div>
       </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid md:grid-cols-2 gap-4">
