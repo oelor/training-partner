@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Users,
@@ -18,6 +18,12 @@ import {
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    // Check if user has a token (lightweight check, no API call)
+    setIsLoggedIn(!!localStorage.getItem('token'))
+  }, [])
 
   return (
     <div className="min-h-screen bg-background bg-pattern">
@@ -44,18 +50,29 @@ export default function LandingPage() {
               <Link href="#pricing" className="text-text-secondary hover:text-primary transition-colors">
                 Pricing
               </Link>
-              <Link 
-                href="/auth/signin" 
-                className="text-text-secondary hover:text-primary transition-colors"
-              >
-                Sign In
-              </Link>
-              <Link 
-                href="/auth/signup" 
-                className="bg-primary text-white px-5 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors btn-glow"
-              >
-                Get Started
-              </Link>
+              {isLoggedIn ? (
+                <Link
+                  href="/app"
+                  className="bg-primary text-white px-5 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors btn-glow"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/auth/signin"
+                    className="text-text-secondary hover:text-primary transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="bg-primary text-white px-5 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors btn-glow"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
@@ -72,24 +89,35 @@ export default function LandingPage() {
         {mobileMenuOpen && (
           <div className="md:hidden bg-surface border-t border-border">
             <div className="px-4 py-4 space-y-3">
-              <Link href="#features" className="block text-text-secondary hover:text-primary">
+              <Link href="#features" onClick={() => setMobileMenuOpen(false)} className="block text-text-secondary hover:text-primary">
                 Features
               </Link>
-              <Link href="#how-it-works" className="block text-text-secondary hover:text-primary">
+              <Link href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="block text-text-secondary hover:text-primary">
                 How It Works
               </Link>
-              <Link href="#pricing" className="block text-text-secondary hover:text-primary">
+              <Link href="#pricing" onClick={() => setMobileMenuOpen(false)} className="block text-text-secondary hover:text-primary">
                 Pricing
               </Link>
-              <Link href="/auth/signin" className="block text-text-secondary hover:text-primary">
-                Sign In
-              </Link>
-              <Link 
-                href="/auth/signup" 
-                className="block bg-primary text-white px-5 py-2 rounded-md font-medium text-center"
-              >
-                Get Started
-              </Link>
+              {isLoggedIn ? (
+                <Link
+                  href="/app"
+                  className="block bg-primary text-white px-5 py-2 rounded-md font-medium text-center"
+                >
+                  Go to Dashboard
+                </Link>
+              ) : (
+                <>
+                  <Link href="/auth/signin" className="block text-text-secondary hover:text-primary">
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="block bg-primary text-white px-5 py-2 rounded-md font-medium text-center"
+                  >
+                    Get Started
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         )}
