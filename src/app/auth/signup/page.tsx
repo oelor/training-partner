@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
@@ -57,15 +56,9 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12 relative overflow-hidden">
-      {/* Background image with overlay */}
+      {/* Background pattern */}
       <div className="absolute inset-0 z-0">
-        <Image
-          src="/images/hero-banner.png"
-          alt=""
-          fill
-          className="object-cover object-center opacity-10"
-          priority
-        />
+        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, rgba(255,77,0,0.3) 0%, transparent 50%), radial-gradient(circle at 75% 75%, rgba(0,255,136,0.2) 0%, transparent 50%)' }} />
         <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/95 to-background" />
       </div>
       <div className="w-full max-w-md relative z-10">

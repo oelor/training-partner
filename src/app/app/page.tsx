@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Users, MapPin, MessageCircle, Trophy, Calendar, ArrowRight, UserSearch, TrendingUp, Star, Crown, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
@@ -323,15 +322,13 @@ export default function DashboardPage() {
           <div className="grid md:grid-cols-3 gap-4">
             {gyms.map((gym) => (
               <Link key={gym.id} href={`/app/gyms/${gym.id}`} className="bg-surface border border-border rounded-xl overflow-hidden card-hover group">
-                <div className="h-28 relative overflow-hidden">
-                  <Image
-                    src="/images/gym-interior.png"
-                    alt={`${gym.name} gym`}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+                <div className="h-28 relative overflow-hidden bg-gradient-to-br from-surface via-background to-surface">
+                  <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,77,0,0.1) 10px, rgba(255,77,0,0.1) 20px)' }} />
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    <span className="text-xs text-text-secondary">{gym.city}</span>
+                  </div>
                   <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
-                  <MapPin className="absolute bottom-2 right-2 w-5 h-5 text-primary/70" />
                 </div>
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-1">
