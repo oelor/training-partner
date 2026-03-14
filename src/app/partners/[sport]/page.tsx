@@ -73,6 +73,9 @@ export async function generateMetadata({ params }: { params: Promise<{ sport: st
   return {
     title: `Find ${info.name} Training Partners | Training Partner`,
     description: info.description,
+    alternates: {
+      canonical: `https://trainingpartner.app/partners/${sport}`,
+    },
     openGraph: {
       title: `Find ${info.name} Training Partners Near You`,
       description: info.description,

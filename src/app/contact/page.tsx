@@ -5,11 +5,73 @@ import { Users, Mail, MessageCircle, Shield, Clock } from 'lucide-react'
 export const metadata: Metadata = {
   title: 'Contact & Support | Training Partner',
   description: 'Get help with your Training Partner account. Contact our support team for questions about training partners, gyms, subscriptions, and more.',
+  alternates: {
+    canonical: 'https://trainingpartner.app/contact',
+  },
+}
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: 'Is Training Partner free to use?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Yes! Creating an account, building your profile, finding training partners, and messaging are all free. We offer an optional Premium plan with advanced features like unlimited matching and priority support.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'How does the matching algorithm work?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'We match you based on your sport, skill level, weight class, location, training goals, and availability. The more complete your profile, the better your matches.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'How do I report a user?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'You can report a user from their profile page using the flag icon, or email us at safety@trainingpartner.app. We review all reports within 24 hours.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'Can I use Training Partner in my city?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: "Training Partner is available everywhere. If there aren't many partners in your area yet, creating your profile helps grow the local community.",
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'How do I delete my account?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: 'Go to Settings in the app and scroll to the Account section. You can request account deletion there, or email us at support@trainingpartner.app.',
+      },
+    },
+    {
+      '@type': 'Question',
+      name: 'I forgot my password. How do I reset it?',
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: "Click \"Forgot Password\" on the sign-in page. We'll send a reset link to your email address.",
+      },
+    },
+  ],
 }
 
 export default function ContactPage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <header className="border-b border-border">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">

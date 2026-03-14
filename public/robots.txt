@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /app/
-Disallow: /auth/
-Disallow: /api/
-
-Sitemap: https://trainingpartner.app/sitemap.xml

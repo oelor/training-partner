@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     siteName: 'Training Partner',
     images: [
       {
-        url: '/og-image.png',
+        url: 'https://trainingpartner.app/og-image.png',
         width: 1200,
         height: 630,
         alt: 'Training Partner - Never Train Alone Again',
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Training Partner - Never Train Alone Again',
     description: 'Connect with compatible training partners based on skill level, weight class, and training goals.',
-    images: ['/og-image.png'],
+    images: ['https://trainingpartner.app/og-image.png'],
   },
   robots: {
     index: true,
@@ -72,6 +72,18 @@ const jsonLd = {
         '@type': 'SearchAction',
         target: `${SITE_URL}/partners?q={search_term_string}`,
         'query-input': 'required name=search_term_string',
+      },
+    },
+    {
+      '@type': 'WebApplication',
+      name: 'Training Partner',
+      url: SITE_URL,
+      applicationCategory: 'SportsApplication',
+      operatingSystem: 'Web, iOS, Android',
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD',
       },
     },
   ],

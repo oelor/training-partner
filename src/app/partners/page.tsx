@@ -5,6 +5,9 @@ import { Users, ArrowRight } from 'lucide-react'
 export const metadata: Metadata = {
   title: 'Find Training Partners by Sport | Training Partner',
   description: 'Find combat sports training partners near you. Browse by sport — Wrestling, MMA, BJJ, Boxing, Kickboxing, Muay Thai, Judo, Karate, and Sambo.',
+  alternates: {
+    canonical: 'https://trainingpartner.app/partners',
+  },
 }
 
 const sports = [

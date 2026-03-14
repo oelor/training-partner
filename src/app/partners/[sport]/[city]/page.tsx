@@ -37,6 +37,9 @@ export async function generateMetadata({ params }: { params: Promise<{ sport: st
   return {
     title: `${sportName} Training Partners in ${cityName} | Training Partner`,
     description: `Find ${sportName.toLowerCase()} training partners in ${cityName}. Connect with local athletes at your skill level for sparring, drilling, and competition prep.`,
+    alternates: {
+      canonical: `https://trainingpartner.app/partners/${sport}/${city}`,
+    },
     openGraph: {
       title: `${sportName} Training Partners in ${cityName}`,
       description: `Find ${sportName.toLowerCase()} training partners in ${cityName}. Connect with local athletes at your skill level.`,
@@ -49,6 +52,44 @@ export default async function CityPage({ params }: { params: Promise<{ sport: st
   const { sport, city } = await params
   const sportName = sportsMap[sport]
   const cityName = citySlugToName(city)
+
+  const pageUrl = `https://trainingpartner.app/partners/${sport}/${city}`
+  const pageDescription = `Find ${sportName?.toLowerCase() || sport} training partners in ${cityName}. Connect with local athletes at your skill level for sparring, drilling, and competition prep.`
+
+  const jsonLd = sportName ? {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: `${sportName} Training Partners in ${cityName}`,
+        description: pageDescription,
+        url: pageUrl,
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'Home',
+            item: 'https://trainingpartner.app',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: sportName,
+            item: `https://trainingpartner.app/partners/${sport}`,
+          },
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: cityName,
+            item: pageUrl,
+          },
+        ],
+      },
+    ],
+  } : null
 
   if (!sportName) {
     return (
@@ -63,6 +104,12 @@ export default async function CityPage({ params }: { params: Promise<{ sport: st
 
   return (
     <div className="min-h-screen bg-background">
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
       <header className="border-b border-border">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">

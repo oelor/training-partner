@@ -5,6 +5,9 @@ import { Users } from 'lucide-react'
 export const metadata: Metadata = {
   title: 'Terms of Service | Training Partner',
   description: 'Terms and conditions for using Training Partner, the combat sports training platform.',
+  alternates: {
+    canonical: 'https://trainingpartner.app/terms',
+  },
 }
 
 export default function TermsPage() {

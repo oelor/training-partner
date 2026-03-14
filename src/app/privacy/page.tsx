@@ -5,6 +5,9 @@ import { Users } from 'lucide-react'
 export const metadata: Metadata = {
   title: 'Privacy Policy | Training Partner',
   description: 'How Training Partner collects, uses, and protects your personal information.',
+  alternates: {
+    canonical: 'https://trainingpartner.app/privacy',
+  },
 }
 
 export default function PrivacyPage() {
