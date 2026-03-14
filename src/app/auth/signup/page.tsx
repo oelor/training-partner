@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2 } from 'lucide-react'
+import { Users, Mail, Lock, Eye, EyeOff, ArrowLeft, Loader2, CalendarDays, Info } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 import Turnstile from '@/components/turnstile'
@@ -21,8 +21,10 @@ export default function SignUpPage() {
     email: '',
     password: '',
     sport: '',
+    date_of_birth: '',
     agreeToTerms: false
   })
+  const [dobNotice, setDobNotice] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [turnstileToken, setTurnstileToken] = useState('')
@@ -32,6 +34,19 @@ export default function SignUpPage() {
     if (!formData.agreeToTerms) {
       setError('Please agree to the terms and conditions')
       return
+    }
+    if (formData.date_of_birth) {
+      const dob = new Date(formData.date_of_birth)
+      const today = new Date()
+      let age = today.getFullYear() - dob.getFullYear()
+      const monthDiff = today.getMonth() - dob.getMonth()
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--
+      }
+      if (age < 13) {
+        setError('You must be at least 13 years old to use Training Partner')
+        return
+      }
     }
     setLoading(true)
     setError('')
@@ -61,25 +76,25 @@ export default function SignUpPage() {
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, rgba(255,77,0,0.3) 0%, transparent 50%), radial-gradient(circle at 75% 75%, rgba(0,255,136,0.2) 0%, transparent 50%)' }} />
         <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/95 to-background" />
       </div>
-      <div className="w-full max-w-md relative z-10">
-        <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors">
+      <div className="w-full max-w-md relative z-10 animate-slide-up">
+        <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors animate-fade-in">
           <ArrowLeft className="w-4 h-4" />
           Back to Home
         </Link>
 
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-2 mb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
           <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
             <Users className="w-7 h-7 text-white" />
           </div>
           <span className="font-heading text-2xl text-white">TRAINING PARTNER</span>
         </div>
 
-        <div className="mb-8">
-          <h1 className="font-heading text-4xl text-white mb-2">CREATE ACCOUNT</h1>
+        <div className="mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
+          <h1 className="font-heading text-4xl text-white mb-2">CREATE <span className="gradient-text">ACCOUNT</span></h1>
           <p className="text-text-secondary">Create your free account and find training partners</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
           <div>
             <label htmlFor="fullName" className="block text-text-secondary text-sm mb-2">Full Name</label>
             <div className="relative">
@@ -150,6 +165,43 @@ export default function SignUpPage() {
                 <option key={sport} value={sport}>{sport}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="dob" className="block text-text-secondary text-sm mb-2">Date of Birth</label>
+            <div className="relative">
+              <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
+              <input
+                id="dob"
+                type="date"
+                value={formData.date_of_birth}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setFormData({ ...formData, date_of_birth: val })
+                  setDobNotice('')
+                  if (val) {
+                    const dob = new Date(val)
+                    const today = new Date()
+                    let age = today.getFullYear() - dob.getFullYear()
+                    const monthDiff = today.getMonth() - dob.getMonth()
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+                      age--
+                    }
+                    if (age >= 13 && age < 18) {
+                      setDobNotice('Some features are restricted for users under 18')
+                    }
+                  }
+                }}
+                className="w-full bg-surface border border-border rounded-lg py-3 pl-11 pr-4 text-white focus:border-primary transition-colors"
+                required
+              />
+            </div>
+            {dobNotice && (
+              <div className="flex items-center gap-2 mt-2 text-yellow-400 text-sm">
+                <Info className="w-4 h-4 flex-shrink-0" />
+                {dobNotice}
+              </div>
+            )}
           </div>
 
           <div className="flex items-start gap-3">

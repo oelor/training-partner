@@ -47,8 +47,8 @@ function VerifyEmailContent() {
 
   return (
     <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md text-center">
-        <div className="flex items-center justify-center gap-2 mb-12">
+      <div className="w-full max-w-md text-center animate-slide-up">
+        <div className="flex items-center justify-center gap-2 mb-12 animate-fade-in">
           <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
             <Users className="w-7 h-7 text-white" />
           </div>
@@ -65,16 +65,16 @@ function VerifyEmailContent() {
 
         {status === 'success' && (
           <>
-            <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6 animate-float">
               <CheckCircle className="w-8 h-8 text-accent" />
             </div>
-            <h1 className="font-heading text-3xl text-white mb-3">EMAIL VERIFIED!</h1>
-            <p className="text-text-secondary mb-8">
+            <h1 className="font-heading text-3xl text-white mb-3 animate-fade-in">EMAIL VERIFIED!</h1>
+            <p className="text-text-secondary mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
               Your email has been verified. You can now access all features.
             </p>
             <Link
               href="/app"
-              className="inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+              className="inline-flex items-center justify-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors btn-glow"
             >
               Go to Dashboard
             </Link>
@@ -83,7 +83,7 @@ function VerifyEmailContent() {
 
         {status === 'error' && (
           <>
-            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6 animate-float">
               <XCircle className="w-8 h-8 text-red-400" />
             </div>
             <h1 className="font-heading text-3xl text-white mb-3">VERIFICATION FAILED</h1>

@@ -42,25 +42,25 @@ export default function SignInPage() {
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, rgba(255,77,0,0.3) 0%, transparent 50%), radial-gradient(circle at 75% 75%, rgba(0,255,136,0.2) 0%, transparent 50%)' }} />
         <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/95 to-background" />
       </div>
-      <div className="w-full max-w-md relative z-10">
-        <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors">
+      <div className="w-full max-w-md relative z-10 animate-slide-up">
+        <Link href="/" className="inline-flex items-center gap-2 text-text-secondary hover:text-primary mb-8 transition-colors animate-fade-in">
           <ArrowLeft className="w-4 h-4" />
           Back to Home
         </Link>
 
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-2 mb-8 animate-fade-in" style={{ animationDelay: '0ms' }}>
           <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
             <Users className="w-7 h-7 text-white" />
           </div>
           <span className="font-heading text-2xl text-white">TRAINING PARTNER</span>
         </div>
 
-        <div className="mb-8">
-          <h1 className="font-heading text-4xl text-white mb-2">WELCOME BACK</h1>
+        <div className="mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
+          <h1 className="font-heading text-4xl text-white mb-2">WELCOME <span className="gradient-text">BACK</span></h1>
           <p className="text-text-secondary">Sign in to continue training</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in" style={{ animationDelay: '200ms' }}>
           <div>
             <label htmlFor="email" className="block text-text-secondary text-sm mb-2">Email Address</label>
             <div className="relative">
@@ -112,14 +112,16 @@ export default function SignInPage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary text-white py-4 rounded-lg font-heading text-lg hover:bg-primary/90 transition-all disabled:opacity-50 btn-glow flex items-center justify-center gap-2"
-          >
-            {loading && <Loader2 className="w-5 h-5 animate-spin" />}
-            {loading ? 'Signing In...' : 'SIGN IN'}
-          </button>
+          <div className="animate-fade-in" style={{ animationDelay: '300ms' }}>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary text-white py-4 rounded-lg font-heading text-lg hover:bg-primary/90 transition-all disabled:opacity-50 btn-glow flex items-center justify-center gap-2"
+            >
+              {loading && <Loader2 className="w-5 h-5 animate-spin" />}
+              {loading ? 'Signing In...' : 'SIGN IN'}
+            </button>
+          </div>
         </form>
 
         <div className="flex items-center gap-4 my-6">

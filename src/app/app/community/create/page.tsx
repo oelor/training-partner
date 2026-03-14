@@ -71,9 +71,9 @@ export default function CreatePostPage() {
         Back to Community
       </Link>
 
-      <h1 className="font-heading text-3xl text-white mb-6">CREATE POST</h1>
+      <h1 className="font-heading text-3xl text-white mb-6 animate-slide-up">CREATE POST</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 animate-slide-up">
         {/* Post Type */}
         <div>
           <label className="block text-white text-sm font-medium mb-3">Post Type</label>
@@ -83,7 +83,7 @@ export default function CreatePostPage() {
                 key={t.value}
                 type="button"
                 onClick={() => setType(t.value)}
-                className={`p-4 rounded-xl border text-left transition-colors ${
+                className={`p-4 rounded-xl border text-left transition-colors card-hover ${
                   type === t.value
                     ? 'border-primary bg-primary/10'
                     : 'border-border bg-surface hover:border-border/80'
@@ -99,7 +99,7 @@ export default function CreatePostPage() {
         </div>
 
         {/* Sport */}
-        <div>
+        <div className="animate-fade-in">
           <label htmlFor="sport" className="block text-white text-sm font-medium mb-2">Sport (optional)</label>
           <select
             id="sport"
@@ -114,7 +114,7 @@ export default function CreatePostPage() {
         </div>
 
         {/* Title */}
-        <div>
+        <div className="animate-fade-in">
           <label htmlFor="title" className="block text-white text-sm font-medium mb-2">Title</label>
           <input
             id="title"
@@ -128,7 +128,7 @@ export default function CreatePostPage() {
         </div>
 
         {/* Body */}
-        <div>
+        <div className="animate-fade-in">
           <label htmlFor="content" className="block text-white text-sm font-medium mb-2">Content</label>
           <textarea
             id="content"
@@ -150,7 +150,7 @@ export default function CreatePostPage() {
           <button
             type="submit"
             disabled={loading || !title.trim() || !body.trim()}
-            className="flex-1 bg-primary text-white py-3 rounded-xl font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="flex-1 bg-primary text-white py-3 rounded-xl font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 btn-glow"
           >
             {loading ? (
               <>

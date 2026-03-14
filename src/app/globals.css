@@ -206,6 +206,12 @@ input:focus, select:focus, textarea:focus {
   animation: float 3s ease-in-out infinite;
 }
 
+/* Silhouette decorations */
+.silhouette {
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Shimmer effect for accent elements */
 @keyframes shimmer {
   0% { background-position: -200% center; }

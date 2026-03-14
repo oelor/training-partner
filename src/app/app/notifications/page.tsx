@@ -103,9 +103,9 @@ export default function NotificationsPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-slide-up">
         <div>
-          <h1 className="font-heading text-3xl text-white mb-1">NOTIFICATIONS</h1>
+          <h1 className="font-heading text-3xl text-white mb-1"><span className="gradient-text">NOTIFICATIONS</span></h1>
           <p className="text-text-secondary">
             {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}
           </p>
@@ -114,7 +114,7 @@ export default function NotificationsPage() {
           <button
             onClick={handleMarkAllRead}
             disabled={markingRead}
-            className="flex items-center gap-2 text-primary text-sm hover:underline disabled:opacity-50"
+            className="flex items-center gap-2 text-primary text-sm hover:underline disabled:opacity-50 btn-glow"
           >
             {markingRead ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -150,7 +150,7 @@ export default function NotificationsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 stagger-children">
           {notifications.map((notification) => {
             const Icon = getNotificationIcon(notification.type)
             const colorClass = getNotificationColor(notification.type)
@@ -160,9 +160,9 @@ export default function NotificationsPage() {
                 key={notification.id}
                 onClick={() => handleNotificationClick(notification)}
                 className={`
-                  bg-surface border rounded-xl p-4 cursor-pointer transition-colors
+                  bg-surface border rounded-xl p-4 cursor-pointer transition-colors card-hover
                   ${notification.read
-                    ? 'border-border hover:border-border/80'
+                    ? 'border-border hover:border-border/80 hover:bg-surface/50'
                     : 'border-primary/30 bg-primary/5 hover:bg-primary/10'
                   }
                 `}

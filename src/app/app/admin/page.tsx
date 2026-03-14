@@ -4,22 +4,29 @@ import { useEffect, useState } from 'react'
 import {
   Users, BarChart3, MessageCircle, AlertTriangle, MapPin,
   Calendar, TrendingUp, Shield, Check, X, ChevronRight,
-  Search, Loader2
+  Search, Loader2, Eye
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api, { AdminStats, AdminUser, AdminReport } from '@/lib/api'
+import { useToast } from '@/components/toast'
+import api, { AdminStats, AdminUser, AdminReport, AdminPendingIdentity } from '@/lib/api'
 
 export default function AdminPage() {
   const { user } = useAuth()
+  const toast = useToast()
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [reports, setReports] = useState<AdminReport[]>([])
   const [recentUsers, setRecentUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'reports'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'reports' | 'identities'>('overview')
   const [searchQuery, setSearchQuery] = useState('')
   const [allUsers, setAllUsers] = useState<AdminUser[]>([])
   const [userTotal, setUserTotal] = useState(0)
   const [resolvingId, setResolvingId] = useState<number | null>(null)
+  const [pendingIdentities, setPendingIdentities] = useState<AdminPendingIdentity[]>([])
+  const [identitiesLoading, setIdentitiesLoading] = useState(false)
+  const [reviewingId, setReviewingId] = useState<number | null>(null)
+  const [reviewNotes, setReviewNotes] = useState<Record<number, string>>({})
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
 
   const isAdmin = user?.role === 'admin' || user?.role === 'gym_owner'
 
@@ -45,6 +52,35 @@ export default function AdminPage() {
     }
     load()
   }, [isAdmin])
+
+  const loadPendingIdentities = async () => {
+    setIdentitiesLoading(true)
+    try {
+      const res = await api.getAdminPendingIdentities()
+      setPendingIdentities(res.verifications)
+    } catch { /* */ }
+    finally { setIdentitiesLoading(false) }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'identities' && pendingIdentities.length === 0 && !identitiesLoading) {
+      loadPendingIdentities()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  const handleIdentityReview = async (id: number, status: 'approved' | 'rejected') => {
+    setReviewingId(id)
+    try {
+      await api.adminReviewIdentity(id, { status, reviewer_notes: reviewNotes[id] || '' })
+      setPendingIdentities(pendingIdentities.filter(v => v.id !== id))
+      toast.success(`Identity verification ${status}`)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to review identity')
+    } finally {
+      setReviewingId(null)
+    }
+  }
 
   const handleSearch = async () => {
     try {
@@ -94,6 +130,7 @@ export default function AdminPage() {
           { id: 'overview' as const, label: 'Overview', icon: BarChart3 },
           { id: 'users' as const, label: 'Users', icon: Users },
           { id: 'reports' as const, label: `Reports ${stats?.pending_reports ? `(${stats.pending_reports})` : ''}`, icon: AlertTriangle },
+          { id: 'identities' as const, label: 'Identity Verification', icon: Shield },
         ].map(tab => (
           <button
             key={tab.id}
@@ -269,6 +306,127 @@ export default function AdminPage() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* Identity Verification Tab */}
+      {activeTab === 'identities' && (
+        <div className="space-y-4">
+          {identitiesLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : pendingIdentities.length === 0 ? (
+            <div className="text-center py-12 bg-surface border border-border rounded-xl">
+              <Shield className="w-12 h-12 text-accent mx-auto mb-4" />
+              <div className="text-white font-medium mb-1">No Pending Verifications</div>
+              <div className="text-text-secondary text-sm">All identity verifications have been reviewed</div>
+            </div>
+          ) : (
+            pendingIdentities.map(verification => (
+              <div key={verification.id} className="bg-surface border border-border rounded-xl p-6 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-white font-medium">{verification.user_name}</div>
+                    <div className="text-text-secondary text-xs">{verification.user_email}</div>
+                  </div>
+                  <span className="text-xs text-text-secondary">
+                    {new Date(verification.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-text-secondary text-xs mb-2">ID Photo</div>
+                    <div
+                      className="relative cursor-pointer group"
+                      onClick={() => setPreviewImage(verification.id_photo)}
+                    >
+                      <img
+                        src={verification.id_photo}
+                        alt={`ID photo for ${verification.user_name}`}
+                        className="w-full h-40 object-cover rounded-lg border border-border"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                        <Eye className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-text-secondary text-xs mb-2">Selfie</div>
+                    <div
+                      className="relative cursor-pointer group"
+                      onClick={() => setPreviewImage(verification.selfie_photo)}
+                    >
+                      <img
+                        src={verification.selfie_photo}
+                        alt={`Selfie for ${verification.user_name}`}
+                        className="w-full h-40 object-cover rounded-lg border border-border"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                        <Eye className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor={`notes-${verification.id}`} className="block text-text-secondary text-xs mb-1">
+                    Reviewer Notes (optional)
+                  </label>
+                  <input
+                    id={`notes-${verification.id}`}
+                    type="text"
+                    value={reviewNotes[verification.id] || ''}
+                    onChange={(e) => setReviewNotes({ ...reviewNotes, [verification.id]: e.target.value })}
+                    placeholder="Add notes for the user..."
+                    className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white placeholder-text-secondary text-sm focus:border-primary transition-colors"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleIdentityReview(verification.id, 'approved')}
+                    disabled={reviewingId === verification.id}
+                    className="flex items-center gap-1 bg-accent/20 text-accent px-4 py-2 rounded-lg text-sm font-medium hover:bg-accent/30 disabled:opacity-50"
+                  >
+                    {reviewingId === verification.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-4 h-4" />}
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleIdentityReview(verification.id, 'rejected')}
+                    disabled={reviewingId === verification.id}
+                    className="flex items-center gap-1 bg-red-500/20 text-red-400 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-500/30 disabled:opacity-50"
+                  >
+                    {reviewingId === verification.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-4 h-4" />}
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-2xl max-h-[80vh]">
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-10 right-0 text-white hover:text-text-secondary"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewImage}
+              alt="Identity verification preview"
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+            />
+          </div>
         </div>
       )}
     </div>

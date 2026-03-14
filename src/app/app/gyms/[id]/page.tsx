@@ -5,9 +5,10 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft, MapPin, Clock, Shield, Phone, Mail, Calendar, Star,
-  Lock, Loader2, CheckCircle, Dumbbell, Globe, ChevronDown, ChevronUp
+  Lock, Loader2, CheckCircle, Dumbbell, Globe, ChevronDown, ChevronUp,
+  UserPlus, LogIn, Tag, Megaphone
 } from 'lucide-react'
-import api, { GymDetail, GymSession, isPremiumPlan } from '@/lib/api'
+import api, { GymDetail, GymSession, GymMembership, GymPromotion, isPremiumPlan } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 
@@ -23,6 +24,10 @@ export default function GymDetailPage() {
   const [showAllReviews, setShowAllReviews] = useState(false)
   const [reviewForm, setReviewForm] = useState({ rating: 0, comment: '' })
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<string | null>(null)
+  const [joiningGym, setJoiningGym] = useState(false)
+  const [checkingIn, setCheckingIn] = useState(false)
+  const [promotions, setPromotions] = useState<GymPromotion[]>([])
 
   const gymId = Number(params.id)
   const isPremium = isPremiumPlan(subscription?.plan)
@@ -30,8 +35,16 @@ export default function GymDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await api.getGymDetail(gymId)
-        setGym(data.gym)
+        const [gymData, membershipsData, promosData] = await Promise.all([
+          api.getGymDetail(gymId),
+          api.getMyGymMemberships().catch(() => ({ memberships: [] })),
+          api.getGymPromotions(gymId).catch(() => ({ promotions: [] })),
+        ])
+        setGym(gymData.gym)
+        setPromotions(promosData.promotions || [])
+        // Check if user is already a member of this gym
+        const membership = (membershipsData.memberships || []).find((m: GymMembership) => m.gym_id === gymId)
+        if (membership) setMembershipStatus(membership.status)
       } catch {
         toast.error('Failed to load gym details')
       } finally {
@@ -40,6 +53,33 @@ export default function GymDetailPage() {
     }
     if (gymId) load()
   }, [gymId, toast])
+
+  const handleJoinGym = async () => {
+    setJoiningGym(true)
+    try {
+      await api.requestGymMembership(gymId)
+      setMembershipStatus('pending')
+      toast.success('Membership requested! The gym will review your request.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to request membership'
+      toast.error(message)
+    } finally {
+      setJoiningGym(false)
+    }
+  }
+
+  const handleCheckin = async () => {
+    setCheckingIn(true)
+    try {
+      const result = await api.checkin(gymId)
+      toast.success(`Checked in at ${result.gym_name}! +${result.points_earned} points (Total: ${result.total_points})`)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Check-in failed'
+      toast.error(message)
+    } finally {
+      setCheckingIn(false)
+    }
+  }
 
   const handleBookSession = async (sessionId: number) => {
     setBookingSession(sessionId)
@@ -164,6 +204,85 @@ export default function GymDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Action buttons: Join Gym / Check In */}
+      <div className="flex flex-wrap gap-3">
+        {membershipStatus === 'approved' ? (
+          <>
+            <span className="flex items-center gap-2 bg-accent/10 border border-accent/30 text-accent px-4 py-2.5 rounded-lg text-sm">
+              <CheckCircle className="w-4 h-4" /> Member
+            </span>
+            <button
+              onClick={handleCheckin}
+              disabled={checkingIn}
+              className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg text-sm font-heading hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {checkingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
+              {checkingIn ? 'Checking in...' : 'CHECK IN'}
+            </button>
+          </>
+        ) : membershipStatus === 'pending' ? (
+          <span className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-4 py-2.5 rounded-lg text-sm">
+            <Clock className="w-4 h-4" /> Membership Pending
+          </span>
+        ) : (
+          <button
+            onClick={handleJoinGym}
+            disabled={joiningGym}
+            className="flex items-center gap-2 bg-accent text-background px-6 py-2.5 rounded-lg text-sm font-heading hover:bg-accent/90 transition-colors disabled:opacity-50"
+          >
+            {joiningGym ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+            {joiningGym ? 'Requesting...' : 'JOIN GYM'}
+          </button>
+        )}
+        <Link
+          href="/app/passport"
+          className="flex items-center gap-2 bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg text-sm hover:text-white hover:border-primary/30 transition-colors"
+        >
+          <Globe className="w-4 h-4" /> Training Passport
+        </Link>
+      </div>
+
+      {/* Active Promotions */}
+      {promotions.length > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="text-text-secondary text-sm font-medium mb-4 flex items-center gap-2">
+            <Megaphone className="w-4 h-4" />
+            ACTIVE PROMOTIONS
+          </h3>
+          <div className="space-y-3">
+            {promotions.map(promo => (
+              <div key={promo.id} className="bg-background rounded-lg p-4 flex items-start gap-3">
+                <Tag className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                  promo.type === 'open_mat' ? 'text-accent' :
+                  promo.type === 'trial' ? 'text-blue-400' :
+                  promo.type === 'discount' ? 'text-yellow-400' :
+                  promo.type === 'event' ? 'text-purple-400' : 'text-text-secondary'
+                }`} />
+                <div>
+                  <h4 className="text-white font-medium">{promo.title}</h4>
+                  {promo.description && <p className="text-text-secondary text-sm mt-1">{promo.description}</p>}
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      promo.type === 'open_mat' ? 'bg-accent/20 text-accent' :
+                      promo.type === 'trial' ? 'bg-blue-500/20 text-blue-400' :
+                      promo.type === 'discount' ? 'bg-yellow-500/20 text-yellow-400' :
+                      promo.type === 'event' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-text-secondary'
+                    }`}>
+                      {promo.type.replace('_', ' ')}
+                    </span>
+                    {promo.end_date && (
+                      <span className="text-text-secondary text-xs">
+                        Ends {new Date(promo.end_date).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Premium gate notice */}
       {gym.premium && !isPremium && (

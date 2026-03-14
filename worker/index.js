@@ -157,6 +157,27 @@ function isoNow() {
   return new Date().toISOString();
 }
 
+// Haversine distance between two lat/lng points in meters
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000; // Earth radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Generate a random 16-char hex string for checkin codes
+function generateCheckinCode() {
+  const chars = '0123456789abcdef';
+  let code = '';
+  for (let i = 0; i < 16; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 function sanitize(str, maxLen = 5000) {
   if (typeof str !== 'string') return '';
   // Strip HTML-significant and script-injection characters
@@ -306,9 +327,20 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS invite_redemptions (id INTEGER PRIMARY KEY AUTOINCREMENT, code_id INTEGER NOT NULL, user_id INTEGER NOT NULL, created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS app_metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, metric_key TEXT NOT NULL, metric_value TEXT NOT NULL, recorded_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS support_donations (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, donor_name TEXT DEFAULT '', donor_email TEXT DEFAULT '', amount_cents INTEGER NOT NULL, message TEXT DEFAULT '', cause TEXT NOT NULL DEFAULT 'tma', stripe_session_id TEXT, status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL)`,
+      // Gym Features — memberships, check-ins, promotions, announcements
+      `CREATE TABLE IF NOT EXISTS gym_members (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, user_id INTEGER NOT NULL, role TEXT NOT NULL DEFAULT 'member', status TEXT NOT NULL DEFAULT 'pending', requested_by TEXT NOT NULL DEFAULT 'user', created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(gym_id, user_id))`,
+      `CREATE TABLE IF NOT EXISTS checkins (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, gym_id INTEGER NOT NULL, points INTEGER NOT NULL DEFAULT 10, method TEXT NOT NULL DEFAULT 'manual', created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS gym_promotions (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, title TEXT NOT NULL, description TEXT DEFAULT '', type TEXT NOT NULL DEFAULT 'general', start_date TEXT, end_date TEXT, is_active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS gym_announcements (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, author_id INTEGER NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)`,
       // Observability tables — API request tracking & error logging
       `CREATE TABLE IF NOT EXISTS api_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, method TEXT NOT NULL, path TEXT NOT NULL, status INTEGER NOT NULL, duration_ms INTEGER NOT NULL, user_agent TEXT DEFAULT '', country TEXT DEFAULT '', created_at TEXT NOT NULL)`,
       `CREATE TABLE IF NOT EXISTS api_errors (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT NOT NULL, method TEXT NOT NULL, error_message TEXT NOT NULL, error_stack TEXT DEFAULT '', user_agent TEXT DEFAULT '', created_at TEXT NOT NULL)`,
+      // Trust & Safety tables
+      `CREATE TABLE IF NOT EXISTS identity_verifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE, id_photo TEXT NOT NULL, selfie_photo TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', reviewer_notes TEXT DEFAULT '', reviewed_by INTEGER, created_at TEXT NOT NULL, reviewed_at TEXT)`,
+      `CREATE TABLE IF NOT EXISTS session_ratings (id INTEGER PRIMARY KEY AUTOINCREMENT, rater_id INTEGER NOT NULL, rated_id INTEGER NOT NULL, gym_id INTEGER, rating INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+      `CREATE TABLE IF NOT EXISTS blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, blocker_id INTEGER NOT NULL, blocked_id INTEGER NOT NULL, created_at TEXT NOT NULL, UNIQUE(blocker_id, blocked_id))`,
+      // QR Check-in: guest check-ins table
+      `CREATE TABLE IF NOT EXISTS guest_checkins (id INTEGER PRIMARY KEY AUTOINCREMENT, gym_id INTEGER NOT NULL, name TEXT NOT NULL, email TEXT NOT NULL, lat REAL, lng REAL, created_at TEXT DEFAULT (datetime('now')))`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -346,10 +378,30 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_invite_redemptions_code ON invite_redemptions(code_id)',
       'CREATE INDEX IF NOT EXISTS idx_app_metrics_key ON app_metrics(metric_key, recorded_at)',
       'CREATE INDEX IF NOT EXISTS idx_support_donations_user ON support_donations(user_id)',
+      // Gym feature indexes
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_gym_members_pair ON gym_members(gym_id, user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_members_user ON gym_members(user_id, status)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_members_gym ON gym_members(gym_id, status)',
+      'CREATE INDEX IF NOT EXISTS idx_checkins_user ON checkins(user_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_checkins_gym ON checkins(gym_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_promotions_gym ON gym_promotions(gym_id, is_active)',
+      'CREATE INDEX IF NOT EXISTS idx_gym_announcements_gym ON gym_announcements(gym_id, created_at)',
       // Observability indexes
       'CREATE INDEX IF NOT EXISTS idx_api_requests_created ON api_requests(created_at)',
       'CREATE INDEX IF NOT EXISTS idx_api_requests_path ON api_requests(path, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_api_errors_created ON api_errors(created_at)',
+      // Trust & Safety indexes
+      'CREATE INDEX IF NOT EXISTS idx_identity_verifications_user ON identity_verifications(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_identity_verifications_status ON identity_verifications(status)',
+      'CREATE INDEX IF NOT EXISTS idx_session_ratings_rated ON session_ratings(rated_id)',
+      'CREATE INDEX IF NOT EXISTS idx_session_ratings_rater_rated_date ON session_ratings(rater_id, rated_id)',
+      'CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id)',
+      'CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks(blocked_id)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_session_ratings_unique_daily ON session_ratings(rater_id, rated_id, DATE(created_at))',
+      // QR Check-in indexes
+      'CREATE INDEX IF NOT EXISTS idx_guest_checkins_gym ON guest_checkins(gym_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_guest_checkins_email ON guest_checkins(email, gym_id, created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_gyms_checkin_code ON gyms(checkin_code)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
@@ -358,6 +410,15 @@ async function ensureFullSchema(env) {
     const safeAlters = [
       'ALTER TABLE users ADD COLUMN google_id TEXT',
       'ALTER TABLE users ADD COLUMN instagram_username TEXT',
+      'ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN date_of_birth TEXT',
+      'ALTER TABLE users ADD COLUMN emergency_contact_name TEXT',
+      'ALTER TABLE users ADD COLUMN emergency_contact_phone TEXT',
+      'ALTER TABLE users ADD COLUMN emergency_contact_relation TEXT',
+      'ALTER TABLE users ADD COLUMN content_policy_violations INTEGER NOT NULL DEFAULT 0',
+      // QR Check-in columns
+      'ALTER TABLE gyms ADD COLUMN checkin_code TEXT',
+      'ALTER TABLE gyms ADD COLUMN checkin_radius_m INTEGER DEFAULT 200',
     ];
     for (const sql of safeAlters) {
       try { await env.DB.prepare(sql).run(); } catch {} // ignore "duplicate column" errors
@@ -424,6 +485,7 @@ async function handleRegister(request, env) {
   const email = sanitize(normalizeText(body.email)).toLowerCase();
   const password = body.password || '';
   const sport = sanitize(normalizeText(body.sport));
+  const dateOfBirth = body.date_of_birth || null;
 
   if (!name || !email || !password) {
     return corsJson({ ok: false, error: 'Name, email, and password are required' }, { status: 400 }, request, env);
@@ -436,6 +498,21 @@ async function handleRegister(request, env) {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return corsJson({ ok: false, error: 'Invalid email address' }, { status: 400 }, request, env);
+  }
+
+  // Validate date of birth (age gate)
+  if (dateOfBirth) {
+    const dob = new Date(dateOfBirth);
+    if (isNaN(dob.getTime())) {
+      return corsJson({ ok: false, error: 'Invalid date of birth' }, { status: 400 }, request, env);
+    }
+    const now = new Date();
+    let age = now.getFullYear() - dob.getFullYear();
+    const monthDiff = now.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) age--;
+    if (age < 13) {
+      return corsJson({ ok: false, error: 'You must be at least 13 years old' }, { status: 400 }, request, env);
+    }
   }
 
   // Rate limit: 5 registrations per IP per hour
@@ -478,9 +555,9 @@ async function handleRegister(request, env) {
   const verificationToken = crypto.randomUUID();
 
   const result = await env.DB.prepare(`
-    INSERT INTO users (email, password_hash, password_salt, display_name, city, role, email_verified, verification_token, created_at, updated_at)
-    VALUES (?, ?, ?, ?, '', 'athlete', 0, ?, ?, ?)
-  `).bind(email, passwordHash, salt, name, verificationToken, now, now).run();
+    INSERT INTO users (email, password_hash, password_salt, display_name, city, role, email_verified, verification_token, date_of_birth, created_at, updated_at)
+    VALUES (?, ?, ?, ?, '', 'athlete', 0, ?, ?, ?, ?)
+  `).bind(email, passwordHash, salt, name, verificationToken, dateOfBirth, now, now).run();
 
   const userId = result.meta.last_row_id;
 
@@ -681,6 +758,11 @@ async function handleGetMe(request, env) {
       email_verified: user.email_verified,
       google_id: user.google_id || null,
       instagram_username: user.instagram_username || null,
+      verified: user.verified || 0,
+      date_of_birth: user.date_of_birth || null,
+      emergency_contact_name: user.emergency_contact_name || null,
+      emergency_contact_phone: user.emergency_contact_phone || null,
+      emergency_contact_relation: user.emergency_contact_relation || null,
       created_at: user.created_at,
     },
     profile: profile ? {
@@ -976,10 +1058,12 @@ async function handleGetPartners(request, env) {
   `;
   const params = [user.id, user.id, user.id];
 
-  // Check blocked users
+  // Check blocked users (both legacy blocked_users and new blocks tables)
   query += ` AND u.id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id = ?)
-             AND u.id NOT IN (SELECT blocker_id FROM blocked_users WHERE blocked_id = ?)`;
-  params.push(user.id, user.id);
+             AND u.id NOT IN (SELECT blocker_id FROM blocked_users WHERE blocked_id = ?)
+             AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ?)
+             AND u.id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id = ?)`;
+  params.push(user.id, user.id, user.id, user.id);
 
   query += ` ORDER BY m.score DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
@@ -1290,8 +1374,10 @@ async function handleGetConversations(request, env) {
       WHERE sender_id = ? OR receiver_id = ?
       GROUP BY CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END
     )
+    AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ?)
+    AND u.id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id = ?)
     ORDER BY m.created_at DESC
-  `).bind(user.id, user.id, user.id, user.id, user.id, user.id).all();
+  `).bind(user.id, user.id, user.id, user.id, user.id, user.id, user.id, user.id).all();
 
   return corsJson({
     ok: true,
@@ -1359,11 +1445,14 @@ async function handleSendMessage(request, env, receiverId) {
     return corsJson({ ok: false, error: 'Message content is required' }, { status: 400 }, request, env);
   }
 
-  // Check if blocked
+  // Check if blocked (legacy blocked_users and new blocks tables)
   const blocked = await env.DB.prepare(
     'SELECT id FROM blocked_users WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)'
   ).bind(user.id, receiverId, receiverId, user.id).first();
-  if (blocked) {
+  const blocked2 = await env.DB.prepare(
+    'SELECT id FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)'
+  ).bind(user.id, receiverId, receiverId, user.id).first();
+  if (blocked || blocked2) {
     return corsJson({ ok: false, error: 'Cannot send message to this user' }, { status: 403 }, request, env);
   }
 
@@ -1811,8 +1900,8 @@ async function handleReportUser(request, env) {
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
   const body = await readJson(request);
-  if (!body || !body.user_id || !body.reason) {
-    return corsJson({ ok: false, error: 'User ID and reason are required' }, { status: 400 }, request, env);
+  if (!body || !body.user_id) {
+    return corsJson({ ok: false, error: 'User ID is required' }, { status: 400 }, request, env);
   }
 
   const reportedId = parseInt(body.user_id);
@@ -1832,7 +1921,8 @@ async function handleReportUser(request, env) {
     return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
   }
 
-  const reason = sanitize(body.reason).slice(0, 200);
+  const validReasons = ['harassment', 'inappropriate_content', 'fake_identity', 'underage', 'threatening_behavior', 'spam', 'other'];
+  const reason = validReasons.includes(body.reason) ? body.reason : 'other';
   const details = sanitize(body.details || '').slice(0, 2000);
   const now = isoNow();
 
@@ -1956,6 +2046,309 @@ async function handleBlockUser(request, env) {
   await env.DB.prepare(
     'INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
   ).bind(user.id, body.user_id, now).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Trust & Safety: Identity Verification ──────────────────────────────────
+
+async function handleSubmitIdentity(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const idPhoto = body.id_photo;
+  const selfiePhoto = body.selfie_photo;
+
+  if (!idPhoto || !selfiePhoto) {
+    return corsJson({ ok: false, error: 'Both id_photo and selfie_photo are required' }, { status: 400 }, request, env);
+  }
+
+  // Validate max 200KB per photo (base64 ~1.37x original, 200KB = ~273000 base64 chars)
+  if (idPhoto.length > 273000) {
+    return corsJson({ ok: false, error: 'ID photo exceeds maximum size of 200KB' }, { status: 400 }, request, env);
+  }
+  if (selfiePhoto.length > 273000) {
+    return corsJson({ ok: false, error: 'Selfie photo exceeds maximum size of 200KB' }, { status: 400 }, request, env);
+  }
+
+  // Check if user already has a pending or approved verification
+  const existing = await env.DB.prepare(
+    "SELECT id, status FROM identity_verifications WHERE user_id = ? AND status IN ('pending', 'approved')"
+  ).bind(user.id).first();
+  if (existing) {
+    return corsJson({ ok: false, error: `You already have a ${existing.status} verification` }, { status: 409 }, request, env);
+  }
+
+  const now = isoNow();
+  await env.DB.prepare(
+    'INSERT INTO identity_verifications (user_id, id_photo, selfie_photo, status, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(user.id, idPhoto, selfiePhoto, 'pending', now).run();
+
+  return corsJson({ ok: true, status: 'pending' }, {}, request, env);
+}
+
+async function handleGetIdentityStatus(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const verification = await env.DB.prepare(
+    'SELECT status, created_at, reviewed_at, reviewer_notes FROM identity_verifications WHERE user_id = ? ORDER BY id DESC LIMIT 1'
+  ).bind(user.id).first();
+
+  if (!verification) {
+    return corsJson({ ok: true, verification: null }, {}, request, env);
+  }
+
+  return corsJson({ ok: true, verification: {
+    status: verification.status,
+    created_at: verification.created_at,
+    reviewed_at: verification.reviewed_at,
+    reviewer_notes: verification.reviewer_notes,
+  } }, {}, request, env);
+}
+
+async function handleDeleteIdentityData(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  await env.DB.prepare('DELETE FROM identity_verifications WHERE user_id = ?').bind(user.id).run();
+  await env.DB.prepare('UPDATE users SET verified = 0 WHERE id = ?').bind(user.id).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Trust & Safety: Reputation / Session Ratings ────────────────────────────
+
+async function handleSubmitRating(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const ratedId = parseInt(body.rated_id);
+  const rating = body.rating;
+
+  if (!ratedId || (rating !== 1 && rating !== -1)) {
+    return corsJson({ ok: false, error: 'rated_id and rating (1 or -1) are required' }, { status: 400 }, request, env);
+  }
+
+  if (ratedId === user.id) {
+    return corsJson({ ok: false, error: 'You cannot rate yourself' }, { status: 400 }, request, env);
+  }
+
+  // Mutual unlock check: verify both users checked in at same gym on same day
+  const colocated = await env.DB.prepare(`
+    SELECT DISTINCT c1.gym_id FROM checkins c1
+    JOIN checkins c2 ON c1.gym_id = c2.gym_id AND DATE(c1.created_at) = DATE(c2.created_at)
+    WHERE c1.user_id = ? AND c2.user_id = ? AND DATE(c1.created_at) = DATE('now')
+  `).bind(user.id, ratedId).first();
+
+  if (!colocated) {
+    return corsJson({ ok: false, error: "You can only rate someone you've trained with today" }, { status: 403 }, request, env);
+  }
+
+  const now = isoNow();
+  try {
+    await env.DB.prepare(
+      'INSERT INTO session_ratings (rater_id, rated_id, gym_id, rating, created_at) VALUES (?, ?, ?, ?, ?)'
+    ).bind(user.id, ratedId, colocated.gym_id, rating, now).run();
+  } catch (e) {
+    // Handle unique constraint violation (already rated today)
+    if (e.message && e.message.includes('UNIQUE')) {
+      return corsJson({ ok: false, error: 'You have already rated this user today' }, { status: 409 }, request, env);
+    }
+    throw e;
+  }
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleGetTrustScore(request, env, ratedUserId) {
+  // Count total check-ins for the rated user
+  const checkinCount = await env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM checkins WHERE user_id = ?'
+  ).bind(ratedUserId).first();
+
+  const count = checkinCount ? checkinCount.cnt : 0;
+
+  if (count < 10) {
+    return corsJson({ ok: true, score: null, locked: true, sessions_remaining: 10 - count }, {}, request, env);
+  }
+
+  // Calculate trust score
+  const stats = await env.DB.prepare(
+    'SELECT COUNT(*) as total, SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END) as thumbs_up FROM session_ratings WHERE rated_id = ?'
+  ).bind(ratedUserId).first();
+
+  const total = stats ? stats.total : 0;
+  const thumbsUp = stats ? stats.thumbs_up : 0;
+  const percentage = total > 0 ? Math.round((thumbsUp / total) * 100) : null;
+
+  return corsJson({ ok: true, score: { percentage, total_ratings: total, locked: false } }, {}, request, env);
+}
+
+async function handleCanRate(request, env, ratedUserId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Check if both users checked in at same gym today
+  const colocated = await env.DB.prepare(`
+    SELECT DISTINCT c1.gym_id FROM checkins c1
+    JOIN checkins c2 ON c1.gym_id = c2.gym_id AND DATE(c1.created_at) = DATE(c2.created_at)
+    WHERE c1.user_id = ? AND c2.user_id = ? AND DATE(c1.created_at) = DATE('now')
+  `).bind(user.id, ratedUserId).first();
+
+  if (!colocated) {
+    return corsJson({ ok: true, can_rate: false, reason: 'You must train at the same gym today to rate this user' }, {}, request, env);
+  }
+
+  // Check if already rated today
+  const alreadyRated = await env.DB.prepare(
+    "SELECT id FROM session_ratings WHERE rater_id = ? AND rated_id = ? AND DATE(created_at) = DATE('now')"
+  ).bind(user.id, ratedUserId).first();
+
+  if (alreadyRated) {
+    return corsJson({ ok: true, can_rate: false, reason: 'You have already rated this user today' }, {}, request, env);
+  }
+
+  return corsJson({ ok: true, can_rate: true, reason: 'Eligible to rate' }, {}, request, env);
+}
+
+// ─── Trust & Safety: Block System ────────────────────────────────────────────
+
+async function handleTsBlockUser(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.blocked_id) {
+    return corsJson({ ok: false, error: 'blocked_id is required' }, { status: 400 }, request, env);
+  }
+
+  const blockedId = parseInt(body.blocked_id);
+  if (blockedId === user.id) {
+    return corsJson({ ok: false, error: 'You cannot block yourself' }, { status: 400 }, request, env);
+  }
+
+  const now = isoNow();
+  try {
+    await env.DB.prepare(
+      'INSERT INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
+    ).bind(user.id, blockedId, now).run();
+  } catch (e) {
+    // Handle duplicate gracefully
+    if (e.message && e.message.includes('UNIQUE')) {
+      return corsJson({ ok: true }, {}, request, env);
+    }
+    throw e;
+  }
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleTsUnblockUser(request, env, blockedUserId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  await env.DB.prepare(
+    'DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?'
+  ).bind(user.id, blockedUserId).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleGetBlocks(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const results = await env.DB.prepare(`
+    SELECT b.id, b.blocked_id, b.created_at,
+           u.display_name, u.avatar_url
+    FROM blocks b
+    JOIN users u ON b.blocked_id = u.id
+    WHERE b.blocker_id = ?
+    ORDER BY b.created_at DESC
+  `).bind(user.id).all();
+
+  return corsJson({ ok: true, blocks: (results.results || []).map(b => ({
+    id: b.id,
+    blocked_id: b.blocked_id,
+    display_name: b.display_name,
+    avatar_url: b.avatar_url,
+    created_at: b.created_at,
+  })) }, {}, request, env);
+}
+
+// ─── Trust & Safety: Emergency Contact ───────────────────────────────────────
+
+async function handleUpdateEmergencyContact(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const name = sanitize(body.name || '').slice(0, 100);
+  const phone = sanitize(body.phone || '').slice(0, 30);
+  const relation = sanitize(body.relation || '').slice(0, 50);
+
+  await env.DB.prepare(
+    'UPDATE users SET emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?, updated_at = ? WHERE id = ?'
+  ).bind(name || null, phone || null, relation || null, isoNow(), user.id).run();
+
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Trust & Safety: Admin Identity Review ───────────────────────────────────
+
+async function handleAdminGetPendingIdentities(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const results = await env.DB.prepare(`
+    SELECT iv.id, iv.user_id, iv.id_photo, iv.selfie_photo, iv.status, iv.created_at,
+           u.display_name, u.email, u.avatar_url
+    FROM identity_verifications iv
+    JOIN users u ON iv.user_id = u.id
+    WHERE iv.status = 'pending'
+    ORDER BY iv.created_at ASC
+  `).all();
+
+  return corsJson({ ok: true, verifications: results.results || [] }, {}, request, env);
+}
+
+async function handleAdminReviewIdentity(request, env, verificationId) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const status = body.status;
+  if (status !== 'approved' && status !== 'rejected') {
+    return corsJson({ ok: false, error: 'Status must be approved or rejected' }, { status: 400 }, request, env);
+  }
+
+  const reviewerNotes = sanitize(body.reviewer_notes || '').slice(0, 1000);
+  const now = isoNow();
+
+  // Get the verification to find the user
+  const verification = await env.DB.prepare('SELECT user_id FROM identity_verifications WHERE id = ?').bind(verificationId).first();
+  if (!verification) {
+    return corsJson({ ok: false, error: 'Verification not found' }, { status: 404 }, request, env);
+  }
+
+  await env.DB.prepare(
+    'UPDATE identity_verifications SET status = ?, reviewer_notes = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?'
+  ).bind(status, reviewerNotes, user.id, now, verificationId).run();
+
+  if (status === 'approved') {
+    await env.DB.prepare('UPDATE users SET verified = 1 WHERE id = ?').bind(verification.user_id).run();
+  }
 
   return corsJson({ ok: true }, {}, request, env);
 }
@@ -2743,12 +3136,901 @@ async function handleUpdateMyGym(request, env) {
   if (body.amenities) { updates.push('amenities = ?'); params.push(JSON.stringify(body.amenities)); }
   if (body.lat !== undefined) { updates.push('lat = ?'); params.push(parseFloat(body.lat) || 0); }
   if (body.lng !== undefined) { updates.push('lng = ?'); params.push(parseFloat(body.lng) || 0); }
+  if (body.checkin_radius_m !== undefined) {
+    const radius = Math.max(50, Math.min(1000, parseInt(body.checkin_radius_m) || 200));
+    updates.push('checkin_radius_m = ?'); params.push(radius);
+  }
   if (updates.length === 0) return corsJson({ ok: false, error: 'No fields to update' }, { status: 400 }, request, env);
   updates.push('updated_at = ?');
   params.push(isoNow());
   params.push(gym.id);
   await env.DB.prepare(`UPDATE gyms SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
   return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Gym Membership / Affiliation System ─────────────────────────────────────
+
+// Helper: check if user is gym owner or admin/staff
+async function requireGymRole(env, userId, gymId, roles = ['owner']) {
+  if (roles.includes('owner')) {
+    const gym = await env.DB.prepare('SELECT id FROM gyms WHERE id = ? AND owner_id = ?').bind(gymId, userId).first();
+    if (gym) return 'owner';
+  }
+  if (roles.some(r => r !== 'owner')) {
+    const member = await env.DB.prepare('SELECT role FROM gym_members WHERE gym_id = ? AND user_id = ? AND status = ?').bind(gymId, userId, 'approved').first();
+    if (member && roles.includes(member.role)) return member.role;
+  }
+  return null;
+}
+
+// User requests to join a gym (or gym invites a user)
+async function handleRequestGymMembership(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id) return corsJson({ ok: false, error: 'gym_id required' }, { status: 400 }, request, env);
+
+  // Check gym exists
+  const gym = await env.DB.prepare('SELECT id, owner_id FROM gyms WHERE id = ?').bind(body.gym_id).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+
+  // Check user doesn't already have 5 approved gym affiliations
+  const memberCount = await env.DB.prepare('SELECT COUNT(*) as cnt FROM gym_members WHERE user_id = ? AND status = ?').bind(user.id, 'approved').first();
+  if (memberCount && memberCount.cnt >= 5) return corsJson({ ok: false, error: 'Maximum 5 gym affiliations allowed' }, { status: 400 }, request, env);
+
+  // Check if already exists
+  const existing = await env.DB.prepare('SELECT id, status FROM gym_members WHERE gym_id = ? AND user_id = ?').bind(body.gym_id, user.id).first();
+  if (existing) {
+    if (existing.status === 'approved') return corsJson({ ok: false, error: 'Already a member' }, { status: 400 }, request, env);
+    if (existing.status === 'pending') return corsJson({ ok: false, error: 'Request already pending' }, { status: 400 }, request, env);
+    // Re-request if previously rejected
+    await env.DB.prepare('UPDATE gym_members SET status = ?, requested_by = ?, updated_at = ? WHERE id = ?').bind('pending', 'user', isoNow(), existing.id).run();
+    return corsJson({ ok: true, message: 'Membership re-requested' }, { status: 200 }, request, env);
+  }
+
+  await env.DB.prepare('INSERT INTO gym_members (gym_id, user_id, role, status, requested_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(
+    body.gym_id, user.id, 'member', 'pending', 'user', isoNow(), isoNow()
+  ).run();
+
+  // Notify gym owner
+  if (gym.owner_id) {
+    await env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(
+      gym.owner_id, 'gym_member_request', 'New Membership Request',
+      `${user.display_name} wants to join your gym`,
+      JSON.stringify({ gym_id: body.gym_id, user_id: user.id }), isoNow()
+    ).run();
+  }
+
+  return corsJson({ ok: true, message: 'Membership requested' }, { status: 201 }, request, env);
+}
+
+// Gym owner invites a user to join
+async function handleInviteGymMember(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id || !body?.user_id) return corsJson({ ok: false, error: 'gym_id and user_id required' }, { status: 400 }, request, env);
+
+  // Verify caller is gym owner or admin
+  const role = await requireGymRole(env, user.id, body.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized for this gym' }, { status: 403 }, request, env);
+
+  // Check target user exists
+  const target = await env.DB.prepare('SELECT id, display_name FROM users WHERE id = ?').bind(body.user_id).first();
+  if (!target) return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
+
+  // Check existing
+  const existing = await env.DB.prepare('SELECT id, status FROM gym_members WHERE gym_id = ? AND user_id = ?').bind(body.gym_id, body.user_id).first();
+  if (existing) {
+    if (existing.status === 'approved') return corsJson({ ok: false, error: 'User already a member' }, { status: 400 }, request, env);
+    await env.DB.prepare('UPDATE gym_members SET status = ?, requested_by = ?, updated_at = ? WHERE id = ?').bind('pending', 'gym', isoNow(), existing.id).run();
+  } else {
+    await env.DB.prepare('INSERT INTO gym_members (gym_id, user_id, role, status, requested_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(
+      body.gym_id, body.user_id, body.role || 'member', 'pending', 'gym', isoNow(), isoNow()
+    ).run();
+  }
+
+  // Notify the invited user
+  const gym = await env.DB.prepare('SELECT name FROM gyms WHERE id = ?').bind(body.gym_id).first();
+  await env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(
+    body.user_id, 'gym_invite', 'Gym Invitation',
+    `${gym?.name || 'A gym'} invited you to join`,
+    JSON.stringify({ gym_id: body.gym_id }), isoNow()
+  ).run();
+
+  return corsJson({ ok: true, message: 'Invitation sent' }, { status: 201 }, request, env);
+}
+
+// Approve or reject a membership (gym owner approves user requests, user approves gym invites)
+async function handleRespondGymMembership(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.membership_id || !body?.action) return corsJson({ ok: false, error: 'membership_id and action (approve/reject) required' }, { status: 400 }, request, env);
+  if (!['approve', 'reject'].includes(body.action)) return corsJson({ ok: false, error: 'action must be approve or reject' }, { status: 400 }, request, env);
+
+  const membership = await env.DB.prepare('SELECT * FROM gym_members WHERE id = ?').bind(body.membership_id).first();
+  if (!membership || membership.status !== 'pending') return corsJson({ ok: false, error: 'No pending membership found' }, { status: 404 }, request, env);
+
+  // Authorization: gym side approves user requests, user side approves gym invites
+  if (membership.requested_by === 'user') {
+    // Gym owner/admin must approve
+    const role = await requireGymRole(env, user.id, membership.gym_id, ['owner', 'admin']);
+    if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+  } else {
+    // User must approve gym invite
+    if (user.id !== membership.user_id) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+  }
+
+  const newStatus = body.action === 'approve' ? 'approved' : 'rejected';
+
+  // If approving, check 5-gym limit for the member
+  if (newStatus === 'approved') {
+    const memberCount = await env.DB.prepare('SELECT COUNT(*) as cnt FROM gym_members WHERE user_id = ? AND status = ?').bind(membership.user_id, 'approved').first();
+    if (memberCount && memberCount.cnt >= 5) return corsJson({ ok: false, error: 'User already has 5 gym affiliations' }, { status: 400 }, request, env);
+  }
+
+  await env.DB.prepare('UPDATE gym_members SET status = ?, updated_at = ? WHERE id = ?').bind(newStatus, isoNow(), membership.id).run();
+
+  // Notify the other party
+  const gym = await env.DB.prepare('SELECT name, owner_id FROM gyms WHERE id = ?').bind(membership.gym_id).first();
+  const notifyUserId = membership.requested_by === 'user' ? membership.user_id : gym?.owner_id;
+  if (notifyUserId) {
+    await env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(
+      notifyUserId, 'gym_membership_response',
+      newStatus === 'approved' ? 'Membership Approved!' : 'Membership Declined',
+      newStatus === 'approved' ? `You're now affiliated with ${gym?.name || 'a gym'}` : `Your membership request was declined`,
+      JSON.stringify({ gym_id: membership.gym_id, status: newStatus }), isoNow()
+    ).run();
+  }
+
+  return corsJson({ ok: true, status: newStatus }, {}, request, env);
+}
+
+// Get gym members (for gym owners/admins)
+async function handleGetGymMembers(request, env, gymId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const role = await requireGymRole(env, user.id, gymId, ['owner', 'admin', 'staff']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  const url = new URL(request.url);
+  const status = url.searchParams.get('status') || 'approved';
+
+  const members = await env.DB.prepare(`
+    SELECT gm.*, u.display_name, u.email, u.avatar_url, u.city
+    FROM gym_members gm JOIN users u ON gm.user_id = u.id
+    WHERE gm.gym_id = ? AND gm.status = ?
+    ORDER BY gm.created_at DESC
+  `).bind(gymId, status).all();
+
+  return corsJson({ ok: true, members: members.results || [] }, {}, request, env);
+}
+
+// Get user's gym affiliations
+async function handleGetMyGymMemberships(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const memberships = await env.DB.prepare(`
+    SELECT gm.*, g.name as gym_name, g.city as gym_city, g.sports as gym_sports, g.lat, g.lng, g.rating, g.review_count
+    FROM gym_members gm JOIN gyms g ON gm.gym_id = g.id
+    WHERE gm.user_id = ?
+    ORDER BY gm.status ASC, gm.created_at DESC
+  `).bind(user.id).all();
+
+  const results = (memberships.results || []).map(m => {
+    try { m.gym_sports = JSON.parse(m.gym_sports || '[]'); } catch { m.gym_sports = []; }
+    return m;
+  });
+
+  return corsJson({ ok: true, memberships: results }, {}, request, env);
+}
+
+// Remove a member (gym owner/admin) or leave a gym (member)
+async function handleRemoveGymMember(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.membership_id) return corsJson({ ok: false, error: 'membership_id required' }, { status: 400 }, request, env);
+
+  const membership = await env.DB.prepare('SELECT * FROM gym_members WHERE id = ?').bind(body.membership_id).first();
+  if (!membership) return corsJson({ ok: false, error: 'Membership not found' }, { status: 404 }, request, env);
+
+  // User can leave, or gym owner/admin can remove
+  if (membership.user_id === user.id) {
+    await env.DB.prepare('DELETE FROM gym_members WHERE id = ?').bind(body.membership_id).run();
+    return corsJson({ ok: true, message: 'Left gym' }, {}, request, env);
+  }
+
+  const role = await requireGymRole(env, user.id, membership.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  await env.DB.prepare('DELETE FROM gym_members WHERE id = ?').bind(body.membership_id).run();
+  return corsJson({ ok: true, message: 'Member removed' }, {}, request, env);
+}
+
+// Update member role (owner only — promote to admin/staff or demote)
+async function handleUpdateGymMemberRole(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.membership_id || !body?.role) return corsJson({ ok: false, error: 'membership_id and role required' }, { status: 400 }, request, env);
+  if (!['member', 'admin', 'staff'].includes(body.role)) return corsJson({ ok: false, error: 'Invalid role' }, { status: 400 }, request, env);
+
+  const membership = await env.DB.prepare('SELECT * FROM gym_members WHERE id = ? AND status = ?').bind(body.membership_id, 'approved').first();
+  if (!membership) return corsJson({ ok: false, error: 'Approved membership not found' }, { status: 404 }, request, env);
+
+  // Only owner can change roles
+  const role = await requireGymRole(env, user.id, membership.gym_id, ['owner']);
+  if (!role) return corsJson({ ok: false, error: 'Only gym owner can change roles' }, { status: 403 }, request, env);
+
+  await env.DB.prepare('UPDATE gym_members SET role = ?, updated_at = ? WHERE id = ?').bind(body.role, isoNow(), body.membership_id).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Check-In System ─────────────────────────────────────────────────────────
+
+async function handleCheckin(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id) return corsJson({ ok: false, error: 'gym_id required' }, { status: 400 }, request, env);
+
+  // Verify gym exists
+  const gym = await env.DB.prepare('SELECT id, name FROM gyms WHERE id = ?').bind(body.gym_id).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+
+  // Prevent duplicate check-ins within 2 hours
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const recent = await env.DB.prepare('SELECT id FROM checkins WHERE user_id = ? AND gym_id = ? AND created_at > ?').bind(user.id, body.gym_id, twoHoursAgo).first();
+  if (recent) return corsJson({ ok: false, error: 'Already checked in recently' }, { status: 400 }, request, env);
+
+  const method = body.method || 'manual';
+  const points = 10; // base points per check-in
+
+  await env.DB.prepare('INSERT INTO checkins (user_id, gym_id, points, method, created_at) VALUES (?, ?, ?, ?, ?)').bind(
+    user.id, body.gym_id, points, method, isoNow()
+  ).run();
+
+  // Get total points for this user
+  const totalPoints = await env.DB.prepare('SELECT SUM(points) as total FROM checkins WHERE user_id = ?').bind(user.id).first();
+
+  return corsJson({
+    ok: true,
+    points_earned: points,
+    total_points: totalPoints?.total || points,
+    gym_name: gym.name,
+  }, { status: 201 }, request, env);
+}
+
+// ─── QR Code Check-in Endpoints ───────────────────────────────────────────
+
+// Resolve a checkin code to gym info (public)
+async function handleResolveCheckinCode(request, env, code) {
+  const gym = await env.DB.prepare(
+    'SELECT id, name, city, state, lat, lng FROM gyms WHERE checkin_code = ?'
+  ).bind(code).first();
+  if (!gym) return corsJson({ ok: false, error: 'Invalid check-in code' }, { status: 404 }, request, env);
+  return corsJson({ ok: true, gym }, {}, request, env);
+}
+
+// Verify QR check-in with GPS (auth required)
+async function handleQrCheckinVerify(request, env, code) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (body?.lat == null || body?.lng == null) {
+    return corsJson({ ok: false, error: 'Location (lat, lng) required' }, { status: 400 }, request, env);
+  }
+
+  const gym = await env.DB.prepare(
+    'SELECT id, name, address, city, state, lat, lng, checkin_radius_m FROM gyms WHERE checkin_code = ?'
+  ).bind(code).first();
+  if (!gym) return corsJson({ ok: false, error: 'Invalid check-in code' }, { status: 404 }, request, env);
+
+  // GPS verification
+  if (!gym.lat || !gym.lng) {
+    return corsJson({ ok: false, error: 'This gym hasn\'t set up location-based check-in yet' }, { status: 500 }, request, env);
+  }
+  const distance = haversineDistance(gym.lat, gym.lng, body.lat, body.lng);
+  const radius = gym.checkin_radius_m || 200;
+  if (distance > radius) {
+    return corsJson({
+      ok: false, error: 'too_far',
+      distance_m: Math.round(distance),
+      gym_name: gym.name,
+      address: gym.address || `${gym.city}, ${gym.state}`,
+    }, { status: 403 }, request, env);
+  }
+
+  // Rate limit: 1 per user per gym per 2 hours
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const recent = await env.DB.prepare(
+    'SELECT id, created_at FROM checkins WHERE user_id = ? AND gym_id = ? AND created_at > ?'
+  ).bind(user.id, gym.id, twoHoursAgo).first();
+  if (recent) {
+    return corsJson({
+      ok: false, error: 'already_checked_in',
+      gym_name: gym.name,
+      checked_in_at: recent.created_at,
+    }, { status: 429 }, request, env);
+  }
+
+  // Insert check-in
+  const points = 10;
+  await env.DB.prepare(
+    'INSERT INTO checkins (user_id, gym_id, points, method, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(user.id, gym.id, points, 'qr', isoNow()).run();
+
+  const totalPoints = await env.DB.prepare('SELECT SUM(points) as total FROM checkins WHERE user_id = ?').bind(user.id).first();
+
+  return corsJson({
+    ok: true,
+    gym_name: gym.name,
+    points_earned: points,
+    total_points: totalPoints?.total || points,
+  }, { status: 201 }, request, env);
+}
+
+// Guest QR check-in (public, no auth)
+async function handleQrCheckinGuest(request, env, code) {
+  const body = await readJson(request);
+  if (!body?.name?.trim()) return corsJson({ ok: false, error: 'Name is required' }, { status: 400 }, request, env);
+  if (!body?.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+    return corsJson({ ok: false, error: 'Valid email is required' }, { status: 400 }, request, env);
+  }
+  if (body?.lat == null || body?.lng == null) {
+    return corsJson({ ok: false, error: 'Location (lat, lng) required' }, { status: 400 }, request, env);
+  }
+
+  const gym = await env.DB.prepare(
+    'SELECT id, name, address, city, state, lat, lng, checkin_radius_m FROM gyms WHERE checkin_code = ?'
+  ).bind(code).first();
+  if (!gym) return corsJson({ ok: false, error: 'Invalid check-in code' }, { status: 404 }, request, env);
+
+  // GPS verification
+  if (!gym.lat || !gym.lng) {
+    return corsJson({ ok: false, error: 'This gym hasn\'t set up location-based check-in yet' }, { status: 500 }, request, env);
+  }
+  const distance = haversineDistance(gym.lat, gym.lng, body.lat, body.lng);
+  const radius = gym.checkin_radius_m || 200;
+  if (distance > radius) {
+    return corsJson({
+      ok: false, error: 'too_far',
+      distance_m: Math.round(distance),
+      gym_name: gym.name,
+      address: gym.address || `${gym.city}, ${gym.state}`,
+    }, { status: 403 }, request, env);
+  }
+
+  // Rate limit: 1 per email per gym per 24 hours
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const recentGuest = await env.DB.prepare(
+    'SELECT id FROM guest_checkins WHERE email = ? AND gym_id = ? AND created_at > ?'
+  ).bind(body.email.trim().toLowerCase(), gym.id, oneDayAgo).first();
+  if (recentGuest) {
+    return corsJson({ ok: false, error: 'This email was already used to check in today' }, { status: 429 }, request, env);
+  }
+
+  // IP-based backstop: max 10 guest check-ins per IP per day
+  const clientIP = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown';
+  const ipKey = `guest_ip:${clientIP}`;
+  const ipWindow = await env.DB.prepare(
+    'SELECT count FROM rate_limits WHERE key = ? AND window_start > ?'
+  ).bind(ipKey, oneDayAgo).first();
+  if (ipWindow && ipWindow.count >= 10) {
+    return corsJson({ ok: false, error: 'Too many guest check-ins from this location today' }, { status: 429 }, request, env);
+  }
+  // Update IP rate limit
+  if (ipWindow) {
+    await env.DB.prepare('UPDATE rate_limits SET count = count + 1 WHERE key = ? AND window_start > ?').bind(ipKey, oneDayAgo).run();
+  } else {
+    await env.DB.prepare('INSERT INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)').bind(ipKey, isoNow()).run();
+  }
+
+  // Insert guest check-in
+  await env.DB.prepare(
+    'INSERT INTO guest_checkins (gym_id, name, email, lat, lng, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(gym.id, body.name.trim(), body.email.trim().toLowerCase(), body.lat, body.lng, isoNow()).run();
+
+  return corsJson({ ok: true, gym_name: gym.name }, { status: 201 }, request, env);
+}
+
+// Regenerate gym's check-in code (gym_owner only)
+async function handleRegenerateCheckinCode(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'gym_owner') return corsJson({ ok: false, error: 'Only gym owners can regenerate codes' }, { status: 403 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT id FROM gyms WHERE owner_id = ?').bind(user.id).first();
+  if (!gym) return corsJson({ ok: false, error: 'No gym found for this owner' }, { status: 404 }, request, env);
+
+  // Rate limit: 1 per hour via rate_limits table
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const regenKey = `regen:${gym.id}`;
+  const recentRegen = await env.DB.prepare(
+    'SELECT count FROM rate_limits WHERE key = ? AND window_start > ?'
+  ).bind(regenKey, oneHourAgo).first();
+  if (recentRegen) {
+    return corsJson({ ok: false, error: 'Code can only be regenerated once per hour' }, { status: 429 }, request, env);
+  }
+
+  const newCode = generateCheckinCode();
+  await env.DB.prepare('UPDATE gyms SET checkin_code = ? WHERE id = ?').bind(newCode, gym.id).run();
+  await env.DB.prepare('INSERT INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)').bind(regenKey, isoNow()).run();
+
+  return corsJson({ ok: true, checkin_code: newCode }, {}, request, env);
+}
+
+// Get gym's check-in code (gym_owner only, for QR display)
+async function handleGetCheckinCode(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'gym_owner') return corsJson({ ok: false, error: 'Only gym owners can view check-in codes' }, { status: 403 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT id, checkin_code, checkin_radius_m FROM gyms WHERE owner_id = ?').bind(user.id).first();
+  if (!gym) return corsJson({ ok: false, error: 'No gym found for this owner' }, { status: 404 }, request, env);
+
+  // Auto-generate code if none exists
+  let code = gym.checkin_code;
+  if (!code) {
+    code = generateCheckinCode();
+    await env.DB.prepare('UPDATE gyms SET checkin_code = ? WHERE id = ?').bind(code, gym.id).run();
+  }
+
+  return corsJson({
+    ok: true,
+    checkin_code: code,
+    checkin_radius_m: gym.checkin_radius_m || 200,
+    gym_id: gym.id,
+  }, {}, request, env);
+}
+
+// Get guest check-in list for gym owner
+async function handleGetGuestCheckins(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'gym_owner') return corsJson({ ok: false, error: 'Only gym owners can view guest check-ins' }, { status: 403 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT id FROM gyms WHERE owner_id = ?').bind(user.id).first();
+  if (!gym) return corsJson({ ok: false, error: 'No gym found for this owner' }, { status: 404 }, request, env);
+
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
+
+  const guests = await env.DB.prepare(
+    'SELECT id, name, email, created_at FROM guest_checkins WHERE gym_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).bind(gym.id, limit).all();
+
+  return corsJson({ ok: true, guests: guests.results || [] }, {}, request, env);
+}
+
+// ─── End QR Code Check-in Endpoints ──────────────────────────────────────
+
+// Get user's check-in history
+async function handleGetCheckins(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+
+  const checkins = await env.DB.prepare(`
+    SELECT c.*, g.name as gym_name, g.city as gym_city, g.lat, g.lng, g.sports as gym_sports
+    FROM checkins c JOIN gyms g ON c.gym_id = g.id
+    WHERE c.user_id = ?
+    ORDER BY c.created_at DESC
+    LIMIT ? OFFSET ?
+  `).bind(user.id, limit, offset).all();
+
+  const totalPoints = await env.DB.prepare('SELECT SUM(points) as total, COUNT(*) as count FROM checkins WHERE user_id = ?').bind(user.id).first();
+
+  // Get unique gyms visited
+  const uniqueGyms = await env.DB.prepare('SELECT COUNT(DISTINCT gym_id) as count FROM checkins WHERE user_id = ?').bind(user.id).first();
+
+  const results = (checkins.results || []).map(c => {
+    try { c.gym_sports = JSON.parse(c.gym_sports || '[]'); } catch { c.gym_sports = []; }
+    return c;
+  });
+
+  return corsJson({
+    ok: true,
+    checkins: results,
+    total_points: totalPoints?.total || 0,
+    total_checkins: totalPoints?.count || 0,
+    unique_gyms: uniqueGyms?.count || 0,
+  }, {}, request, env);
+}
+
+// Get user's training passport — summary of all gyms visited with stats
+async function handleGetTrainingPassport(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Optionally view another user's passport
+  const url = new URL(request.url);
+  const targetUserId = parseInt(url.searchParams.get('user_id') || '') || user.id;
+
+  const gymsVisited = await env.DB.prepare(`
+    SELECT g.id, g.name, g.city, g.state, g.lat, g.lng, g.sports,
+           COUNT(c.id) as visit_count, SUM(c.points) as total_points,
+           MIN(c.created_at) as first_visit, MAX(c.created_at) as last_visit
+    FROM checkins c JOIN gyms g ON c.gym_id = g.id
+    WHERE c.user_id = ?
+    GROUP BY g.id
+    ORDER BY visit_count DESC
+  `).bind(targetUserId).all();
+
+  const totalStats = await env.DB.prepare('SELECT SUM(points) as total_points, COUNT(*) as total_checkins FROM checkins WHERE user_id = ?').bind(targetUserId).first();
+
+  const results = (gymsVisited.results || []).map(g => {
+    try { g.sports = JSON.parse(g.sports || '[]'); } catch { g.sports = []; }
+    return g;
+  });
+
+  // Calculate badges
+  const badges = [];
+  const totalCheckins = totalStats?.total_checkins || 0;
+  const uniqueCount = results.length;
+  if (totalCheckins >= 1) badges.push({ id: 'first_step', name: 'First Step', description: 'First check-in!' });
+  if (totalCheckins >= 10) badges.push({ id: 'regular', name: 'Regular', description: '10 check-ins' });
+  if (totalCheckins >= 50) badges.push({ id: 'dedicated', name: 'Dedicated', description: '50 check-ins' });
+  if (totalCheckins >= 100) badges.push({ id: 'iron_will', name: 'Iron Will', description: '100 check-ins' });
+  if (totalCheckins >= 500) badges.push({ id: 'legend', name: 'Legend', description: '500 check-ins' });
+  if (uniqueCount >= 3) badges.push({ id: 'explorer', name: 'Explorer', description: 'Visited 3 different gyms' });
+  if (uniqueCount >= 10) badges.push({ id: 'nomad', name: 'Nomad', description: 'Visited 10 different gyms' });
+  if (uniqueCount >= 25) badges.push({ id: 'globetrotter', name: 'Globetrotter', description: 'Visited 25 different gyms' });
+
+  return corsJson({
+    ok: true,
+    gyms: results,
+    total_points: totalStats?.total_points || 0,
+    total_checkins: totalCheckins,
+    unique_gyms: uniqueCount,
+    badges,
+  }, {}, request, env);
+}
+
+// ─── Gym Promotions ──────────────────────────────────────────────────────────
+
+async function handleCreatePromotion(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id || !body?.title) return corsJson({ ok: false, error: 'gym_id and title required' }, { status: 400 }, request, env);
+
+  const role = await requireGymRole(env, user.id, body.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  const validTypes = ['open_mat', 'trial', 'discount', 'event', 'general'];
+  const type = validTypes.includes(body.type) ? body.type : 'general';
+
+  const result = await env.DB.prepare(`
+    INSERT INTO gym_promotions (gym_id, title, description, type, start_date, end_date, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).bind(
+    body.gym_id, sanitize(body.title), sanitize(body.description || ''),
+    type, body.start_date || null, body.end_date || null, isoNow(), isoNow()
+  ).run();
+
+  return corsJson({ ok: true, promotion_id: result.meta?.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleGetGymPromotions(request, env, gymId) {
+  const promotions = await env.DB.prepare(`
+    SELECT p.*, g.name as gym_name, g.city as gym_city
+    FROM gym_promotions p JOIN gyms g ON p.gym_id = g.id
+    WHERE p.gym_id = ? AND p.is_active = 1
+    ORDER BY p.created_at DESC
+  `).bind(gymId).all();
+
+  return corsJson({ ok: true, promotions: promotions.results || [] }, {}, request, env);
+}
+
+async function handleUpdatePromotion(request, env, promoId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const promo = await env.DB.prepare('SELECT * FROM gym_promotions WHERE id = ?').bind(promoId).first();
+  if (!promo) return corsJson({ ok: false, error: 'Promotion not found' }, { status: 404 }, request, env);
+
+  const role = await requireGymRole(env, user.id, promo.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  const body = await readJson(request);
+  const updates = [];
+  const params = [];
+  for (const f of ['title', 'description', 'type', 'start_date', 'end_date']) {
+    if (body[f] !== undefined) { updates.push(`${f} = ?`); params.push(sanitize(String(body[f]))); }
+  }
+  if (body.is_active !== undefined) { updates.push('is_active = ?'); params.push(body.is_active ? 1 : 0); }
+  if (updates.length === 0) return corsJson({ ok: false, error: 'No fields to update' }, { status: 400 }, request, env);
+  updates.push('updated_at = ?');
+  params.push(isoNow());
+  params.push(promoId);
+
+  await env.DB.prepare(`UPDATE gym_promotions SET ${updates.join(', ')} WHERE id = ?`).bind(...params).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+async function handleDeletePromotion(request, env, promoId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const promo = await env.DB.prepare('SELECT gym_id FROM gym_promotions WHERE id = ?').bind(promoId).first();
+  if (!promo) return corsJson({ ok: false, error: 'Promotion not found' }, { status: 404 }, request, env);
+
+  const role = await requireGymRole(env, user.id, promo.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  await env.DB.prepare('DELETE FROM gym_promotions WHERE id = ?').bind(promoId).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// Browse all active promotions (with filters)
+async function handleBrowsePromotions(request, env) {
+  const url = new URL(request.url);
+  const city = url.searchParams.get('city');
+  const type = url.searchParams.get('type');
+  const sport = url.searchParams.get('sport');
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50);
+
+  let sql = `
+    SELECT p.*, g.name as gym_name, g.city as gym_city, g.state as gym_state, g.lat, g.lng, g.sports as gym_sports
+    FROM gym_promotions p JOIN gyms g ON p.gym_id = g.id
+    WHERE p.is_active = 1
+  `;
+  const params = [];
+  if (city) { sql += ' AND LOWER(g.city) = LOWER(?)'; params.push(city); }
+  if (type) { sql += ' AND p.type = ?'; params.push(type); }
+  // end_date filter: only show promotions that haven't expired
+  sql += ` AND (p.end_date IS NULL OR p.end_date >= ?)`;
+  params.push(isoNow().split('T')[0]);
+  sql += ' ORDER BY p.created_at DESC LIMIT ?';
+  params.push(limit);
+
+  const promotions = await env.DB.prepare(sql).bind(...params).all();
+  const results = (promotions.results || []).map(p => {
+    try { p.gym_sports = JSON.parse(p.gym_sports || '[]'); } catch { p.gym_sports = []; }
+    // Filter by sport if requested (sports is a JSON array on gym)
+    if (sport && !p.gym_sports.some(s => s.toLowerCase().includes(sport.toLowerCase()))) return null;
+    return p;
+  }).filter(Boolean);
+
+  return corsJson({ ok: true, promotions: results }, {}, request, env);
+}
+
+// ─── Gym Announcements (Inter-Group Messaging) ──────────────────────────────
+
+async function handleCreateAnnouncement(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id || !body?.title || !body?.body) return corsJson({ ok: false, error: 'gym_id, title, and body required' }, { status: 400 }, request, env);
+
+  const role = await requireGymRole(env, user.id, body.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  const result = await env.DB.prepare(`
+    INSERT INTO gym_announcements (gym_id, author_id, title, body, pinned, created_at) VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(body.gym_id, user.id, sanitize(body.title), sanitize(body.body), body.pinned ? 1 : 0, isoNow()).run();
+
+  // Notify all approved gym members
+  const members = await env.DB.prepare('SELECT user_id FROM gym_members WHERE gym_id = ? AND status = ? AND user_id != ?').bind(body.gym_id, 'approved', user.id).all();
+  const gym = await env.DB.prepare('SELECT name FROM gyms WHERE id = ?').bind(body.gym_id).first();
+  for (const m of (members.results || [])) {
+    await env.DB.prepare('INSERT INTO notifications (user_id, type, title, body, data, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(
+      m.user_id, 'gym_announcement', `${gym?.name || 'Gym'}: ${sanitize(body.title)}`,
+      sanitize(body.body).substring(0, 200),
+      JSON.stringify({ gym_id: body.gym_id, announcement_id: result.meta?.last_row_id }), isoNow()
+    ).run();
+  }
+
+  return corsJson({ ok: true, announcement_id: result.meta?.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleGetGymAnnouncements(request, env, gymId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Must be a member or owner to see announcements
+  const gym = await env.DB.prepare('SELECT owner_id FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+
+  const isMember = gym.owner_id === user.id ||
+    await env.DB.prepare('SELECT id FROM gym_members WHERE gym_id = ? AND user_id = ? AND status = ?').bind(gymId, user.id, 'approved').first();
+  if (!isMember) return corsJson({ ok: false, error: 'Not a member of this gym' }, { status: 403 }, request, env);
+
+  const announcements = await env.DB.prepare(`
+    SELECT a.*, u.display_name as author_name, u.avatar_url as author_avatar
+    FROM gym_announcements a JOIN users u ON a.author_id = u.id
+    WHERE a.gym_id = ?
+    ORDER BY a.pinned DESC, a.created_at DESC
+    LIMIT 50
+  `).bind(gymId).all();
+
+  return corsJson({ ok: true, announcements: announcements.results || [] }, {}, request, env);
+}
+
+async function handleDeleteAnnouncement(request, env, announcementId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const announcement = await env.DB.prepare('SELECT * FROM gym_announcements WHERE id = ?').bind(announcementId).first();
+  if (!announcement) return corsJson({ ok: false, error: 'Announcement not found' }, { status: 404 }, request, env);
+
+  const role = await requireGymRole(env, user.id, announcement.gym_id, ['owner', 'admin']);
+  if (!role && announcement.author_id !== user.id) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  await env.DB.prepare('DELETE FROM gym_announcements WHERE id = ?').bind(announcementId).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Gym Discovery (Nearby / Search with Filters) ───────────────────────────
+
+async function handleDiscoverGyms(request, env) {
+  const url = new URL(request.url);
+  const lat = parseFloat(url.searchParams.get('lat') || '0');
+  const lng = parseFloat(url.searchParams.get('lng') || '0');
+  const radius = Math.min(parseFloat(url.searchParams.get('radius') || '50'), 200); // km, max 200
+  const sport = url.searchParams.get('sport');
+  const hasPromotions = url.searchParams.get('promotions') === 'true';
+  const hasOpenMats = url.searchParams.get('open_mats') === 'true';
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
+
+  // If lat/lng provided, use Haversine approximation for distance sorting
+  // D1/SQLite doesn't have native geo functions, so we use a bounding box + Haversine in SQL
+  let sql, params = [];
+  if (lat && lng) {
+    // Bounding box approximation (1 degree lat ≈ 111km)
+    const latDelta = radius / 111;
+    const lngDelta = radius / (111 * Math.cos(lat * Math.PI / 180));
+    sql = `
+      SELECT g.*,
+        (6371 * 2 * ASIN(SQRT(
+          POWER(SIN((RADIANS(?) - RADIANS(g.lat)) / 2), 2) +
+          COS(RADIANS(?)) * COS(RADIANS(g.lat)) *
+          POWER(SIN((RADIANS(?) - RADIANS(g.lng)) / 2), 2)
+        ))) as distance_km
+      FROM gyms g
+      WHERE g.lat BETWEEN ? AND ? AND g.lng BETWEEN ? AND ?
+    `;
+    params = [lat, lat, lng, lat - latDelta, lat + latDelta, lng - lngDelta, lng + lngDelta];
+  } else {
+    // No geo, just list all gyms
+    sql = 'SELECT g.*, NULL as distance_km FROM gyms g WHERE 1=1';
+  }
+
+  sql += ' ORDER BY ' + (lat && lng ? 'distance_km ASC' : 'g.rating DESC') + ' LIMIT ?';
+  params.push(limit);
+
+  let gyms;
+  try {
+    gyms = await env.DB.prepare(sql).bind(...params).all();
+  } catch {
+    // SQLite may not have RADIANS/ASIN — fallback to simple query
+    const fallbackSql = `SELECT g.*, NULL as distance_km FROM gyms g ORDER BY g.rating DESC LIMIT ?`;
+    gyms = await env.DB.prepare(fallbackSql).bind(limit).all();
+  }
+
+  let results = (gyms.results || []).map(g => {
+    try { g.sports = JSON.parse(g.sports || '[]'); } catch { g.sports = []; }
+    try { g.amenities = JSON.parse(g.amenities || '[]'); } catch { g.amenities = []; }
+    return g;
+  });
+
+  // Filter by sport
+  if (sport) {
+    results = results.filter(g => g.sports.some(s => s.toLowerCase().includes(sport.toLowerCase())));
+  }
+
+  // If we need promotions or open mats, enrich
+  if (hasPromotions || hasOpenMats) {
+    const gymIds = results.map(g => g.id);
+    if (gymIds.length > 0) {
+      const placeholders = gymIds.map(() => '?').join(',');
+      const promos = await env.DB.prepare(`
+        SELECT gym_id, COUNT(*) as promo_count FROM gym_promotions
+        WHERE gym_id IN (${placeholders}) AND is_active = 1 AND (end_date IS NULL OR end_date >= ?)
+        GROUP BY gym_id
+      `).bind(...gymIds, isoNow().split('T')[0]).all();
+
+      const promoMap = {};
+      for (const p of (promos.results || [])) promoMap[p.gym_id] = p.promo_count;
+
+      results = results.map(g => ({ ...g, active_promotions: promoMap[g.id] || 0 }));
+      if (hasPromotions) results = results.filter(g => g.active_promotions > 0);
+
+      if (hasOpenMats) {
+        const openMatPromos = await env.DB.prepare(`
+          SELECT gym_id FROM gym_promotions
+          WHERE gym_id IN (${placeholders}) AND is_active = 1 AND type = 'open_mat'
+          AND (end_date IS NULL OR end_date >= ?)
+        `).bind(...gymIds, isoNow().split('T')[0]).all();
+        const openMatSet = new Set((openMatPromos.results || []).map(p => p.gym_id));
+        results = results.filter(g => openMatSet.has(g.id));
+      }
+    }
+  }
+
+  return corsJson({ ok: true, gyms: results, total: results.length }, {}, request, env);
+}
+
+// ─── Gym Sessions Management (for gym owners) ───────────────────────────────
+
+async function handleCreateGymSession(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  const body = await readJson(request);
+  if (!body?.gym_id || !body?.day_of_week || !body?.start_time || !body?.end_time) {
+    return corsJson({ ok: false, error: 'gym_id, day_of_week, start_time, end_time required' }, { status: 400 }, request, env);
+  }
+
+  const role = await requireGymRole(env, user.id, body.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  const result = await env.DB.prepare(`
+    INSERT INTO gym_sessions (gym_id, day_of_week, start_time, end_time, max_slots, current_slots, created_at)
+    VALUES (?, ?, ?, ?, ?, 0, ?)
+  `).bind(body.gym_id, body.day_of_week, body.start_time, body.end_time, body.max_slots || 20, isoNow()).run();
+
+  return corsJson({ ok: true, session_id: result.meta?.last_row_id }, { status: 201 }, request, env);
+}
+
+async function handleDeleteGymSession(request, env, sessionId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const session = await env.DB.prepare('SELECT gym_id FROM gym_sessions WHERE id = ?').bind(sessionId).first();
+  if (!session) return corsJson({ ok: false, error: 'Session not found' }, { status: 404 }, request, env);
+
+  const role = await requireGymRole(env, user.id, session.gym_id, ['owner', 'admin']);
+  if (!role) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  await env.DB.prepare('DELETE FROM gym_sessions WHERE id = ?').bind(sessionId).run();
+  return corsJson({ ok: true }, {}, request, env);
+}
+
+// ─── Gym Owner Dashboard Stats ───────────────────────────────────────────────
+
+async function handleGymDashboardStats(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT * FROM gyms WHERE owner_id = ?').bind(user.id).first();
+  if (!gym) return corsJson({ ok: false, error: 'No gym found' }, { status: 404 }, request, env);
+
+  const [members, pendingRequests, checkins7d, totalCheckins, reviews, activePromos, announcements] = await Promise.all([
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM gym_members WHERE gym_id = ? AND status = ?').bind(gym.id, 'approved').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM gym_members WHERE gym_id = ? AND status = ?').bind(gym.id, 'pending').first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM checkins WHERE gym_id = ? AND created_at > ?').bind(gym.id, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()).first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM checkins WHERE gym_id = ?').bind(gym.id).first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt, AVG(rating) as avg FROM gym_reviews WHERE gym_id = ?').bind(gym.id).first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM gym_promotions WHERE gym_id = ? AND is_active = 1').bind(gym.id).first(),
+    env.DB.prepare('SELECT COUNT(*) as cnt FROM gym_announcements WHERE gym_id = ?').bind(gym.id).first(),
+  ]);
+
+  try { gym.sports = JSON.parse(gym.sports || '[]'); } catch { gym.sports = []; }
+  try { gym.amenities = JSON.parse(gym.amenities || '[]'); } catch { gym.amenities = []; }
+
+  return corsJson({
+    ok: true,
+    gym,
+    stats: {
+      total_members: members?.cnt || 0,
+      pending_requests: pendingRequests?.cnt || 0,
+      checkins_7d: checkins7d?.cnt || 0,
+      total_checkins: totalCheckins?.cnt || 0,
+      total_reviews: reviews?.cnt || 0,
+      avg_rating: reviews?.avg ? Math.round(reviews.avg * 10) / 10 : 0,
+      active_promotions: activePromos?.cnt || 0,
+      total_announcements: announcements?.cnt || 0,
+    }
+  }, {}, request, env);
 }
 
 // ─── Subscription Management ─────────────────────────────────────────────────
@@ -3031,6 +4313,33 @@ export default {
       if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
       if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
 
+      // Trust & Safety: Identity Verification
+      if (path === '/api/identity/submit' && method === 'POST') return handleSubmitIdentity(request, env);
+      if (path === '/api/identity/status' && method === 'GET') return handleGetIdentityStatus(request, env);
+      if (path === '/api/identity/data' && method === 'DELETE') return handleDeleteIdentityData(request, env);
+
+      // Trust & Safety: Session Ratings / Reputation
+      if (path === '/api/ratings' && method === 'POST') return handleSubmitRating(request, env);
+      if (path.match(/^\/api\/ratings\/score\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[4]);
+        return handleGetTrustScore(request, env, id);
+      }
+      if (path.match(/^\/api\/ratings\/can-rate\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[4]);
+        return handleCanRate(request, env, id);
+      }
+
+      // Trust & Safety: Block System
+      if (path === '/api/blocks' && method === 'POST') return handleTsBlockUser(request, env);
+      if (path === '/api/blocks' && method === 'GET') return handleGetBlocks(request, env);
+      if (path.match(/^\/api\/blocks\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleTsUnblockUser(request, env, id);
+      }
+
+      // Trust & Safety: Emergency Contact
+      if (path === '/api/profile/emergency-contact' && method === 'PUT') return handleUpdateEmergencyContact(request, env);
+
       // Admin routes
       if (path === '/api/admin/stats' && method === 'GET') return handleAdminStats(request, env);
       if (path === '/api/admin/users' && method === 'GET') return handleAdminUsers(request, env);
@@ -3038,6 +4347,13 @@ export default {
       if (path.match(/^\/api\/admin\/reports\/(\d+)\/resolve$/) && method === 'POST') {
         const id = parseInt(path.split('/')[4]);
         return handleAdminResolveReport(request, env, id);
+      }
+
+      // Admin Identity Verification
+      if (path === '/api/admin/identity/pending' && method === 'GET') return handleAdminGetPendingIdentities(request, env);
+      if (path.match(/^\/api\/admin\/identity\/(\d+)\/review$/) && method === 'PUT') {
+        const id = parseInt(path.split('/')[4]);
+        return handleAdminReviewIdentity(request, env, id);
       }
 
       // Community Posts
@@ -3116,6 +4432,78 @@ export default {
       // Gym Owner Management
       if (path === '/api/gym/mine' && method === 'GET') return handleGetMyGym(request, env);
       if (path === '/api/gym/mine' && method === 'PUT') return handleUpdateMyGym(request, env);
+      if (path === '/api/gym/dashboard' && method === 'GET') return handleGymDashboardStats(request, env);
+
+      // Gym Membership / Affiliation
+      if (path === '/api/gym/members/request' && method === 'POST') return handleRequestGymMembership(request, env);
+      if (path === '/api/gym/members/invite' && method === 'POST') return handleInviteGymMember(request, env);
+      if (path === '/api/gym/members/respond' && method === 'POST') return handleRespondGymMembership(request, env);
+      if (path === '/api/gym/members/remove' && method === 'POST') return handleRemoveGymMember(request, env);
+      if (path === '/api/gym/members/role' && method === 'PUT') return handleUpdateGymMemberRole(request, env);
+      if (path === '/api/gym/my-memberships' && method === 'GET') return handleGetMyGymMemberships(request, env);
+      if (path.match(/^\/api\/gyms\/(\d+)\/members$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetGymMembers(request, env, id);
+      }
+
+      // QR Code Check-In (public routes first)
+      if (path.match(/^\/api\/checkin\/([a-f0-9]+)$/) && method === 'GET') {
+        const code = path.split('/')[3];
+        return handleResolveCheckinCode(request, env, code);
+      }
+      if (path.match(/^\/api\/checkin\/([a-f0-9]+)\/verify$/) && method === 'POST') {
+        const code = path.split('/')[3];
+        return handleQrCheckinVerify(request, env, code);
+      }
+      if (path.match(/^\/api\/checkin\/([a-f0-9]+)\/guest$/) && method === 'POST') {
+        const code = path.split('/')[3];
+        return handleQrCheckinGuest(request, env, code);
+      }
+      if (path === '/api/gym/checkin-code' && method === 'GET') return handleGetCheckinCode(request, env);
+      if (path === '/api/gym/checkin-code/regenerate' && method === 'POST') return handleRegenerateCheckinCode(request, env);
+      if (path === '/api/gym/guest-checkins' && method === 'GET') return handleGetGuestCheckins(request, env);
+
+      // Check-Ins (existing)
+      if (path === '/api/checkins' && method === 'POST') return handleCheckin(request, env);
+      if (path === '/api/checkins' && method === 'GET') return handleGetCheckins(request, env);
+      if (path === '/api/checkins/passport' && method === 'GET') return handleGetTrainingPassport(request, env);
+
+      // Gym Promotions
+      if (path === '/api/promotions' && method === 'POST') return handleCreatePromotion(request, env);
+      if (path === '/api/promotions/browse' && method === 'GET') return handleBrowsePromotions(request, env);
+      if (path.match(/^\/api\/gyms\/(\d+)\/promotions$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetGymPromotions(request, env, id);
+      }
+      if (path.match(/^\/api\/promotions\/(\d+)$/) && method === 'PUT') {
+        const id = parseInt(path.split('/')[3]);
+        return handleUpdatePromotion(request, env, id);
+      }
+      if (path.match(/^\/api\/promotions\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeletePromotion(request, env, id);
+      }
+
+      // Gym Announcements
+      if (path === '/api/gym/announcements' && method === 'POST') return handleCreateAnnouncement(request, env);
+      if (path.match(/^\/api\/gyms\/(\d+)\/announcements$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetGymAnnouncements(request, env, id);
+      }
+      if (path.match(/^\/api\/announcements\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeleteAnnouncement(request, env, id);
+      }
+
+      // Gym Sessions Management
+      if (path === '/api/gym/sessions' && method === 'POST') return handleCreateGymSession(request, env);
+      if (path.match(/^\/api\/gym\/sessions\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[4]);
+        return handleDeleteGymSession(request, env, id);
+      }
+
+      // Gym Discovery (geo + filter based)
+      if (path === '/api/gyms/discover' && method === 'GET') return handleDiscoverGyms(request, env);
 
       // Subscription Management
       if (path === '/api/subscriptions/cancel' && method === 'POST') return handleCancelSubscription(request, env);

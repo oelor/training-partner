@@ -251,7 +251,7 @@ export default function OnboardingPage() {
                   <button
                     key={sport}
                     onClick={() => toggleSport(sport)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    className={`p-4 rounded-xl border-2 text-left transition-all duration-300 card-hover hover:scale-105 ${
                       selected
                         ? 'border-primary bg-primary/10 text-white'
                         : 'border-border bg-surface text-text-secondary hover:border-primary/50'
@@ -282,7 +282,7 @@ export default function OnboardingPage() {
                     <button
                       key={level}
                       onClick={() => setProfile({ ...profile, skillLevel: level })}
-                      className={`p-3 rounded-xl border-2 text-center transition-all ${
+                      className={`p-3 rounded-xl border-2 text-center transition-all duration-300 card-hover hover:scale-105 ${
                         profile.skillLevel === level
                           ? 'border-primary bg-primary/10 text-white'
                           : 'border-border bg-surface text-text-secondary hover:border-primary/50'
@@ -328,7 +328,7 @@ export default function OnboardingPage() {
                     <button
                       key={goal}
                       onClick={() => toggleGoal(goal)}
-                      className={`px-4 py-2 rounded-full border-2 transition-all ${
+                      className={`px-4 py-2 rounded-full border-2 transition-all duration-300 hover:scale-105 ${
                         profile.trainingGoals.includes(goal)
                           ? 'border-accent bg-accent/10 text-accent'
                           : 'border-border text-text-secondary hover:border-accent/50'
@@ -409,7 +409,7 @@ export default function OnboardingPage() {
           <button
             onClick={() => setStep(step + 1)}
             disabled={!canProceed()}
-            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors btn-glow"
           >
             Continue <ChevronRight className="w-5 h-5" />
           </button>
@@ -417,7 +417,7 @@ export default function OnboardingPage() {
           <button
             onClick={handleFinish}
             disabled={saving}
-            className="flex items-center gap-2 bg-accent text-background px-8 py-3 rounded-lg font-bold hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 bg-accent text-background px-8 py-3 rounded-lg font-bold hover:bg-accent/90 disabled:opacity-50 transition-colors animate-pulse-glow btn-glow"
           >
             {saving ? (
               <>

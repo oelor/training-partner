@@ -47,8 +47,8 @@ export default function BookingsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-heading text-3xl lg:text-4xl text-white mb-2">MY BOOKINGS</h1>
+      <div className="animate-slide-up">
+        <h1 className="font-heading text-3xl lg:text-4xl text-white mb-2">MY <span className="gradient-text">BOOKINGS</span></h1>
         <p className="text-text-secondary">Manage your open mat sessions</p>
       </div>
 
@@ -74,9 +74,9 @@ export default function BookingsPage() {
                 <CheckCircle className="w-5 h-5 text-green-400" />
                 Upcoming Sessions ({upcoming.length})
               </h2>
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-2 gap-4 stagger-children">
                 {upcoming.map(booking => (
-                  <div key={booking.id} className="bg-surface border border-border rounded-xl p-5">
+                  <div key={booking.id} className="bg-surface border border-border rounded-xl p-5 card-hover">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-white font-heading text-lg">{booking.gym_name}</h3>
@@ -84,7 +84,7 @@ export default function BookingsPage() {
                           <MapPin className="w-3.5 h-3.5" /> {booking.gym_city}
                         </p>
                       </div>
-                      <span className="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded capitalize">
+                      <span className="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded capitalize animate-pulse-glow">
                         {booking.status}
                       </span>
                     </div>
@@ -99,7 +99,7 @@ export default function BookingsPage() {
                     <button
                       onClick={() => handleCancel(booking.id)}
                       disabled={cancelling === booking.id}
-                      className="text-red-400 text-sm hover:text-red-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                      className="text-red-400 text-sm hover:text-red-300 flex items-center gap-1 transition-colors disabled:opacity-50 btn-glow"
                     >
                       {cancelling === booking.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                       Cancel Booking
@@ -117,9 +117,9 @@ export default function BookingsPage() {
                 <XCircle className="w-5 h-5 text-text-secondary" />
                 Past / Cancelled ({past.length})
               </h2>
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid md:grid-cols-2 gap-4 stagger-children">
                 {past.map(booking => (
-                  <div key={booking.id} className="bg-surface border border-border rounded-xl p-5 opacity-60">
+                  <div key={booking.id} className="bg-surface border border-border rounded-xl p-5 opacity-60 card-hover">
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-white font-heading text-lg">{booking.gym_name}</h3>

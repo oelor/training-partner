@@ -13,15 +13,23 @@ import {
   Target,
   CheckCircle,
   ArrowRight,
-  Crown
+  Crown,
+  Heart
 } from 'lucide-react'
+import {
+  WrestlerSilhouette,
+  BJJGuardSilhouette,
+  MuayThaiKickSilhouette,
+  BoxerSilhouette,
+  JudoThrowSilhouette,
+  MMAFighterSilhouette
+} from '@/components/silhouettes'
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   useEffect(() => {
-    // Check if user has a token (lightweight check, no API call)
     setIsLoggedIn(!!localStorage.getItem('tp_token'))
   }, [])
 
@@ -31,7 +39,6 @@ export default function LandingPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
             <Link href="/" className="flex items-center gap-2">
               <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
                 <Users className="w-6 h-6 text-white" />
@@ -39,7 +46,6 @@ export default function LandingPage() {
               <span className="font-heading text-2xl text-white">TRAINING PARTNER</span>
             </Link>
 
-            {/* Desktop Nav */}
             <div className="hidden md:flex items-center gap-8">
               <Link href="#features" className="text-text-secondary hover:text-primary transition-colors">
                 Features
@@ -75,8 +81,7 @@ export default function LandingPage() {
               )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <button 
+            <button
               className="md:hidden text-white"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
@@ -85,7 +90,6 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden bg-surface border-t border-border">
             <div className="px-4 py-4 space-y-3">
@@ -125,38 +129,40 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Hero background pattern */}
         <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
           <div className="absolute inset-0 opacity-10" style={{
             backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, #FF4D00 10px, #FF4D00 20px)',
           }} />
         </div>
+        {/* Decorative silhouettes */}
+        <WrestlerSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-32 w-72 lg:w-80 text-primary opacity-[0.06] z-0 -rotate-6" />
+        <BJJGuardSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-48 w-64 lg:w-80 text-primary opacity-[0.06] z-0 rotate-6" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center">
             <div className="inline-flex items-center gap-2 bg-surface px-4 py-2 rounded-full border border-border mb-8 animate-fade-in">
               <Zap className="w-4 h-4 text-accent" />
               <span className="text-sm text-text-secondary">Find your perfect training match</span>
             </div>
-            
+
             <h1 className="font-heading text-5xl sm:text-6xl lg:text-7xl text-white mb-6 animate-slide-up">
               NEVER TRAIN <span className="gradient-text">ALONE</span> AGAIN
             </h1>
-            
+
             <p className="text-xl text-text-secondary max-w-2xl mx-auto mb-10 animate-slide-up delay-100">
-              Connect with compatible training partners based on skill level, weight class, 
+              Connect with compatible training partners based on skill level, weight class,
               and training goals. Plus access exclusive open mat hours at partner gyms.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up delay-200">
-              <Link 
-                href="/auth/signup" 
+              <Link
+                href="/auth/signup"
                 className="w-full sm:w-auto bg-primary text-white px-8 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105"
               >
                 START TRAINING FREE
               </Link>
-              <Link 
-                href="#how-it-works" 
+              <Link
+                href="#how-it-works"
                 className="w-full sm:w-auto flex items-center justify-center gap-2 text-text-secondary hover:text-white transition-colors px-8 py-4"
               >
                 See How It Works <ChevronRight className="w-5 h-5" />
@@ -179,36 +185,39 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Hero Visual - App Preview */}
+            {/* Hero Visual — abstract match visualization (no fake profiles) */}
             <div className="mt-16 animate-slide-up delay-400 relative max-w-3xl mx-auto">
               <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
               <div className="bg-surface border border-border rounded-2xl p-6 shadow-2xl shadow-primary/10">
-                {/* App preview header */}
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
                       <Users className="w-4 h-4 text-white" />
                     </div>
-                    <span className="font-heading text-sm text-white">YOUR MATCHES</span>
+                    <span className="font-heading text-sm text-white">SMART MATCHING</span>
                   </div>
-                  <span className="text-text-secondary text-xs">Preview</span>
+                  <span className="text-accent font-mono text-xs font-bold">LIVE</span>
                 </div>
-                {/* Example match cards */}
+                {/* Abstract matching visualization */}
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { name: 'Alex R.', sport: 'BJJ', match: 94, skill: 'Purple Belt' },
-                    { name: 'Jordan M.', sport: 'Wrestling', match: 91, skill: 'Advanced' },
-                    { name: 'Sam K.', sport: 'MMA', match: 87, skill: 'Intermediate' },
-                  ].map((p) => (
-                    <div key={p.name} className="bg-background rounded-xl p-4 border border-border">
+                    { sport: 'BJJ', level: 'Purple Belt', match: 94, color: 'primary' },
+                    { sport: 'Wrestling', level: 'Advanced', match: 91, color: 'accent' },
+                    { sport: 'MMA', level: 'Intermediate', match: 87, color: 'primary' },
+                  ].map((p, i) => (
+                    <div key={i} className="bg-background rounded-xl p-4 border border-border">
                       <div className="flex items-center justify-between mb-3">
-                        <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold text-sm">
-                          {p.name.charAt(0)}
+                        <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                          <Target className="w-5 h-5 text-primary" />
                         </div>
                         <span className="text-accent font-mono text-sm font-bold">{p.match}%</span>
                       </div>
-                      <div className="text-white text-sm font-medium">{p.name}</div>
-                      <div className="text-text-secondary text-xs">{p.sport} · {p.skill}</div>
+                      <div className="text-white text-sm font-medium">{p.sport}</div>
+                      <div className="text-text-secondary text-xs">{p.level} · Near you</div>
+                      {/* Match bar */}
+                      <div className="mt-2 h-1 bg-border rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full" style={{ width: `${p.match}%` }} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -219,8 +228,9 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
-        <div className="max-w-7xl mx-auto">
+      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface relative overflow-hidden">
+        <MuayThaiKickSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] text-white opacity-[0.04] z-0" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
               WHY ATHLETES <span className="gradient-text">CHOOSE US</span>
@@ -231,38 +241,35 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
             <div className="bg-background p-8 rounded-xl border border-border card-hover">
               <div className="w-14 h-14 bg-primary/20 rounded-lg flex items-center justify-center mb-6">
                 <Target className="w-7 h-7 text-primary" />
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">SMART MATCHING</h3>
               <p className="text-text-secondary">
-                Our algorithm matches you with partners based on skill level, weight class, 
+                Our algorithm matches you with partners based on skill level, weight class,
                 experience, and training goals. Find someone who pushes you.
               </p>
             </div>
 
-            {/* Feature 2 */}
             <div className="bg-background p-8 rounded-xl border border-border card-hover">
               <div className="w-14 h-14 bg-accent/20 rounded-lg flex items-center justify-center mb-6">
                 <MapPin className="w-7 h-7 text-accent" />
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">LOCAL GYM ACCESS</h3>
               <p className="text-text-secondary">
-                Get exclusive access to open mat hours at partner gyms. Train anywhere 
+                Get exclusive access to open mat hours at partner gyms. Train anywhere
                 with your subscription - we handle the logistics.
               </p>
             </div>
 
-            {/* Feature 3 */}
             <div className="bg-background p-8 rounded-xl border border-border card-hover">
               <div className="w-14 h-14 bg-primary/20 rounded-lg flex items-center justify-center mb-6">
                 <Shield className="w-7 h-7 text-primary" />
               </div>
               <h3 className="font-heading text-2xl text-white mb-3">VERIFIED ATHLETES</h3>
               <p className="text-text-secondary">
-                Every profile is verified. Train with confidence knowing everyone on the platform 
+                Every profile is verified. Train with confidence knowing everyone on the platform
                 is serious about their craft.
               </p>
             </div>
@@ -270,7 +277,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* How It Works */}
+      {/* How It Works — 3 bold steps */}
       <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -282,136 +289,191 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-8">
-            {[
-              { step: '1', title: 'Sign Up', desc: 'Create your profile with your combat sport, skill level, and goals.' },
-              { step: '2', title: 'Get Matched', desc: 'Our algorithm finds compatible training partners near you.' },
-              { step: '3', title: 'Connect', desc: 'Message partners, coordinate sessions, and build your network.' },
-              { step: '4', title: 'Train', desc: 'Start training with verified partners at gyms worldwide.' },
-            ].map((item) => (
-              <div key={item.step} className="relative">
-                <div className="bg-surface border border-border rounded-xl p-6 text-center card-hover">
-                  <div className="w-12 h-12 bg-primary text-white rounded-full flex items-center justify-center font-heading text-lg mx-auto mb-4">
-                    {item.step}
-                  </div>
-                  <h3 className="font-heading text-xl text-white mb-2">{item.title}</h3>
-                  <p className="text-text-secondary text-sm">{item.desc}</p>
-                </div>
-                {/* Connector line */}
-                {item.step !== '4' && (
-                  <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-primary to-transparent" />
-                )}
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-6 font-heading text-3xl text-white">
+                1
               </div>
+              <h3 className="font-heading text-2xl text-white mb-3">CREATE PROFILE</h3>
+              <p className="text-text-secondary">
+                Sign up free and tell us about your sport, skill level, weight class,
+                and training goals.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-6 font-heading text-3xl text-white">
+                2
+              </div>
+              <h3 className="font-heading text-2xl text-white mb-3">GET MATCHED</h3>
+              <p className="text-text-secondary">
+                Our algorithm finds compatible training partners in your area.
+                Connect and start training!
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-20 h-20 bg-primary rounded-full flex items-center justify-center mx-auto mb-6 font-heading text-3xl text-white">
+                3
+              </div>
+              <h3 className="font-heading text-2xl text-white mb-3">TRAIN TOGETHER</h3>
+              <p className="text-text-secondary">
+                Upgrade to access partner gyms with exclusive open mat hours.
+                Train anywhere, anytime.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Supported Sports */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
+              SUPPORTED <span className="gradient-text">SPORTS</span>
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-4">
+            {[
+              'Wrestling', 'MMA', 'Brazilian Jiu-Jitsu', 'Boxing',
+              'Kickboxing', 'Judo', 'Taekwondo', 'Karate',
+              'Sambo', 'Muay Thai', 'Capoeira', 'Kung Fu'
+            ].map((sport) => (
+              <span
+                key={sport}
+                className="px-6 py-3 bg-background border border-border rounded-full text-text-secondary hover:text-primary hover:border-primary transition-colors cursor-default"
+              >
+                {sport}
+              </span>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface">
+      {/* Pricing Section — detailed tiers */}
+      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
               SIMPLE <span className="gradient-text">PRICING</span>
             </h2>
             <p className="text-text-secondary text-lg max-w-2xl mx-auto">
-              Start free. Upgrade when you're ready for premium features.
+              Start free, upgrade when you&apos;re ready. Gyms list for free too.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Free Plan */}
-            <div className="bg-background border border-border rounded-xl p-8">
-              <h3 className="font-heading text-2xl text-white mb-2">FREE</h3>
-              <p className="text-text-secondary mb-6">Forever free</p>
-              <div className="text-4xl font-heading text-primary mb-6">$0<span className="text-lg text-text-secondary">/mo</span></div>
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {/* Free Tier */}
+            <div className="bg-surface p-8 rounded-xl border border-border">
+              <div className="mb-6">
+                <h3 className="font-heading text-2xl text-white">FREE</h3>
+                <p className="text-text-secondary text-sm mt-1">For athletes &amp; gyms</p>
+                <div className="mt-3">
+                  <span className="text-3xl font-bold text-white">$0</span>
+                  <span className="text-text-secondary">/month</span>
+                </div>
+              </div>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Find training partners</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Browse gyms</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Send messages</span>
-                </li>
+                {[
+                  'Create your athlete profile',
+                  'Find compatible training partners',
+                  'Browse & book open mats',
+                  'Direct messaging',
+                  'Community posts & content',
+                  'Gyms: claim & manage listing',
+                  'Gyms: set open mat schedules',
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
+                    <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                    {item}
+                  </li>
+                ))}
               </ul>
-              <Link 
+              <Link
                 href="/auth/signup"
-                className="w-full bg-border text-white px-6 py-3 rounded-md font-heading text-center hover:bg-border/80 transition-colors"
+                className="block w-full bg-surface border border-primary text-primary px-6 py-3 rounded-md font-medium text-center hover:bg-primary hover:text-white transition-colors"
               >
-                Get Started
+                Sign Up Free
               </Link>
             </div>
 
-            {/* Pro Plan (Featured) */}
-            <div className="bg-gradient-to-br from-primary/20 to-accent/10 border-2 border-primary rounded-xl p-8 relative">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-primary text-white px-4 py-1 rounded-full text-sm font-heading">
+            {/* Premium Athlete */}
+            <div className="bg-gradient-to-br from-primary/20 to-surface p-8 rounded-xl border border-primary relative">
+              <div className="absolute top-0 right-0 bg-accent text-background px-4 py-1 rounded-bl-md rounded-tr-xl font-medium text-xs">
                 MOST POPULAR
               </div>
-              <h3 className="font-heading text-2xl text-white mb-2">PRO</h3>
-              <p className="text-text-secondary mb-6">For serious athletes</p>
-              <div className="text-4xl font-heading text-primary mb-6">$9.99<span className="text-lg text-text-secondary">/mo</span></div>
+              <div className="mb-6">
+                <h3 className="font-heading text-2xl text-white">PREMIUM</h3>
+                <p className="text-text-secondary text-sm mt-1">For serious athletes</p>
+                <div className="mt-3">
+                  <span className="text-3xl font-bold text-white">$9.99</span>
+                  <span className="text-text-secondary">/month</span>
+                </div>
+              </div>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Everything in Free</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Gym access pass</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Priority matching</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Advanced filters</span>
-                </li>
+                {[
+                  { text: 'Everything in Free', icon: 'heart' },
+                  { text: 'Verified badge (ID verification)', icon: 'shield' },
+                  { text: 'Ad-free experience', icon: 'check' },
+                  { text: 'Boosted profile in search', icon: 'check' },
+                  { text: 'Secure encrypted messaging', icon: 'check' },
+                  { text: 'Priority matching algorithm', icon: 'check' },
+                  { text: 'Discounts on clinics & events', icon: 'check' },
+                  { text: 'Advanced filters (distance, age, etc.)', icon: 'check' },
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
+                    {item.icon === 'heart' ? <Heart className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
+                     item.icon === 'shield' ? <Shield className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" /> :
+                     <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />}
+                    {item.text}
+                  </li>
+                ))}
               </ul>
-              <Link 
-                href="/auth/signup"
-                className="w-full bg-primary text-white px-6 py-3 rounded-md font-heading text-center hover:bg-primary/90 transition-colors btn-glow"
+              <Link
+                href="/auth/signup?plan=premium"
+                className="block w-full bg-primary text-white px-6 py-3 rounded-md font-medium text-center hover:bg-primary/90 transition-colors btn-glow"
               >
-                Start Free Trial
+                Get Premium
               </Link>
             </div>
 
-            {/* Elite Plan */}
-            <div className="bg-background border border-border rounded-xl p-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Crown className="w-5 h-5 text-primary" />
-                <h3 className="font-heading text-2xl text-white">ELITE</h3>
+            {/* Gym & Coach */}
+            <div className="bg-surface p-8 rounded-xl border border-border relative">
+              <div className="absolute top-0 right-0 bg-primary/80 text-white px-4 py-1 rounded-bl-md rounded-tr-xl font-medium text-xs">
+                FOR GYMS
               </div>
-              <p className="text-text-secondary mb-6">For competitors</p>
-              <div className="text-4xl font-heading text-primary mb-6">$19.99<span className="text-lg text-text-secondary">/mo</span></div>
+              <div className="mb-6">
+                <h3 className="font-heading text-2xl text-white">GYM PRO</h3>
+                <p className="text-text-secondary text-sm mt-1">For gym owners &amp; coaches</p>
+                <div className="mt-3">
+                  <span className="text-3xl font-bold text-white">$19.99</span>
+                  <span className="text-text-secondary">/month</span>
+                </div>
+              </div>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Everything in Pro</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Unlimited gym access</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Training analytics</span>
-                </li>
-                <li className="flex items-center gap-2 text-text-secondary">
-                  <CheckCircle className="w-5 h-5 text-accent" />
-                  <span>Priority support</span>
-                </li>
+                {[
+                  { text: 'Everything in Free (gym)', icon: 'crown' },
+                  { text: 'Promoted listing in search', icon: 'check' },
+                  { text: 'Upload insurance & certifications', icon: 'check' },
+                  { text: 'Sell private lessons on platform', icon: 'check' },
+                  { text: 'Advanced analytics dashboard', icon: 'check' },
+                  { text: 'Featured gym badge', icon: 'check' },
+                  { text: 'Priority support', icon: 'check' },
+                ].map((item, i) => (
+                  <li key={i} className="flex items-start gap-3 text-text-secondary text-sm">
+                    {item.icon === 'crown' ? <Crown className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" /> :
+                     <CheckCircle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />}
+                    {item.text}
+                  </li>
+                ))}
               </ul>
-              <Link 
-                href="/auth/signup"
-                className="w-full bg-primary text-white px-6 py-3 rounded-md font-heading text-center hover:bg-primary/90 transition-colors btn-glow"
+              <Link
+                href="/auth/signup?plan=gym"
+                className="block w-full bg-surface border border-border text-white px-6 py-3 rounded-md font-medium text-center hover:border-primary hover:text-primary transition-colors"
               >
-                Start Free Trial
+                Get Gym Pro
               </Link>
             </div>
           </div>
@@ -422,24 +484,26 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Why Training Partner — Visual showcase */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      {/* Built For Athletes — Visual showcase */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <JudoThrowSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-80 text-primary opacity-[0.05] z-0 -rotate-3" />
+        <BoxerSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-72 text-primary opacity-[0.05] z-0 rotate-3" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
               BUILT FOR <span className="gradient-text">ATHLETES</span>
             </h2>
             <p className="text-text-secondary text-lg max-w-2xl mx-auto">
-              We're building the platform we wish existed — by combat sports athletes, for combat sports athletes.
+              We&apos;re building the platform we wish existed — by combat sports athletes, for combat sports athletes.
             </p>
           </div>
 
-          {/* Gym showcase with CSS visual */}
-          <div className="relative rounded-2xl overflow-hidden mb-12 group bg-gradient-to-br from-primary/20 via-background to-accent/10 border border-border p-12 h-[400px] flex flex-col justify-between">
+          {/* Gym showcase — gradient with grid pattern */}
+          <div className="relative rounded-2xl overflow-hidden mb-12 group bg-gradient-to-br from-primary/20 via-background to-accent/10 border border-border h-[400px]">
             {/* Accent shapes */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -z-10" />
-            <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/10 rounded-full blur-3xl -z-10" />
-            
+            <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-0 w-80 h-80 bg-accent/10 rounded-full blur-3xl" />
+
             {/* Grid pattern overlay */}
             <div className="absolute inset-0 opacity-5 pointer-events-none">
               <div className="absolute inset-0" style={{
@@ -447,10 +511,13 @@ export default function LandingPage() {
                 backgroundSize: '40px 40px'
               }} />
             </div>
-            
-            {/* Content */}
-            <div className="relative z-10">
-              <div className="flex items-center gap-3 mb-6">
+
+            {/* Gradient overlay from bottom */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
+
+            {/* Content positioned at bottom */}
+            <div className="absolute bottom-0 left-0 right-0 p-8 z-10">
+              <div className="flex items-center gap-3 mb-4">
                 <div className="w-12 h-12 bg-primary rounded-lg flex items-center justify-center">
                   <MapPin className="w-6 h-6 text-white" />
                 </div>
@@ -492,49 +559,49 @@ export default function LandingPage() {
 
       {/* CTA Section with app mockup */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
-        <div className="max-w-7xl mx-auto">
+        <MMAFighterSilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-96 text-white opacity-[0.04] z-0" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
-            {/* App mockup - CSS-based phone */}
+            {/* App mockup — CSS phone */}
             <div className="relative mx-auto md:mx-0 max-w-[280px] md:max-w-[320px]">
               <div className="relative rounded-[2rem] overflow-hidden shadow-2xl shadow-primary/20 border-8 border-gray-900 bg-black aspect-[9/16]">
-                {/* Phone notch */}
                 <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-40 h-7 bg-black rounded-b-3xl z-20" />
-                
-                {/* Phone screen content */}
+
                 <div className="w-full h-full bg-gradient-to-b from-background to-surface p-4 flex flex-col">
-                  {/* Status bar */}
                   <div className="flex justify-between items-center text-white text-xs mb-4 mt-2">
                     <span>9:41</span>
                     <span>📶</span>
                   </div>
-                  
-                  {/* App header */}
+
                   <div className="mb-4">
                     <h3 className="font-heading text-white text-sm">TRAINING PARTNER</h3>
                     <p className="text-text-secondary text-xs">Your matches</p>
                   </div>
-                  
-                  {/* Match cards */}
+
                   <div className="space-y-2 flex-1">
-                    {[1, 2, 3].map((i) => (
+                    {[
+                      { sport: 'BJJ', level: 'Purple Belt', pct: 94 },
+                      { sport: 'Wrestling', level: 'Advanced', pct: 91 },
+                      { sport: 'MMA', level: 'Blue Belt', pct: 87 },
+                    ].map((m, i) => (
                       <div key={i} className="bg-surface border border-border rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
-                          <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-primary text-xs font-bold">A</div>
-                          <span className="text-accent text-xs font-mono">92%</span>
+                          <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+                            <Target className="w-4 h-4 text-primary" />
+                          </div>
+                          <span className="text-accent text-xs font-mono">{m.pct}%</span>
                         </div>
-                        <div className="text-white text-xs font-medium">Partner {i}</div>
-                        <div className="text-text-secondary text-xs">BJJ · Purple</div>
+                        <div className="text-white text-xs font-medium">{m.sport}</div>
+                        <div className="text-text-secondary text-xs">{m.level} · Nearby</div>
                       </div>
                     ))}
                   </div>
-                  
-                  {/* CTA button */}
-                  <button className="w-full bg-primary text-white py-2 rounded-lg font-heading text-xs mt-4 hover:bg-primary/90">
+
+                  <button className="w-full bg-primary text-white py-2 rounded-lg font-heading text-xs mt-4">
                     CONNECT
                   </button>
                 </div>
               </div>
-              {/* Glow effect behind phone */}
               <div className="absolute -inset-4 bg-primary/10 rounded-[3rem] blur-3xl -z-10" />
             </div>
 
@@ -580,7 +647,7 @@ export default function LandingPage() {
                 Connecting athletes with their perfect training partners since 2026.
               </p>
             </div>
-            
+
             <div>
               <h4 className="font-heading text-lg text-white mb-4">PLATFORM</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
@@ -600,7 +667,7 @@ export default function LandingPage() {
                 <li><Link href="/partners/muay-thai" className="hover:text-primary">Muay Thai Partners</Link></li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="font-heading text-lg text-white mb-4">LEGAL</h4>
               <ul className="space-y-2 text-text-secondary text-sm">
@@ -610,9 +677,9 @@ export default function LandingPage() {
               </ul>
             </div>
           </div>
-          
+
           <div className="border-t border-border mt-12 pt-8 text-center text-text-secondary text-sm">
-            © 2026 Training Partner. All rights reserved.
+            &copy; 2026 Training Partner. All rights reserved.
           </div>
         </div>
       </footer>

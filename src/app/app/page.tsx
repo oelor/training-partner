@@ -86,9 +86,9 @@ export default function DashboardPage() {
       )}
       <div className="space-y-8">
       {/* Welcome Header */}
-      <div>
+      <div className="animate-slide-up">
         <h1 className="font-heading text-3xl text-white mb-2">
-          WELCOME BACK, {user?.display_name?.split(' ')[0]?.toUpperCase() || 'ATHLETE'}!
+          WELCOME <span className="gradient-text">BACK</span>, {user?.display_name?.split(' ')[0]?.toUpperCase() || 'ATHLETE'}!
         </h1>
         <p className="text-text-secondary">Here&apos;s what&apos;s happening in your training network</p>
       </div>
@@ -125,8 +125,8 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-        <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 stagger-children">
+        <div className="bg-surface border border-border rounded-xl p-6 card-hover">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
               <UserSearch className="w-5 h-5 text-primary" />
@@ -137,7 +137,7 @@ export default function DashboardPage() {
           <div className="text-text-secondary text-sm">Partners found</div>
         </div>
 
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="bg-surface border border-border rounded-xl p-6 card-hover">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
               <MessageCircle className="w-5 h-5 text-blue-400" />
@@ -148,7 +148,7 @@ export default function DashboardPage() {
           <div className="text-text-secondary text-sm">Unread</div>
         </div>
 
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="bg-surface border border-border rounded-xl p-6 card-hover">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
               <Calendar className="w-5 h-5 text-green-400" />
@@ -159,7 +159,7 @@ export default function DashboardPage() {
           <div className="text-text-secondary text-sm">Upcoming</div>
         </div>
 
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="bg-surface border border-border rounded-xl p-6 card-hover">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
               <MapPin className="w-5 h-5 text-yellow-400" />
@@ -176,7 +176,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         <Link
           href="/app/partners"
-          className="bg-gradient-to-r from-primary/20 to-surface border border-primary/50 rounded-xl p-6 hover:border-primary transition-colors group"
+          className="bg-gradient-to-r from-primary/20 to-surface border border-primary/50 rounded-xl p-6 hover:border-primary transition-colors group card-hover"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -189,7 +189,7 @@ export default function DashboardPage() {
 
         <Link
           href="/app/gyms"
-          className="bg-gradient-to-r from-accent/20 to-surface border border-accent/50 rounded-xl p-6 hover:border-accent transition-colors group"
+          className="bg-gradient-to-r from-accent/20 to-surface border border-accent/50 rounded-xl p-6 hover:border-accent transition-colors group card-hover"
         >
           <div className="flex items-center justify-between">
             <div>
@@ -237,7 +237,7 @@ export default function DashboardPage() {
         ) : partners.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
             <div className="w-16 h-16 bg-surface/50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-text-secondary" />
+              <Users className="w-8 h-8 text-text-secondary animate-float" />
             </div>
             <p className="text-white font-heading text-lg mb-2">Find Your Training Partners</p>
             <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Get matched with compatible athletes in your area for BJJ, wrestling, and combat sports training</p>
@@ -303,7 +303,7 @@ export default function DashboardPage() {
         ) : gyms.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-8 text-center">
             <div className="w-16 h-16 bg-surface/50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <MapPin className="w-8 h-8 text-text-secondary" />
+              <MapPin className="w-8 h-8 text-text-secondary animate-float" />
             </div>
             <p className="text-white font-heading text-lg mb-2">Discover Partner Gyms</p>
             <p className="text-text-secondary text-sm mb-6 max-w-md mx-auto">Explore our network of partner gyms with verified open mat hours and facilities in your area</p>
@@ -354,7 +354,7 @@ export default function DashboardPage() {
 
       {/* Premium CTA */}
       {subscription?.plan !== 'premium' && (
-        <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-xl p-6">
+        <div className="bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 rounded-xl p-6 animate-pulse-glow">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-primary/30 rounded-lg flex items-center justify-center">
@@ -369,7 +369,7 @@ export default function DashboardPage() {
             </div>
             <Link
               href="/app/settings"
-              className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors whitespace-nowrap text-center"
+              className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors whitespace-nowrap text-center btn-glow"
             >
               Upgrade - $20/mo
             </Link>

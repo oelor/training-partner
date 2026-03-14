@@ -351,6 +351,68 @@ class ApiClient {
     });
   }
 
+  async unblockUser(userId: number) {
+    return this.request<{ ok: boolean }>('/api/block', {
+      method: 'DELETE',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async getBlocks() {
+    return this.request<{ ok: boolean; blocks: BlockedUser[] }>('/api/block');
+  }
+
+  // Identity Verification
+  async submitIdentity(data: { id_photo: string; selfie_photo: string }) {
+    return this.request<{ ok: boolean }>('/api/identity/submit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getIdentityStatus() {
+    return this.request<{ ok: boolean; verification: IdentityVerification | null }>('/api/identity/status');
+  }
+
+  async deleteIdentityData() {
+    return this.request<{ ok: boolean }>('/api/identity', { method: 'DELETE' });
+  }
+
+  async getAdminPendingIdentities() {
+    return this.request<{ ok: boolean; verifications: AdminPendingIdentity[] }>('/api/admin/identities?status=pending');
+  }
+
+  async adminReviewIdentity(id: number, data: { status: string; reviewer_notes: string }) {
+    return this.request<{ ok: boolean }>(`/api/admin/identities/${id}/review`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Trust & Ratings
+  async submitRating(data: { rated_id: number; rating: number }) {
+    return this.request<{ ok: boolean }>('/api/ratings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getTrustScore(userId: number) {
+    return this.request<{ ok: boolean; score: TrustScore | null }>(`/api/ratings/score/${userId}`);
+  }
+
+  async canRate(userId: number) {
+    return this.request<{ ok: boolean; can_rate: boolean; reason: string }>(`/api/ratings/can-rate/${userId}`);
+  }
+
+  // Emergency Contact
+  async updateEmergencyContact(data: { name: string; phone: string; relation: string }) {
+    return this.request<{ ok: boolean }>('/api/profile/emergency-contact', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
   // Admin
   async getAdminStats() {
     return this.request<{ ok: boolean; stats: AdminStats }>('/api/admin/stats')
@@ -466,6 +528,183 @@ class ApiClient {
     });
   }
 
+  async getGymDashboardStats() {
+    return this.request<{ ok: boolean; gym: Gym; stats: GymDashboardStats }>('/api/gym/dashboard');
+  }
+
+  // Gym Membership / Affiliation
+  async requestGymMembership(gymId: number) {
+    return this.request<{ ok: boolean; message: string }>('/api/gym/members/request', {
+      method: 'POST',
+      body: JSON.stringify({ gym_id: gymId }),
+    });
+  }
+
+  async inviteGymMember(gymId: number, userId: number, role?: string) {
+    return this.request<{ ok: boolean; message: string }>('/api/gym/members/invite', {
+      method: 'POST',
+      body: JSON.stringify({ gym_id: gymId, user_id: userId, role }),
+    });
+  }
+
+  async respondGymMembership(membershipId: number, action: 'approve' | 'reject') {
+    return this.request<{ ok: boolean; status: string }>('/api/gym/members/respond', {
+      method: 'POST',
+      body: JSON.stringify({ membership_id: membershipId, action }),
+    });
+  }
+
+  async removeGymMember(membershipId: number) {
+    return this.request<{ ok: boolean; message: string }>('/api/gym/members/remove', {
+      method: 'POST',
+      body: JSON.stringify({ membership_id: membershipId }),
+    });
+  }
+
+  async updateGymMemberRole(membershipId: number, role: 'member' | 'admin' | 'staff') {
+    return this.request<{ ok: boolean }>('/api/gym/members/role', {
+      method: 'PUT',
+      body: JSON.stringify({ membership_id: membershipId, role }),
+    });
+  }
+
+  async getGymMembers(gymId: number, status?: string) {
+    const qs = status ? `?status=${status}` : '';
+    return this.request<{ ok: boolean; members: GymMember[] }>(`/api/gyms/${gymId}/members${qs}`);
+  }
+
+  async getMyGymMemberships() {
+    return this.request<{ ok: boolean; memberships: GymMembership[] }>('/api/gym/my-memberships');
+  }
+
+  // Check-Ins
+  async checkin(gymId: number, method?: string) {
+    return this.request<{ ok: boolean; points_earned: number; total_points: number; gym_name: string }>('/api/checkins', {
+      method: 'POST',
+      body: JSON.stringify({ gym_id: gymId, method }),
+    });
+  }
+
+  async getCheckins(params?: { limit?: number; offset?: number }) {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; checkins: Checkin[]; total_points: number; total_checkins: number; unique_gyms: number }>(`/api/checkins${qs ? '?' + qs : ''}`);
+  }
+
+  async getTrainingPassport(userId?: number) {
+    const qs = userId ? `?user_id=${userId}` : '';
+    return this.request<{ ok: boolean; gyms: PassportGym[]; total_points: number; total_checkins: number; unique_gyms: number; badges: Badge[] }>(`/api/checkins/passport${qs}`);
+  }
+
+  // QR Code Check-in
+  async resolveCheckinCode(code: string) {
+    return this.request<{ ok: boolean; gym: { id: number; name: string; city: string; state: string; lat: number; lng: number } }>(`/api/checkin/${code}`);
+  }
+
+  async qrCheckinVerify(code: string, lat: number, lng: number) {
+    return this.request<{ ok: boolean; gym_name: string; points_earned: number; total_points: number; error?: string; distance_m?: number; address?: string; checked_in_at?: string }>(`/api/checkin/${code}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ lat, lng }),
+    });
+  }
+
+  async qrCheckinGuest(code: string, data: { name: string; email: string; lat: number; lng: number }) {
+    return this.request<{ ok: boolean; gym_name: string; error?: string; distance_m?: number; address?: string }>(`/api/checkin/${code}/guest`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCheckinCode() {
+    return this.request<{ ok: boolean; checkin_code: string; checkin_radius_m: number; gym_id: number }>('/api/gym/checkin-code');
+  }
+
+  async regenerateCheckinCode() {
+    return this.request<{ ok: boolean; checkin_code: string }>('/api/gym/checkin-code/regenerate', { method: 'POST' });
+  }
+
+  async getGuestCheckins(limit?: number) {
+    const qs = limit ? `?limit=${limit}` : '';
+    return this.request<{ ok: boolean; guests: { id: number; name: string; email: string; created_at: string }[] }>(`/api/gym/guest-checkins${qs}`);
+  }
+
+  // Gym Promotions
+  async createPromotion(data: { gym_id: number; title: string; description?: string; type?: string; start_date?: string; end_date?: string }) {
+    return this.request<{ ok: boolean; promotion_id: number }>('/api/promotions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getGymPromotions(gymId: number) {
+    return this.request<{ ok: boolean; promotions: GymPromotion[] }>(`/api/gyms/${gymId}/promotions`);
+  }
+
+  async browsePromotions(params?: { city?: string; type?: string; sport?: string; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.city) query.set('city', params.city);
+    if (params?.type) query.set('type', params.type);
+    if (params?.sport) query.set('sport', params.sport);
+    if (params?.limit) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; promotions: GymPromotion[] }>(`/api/promotions/browse${qs ? '?' + qs : ''}`);
+  }
+
+  async updatePromotion(promoId: number, data: Partial<{ title: string; description: string; type: string; start_date: string; end_date: string; is_active: boolean }>) {
+    return this.request<{ ok: boolean }>(`/api/promotions/${promoId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePromotion(promoId: number) {
+    return this.request<{ ok: boolean }>(`/api/promotions/${promoId}`, { method: 'DELETE' });
+  }
+
+  // Gym Announcements
+  async createAnnouncement(data: { gym_id: number; title: string; body: string; pinned?: boolean }) {
+    return this.request<{ ok: boolean; announcement_id: number }>('/api/gym/announcements', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getGymAnnouncements(gymId: number) {
+    return this.request<{ ok: boolean; announcements: GymAnnouncement[] }>(`/api/gyms/${gymId}/announcements`);
+  }
+
+  async deleteAnnouncement(announcementId: number) {
+    return this.request<{ ok: boolean }>(`/api/announcements/${announcementId}`, { method: 'DELETE' });
+  }
+
+  // Gym Sessions (owner management)
+  async createGymSession(data: { gym_id: number; day_of_week: string; start_time: string; end_time: string; max_slots?: number }) {
+    return this.request<{ ok: boolean; session_id: number }>('/api/gym/sessions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteGymSession(sessionId: number) {
+    return this.request<{ ok: boolean }>(`/api/gym/sessions/${sessionId}`, { method: 'DELETE' });
+  }
+
+  // Gym Discovery
+  async discoverGyms(params?: { lat?: number; lng?: number; radius?: number; sport?: string; promotions?: boolean; open_mats?: boolean; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.lat) query.set('lat', String(params.lat));
+    if (params?.lng) query.set('lng', String(params.lng));
+    if (params?.radius) query.set('radius', String(params.radius));
+    if (params?.sport) query.set('sport', params.sport);
+    if (params?.promotions) query.set('promotions', 'true');
+    if (params?.open_mats) query.set('open_mats', 'true');
+    if (params?.limit) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; gyms: DiscoverGym[]; total: number }>(`/api/gyms/discover${qs ? '?' + qs : ''}`);
+  }
+
   // Subscription Management
   async cancelSubscription() {
     return this.request<{ ok: boolean; message: string }>('/api/subscriptions/cancel', { method: 'POST' });
@@ -509,6 +748,10 @@ export interface User {
   google_id?: string;
   instagram_username?: string;
   created_at?: string;
+  is_verified?: boolean;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  emergency_contact_relation?: string;
 }
 
 export interface UserProfile {
@@ -545,6 +788,7 @@ export interface Partner {
 export interface PartnerDetail extends Partner {
   availability: Array<{ day: string; time: string }>;
   created_at: string;
+  is_verified?: boolean;
 }
 
 export interface PartnerProfile {
@@ -805,6 +1049,152 @@ export interface GymOwnerDetail extends Gym {
   sessions: GymSession[];
   reviews: GymReview[];
   documents: GymDocument[];
+}
+
+export interface GymDashboardStats {
+  total_members: number;
+  pending_requests: number;
+  checkins_7d: number;
+  total_checkins: number;
+  total_reviews: number;
+  avg_rating: number;
+  active_promotions: number;
+  total_announcements: number;
+}
+
+export interface GymMember {
+  id: number;
+  gym_id: number;
+  user_id: number;
+  role: 'member' | 'admin' | 'staff';
+  status: 'pending' | 'approved' | 'rejected';
+  requested_by: 'user' | 'gym';
+  display_name: string;
+  email: string;
+  avatar_url: string;
+  city: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GymMembership {
+  id: number;
+  gym_id: number;
+  user_id: number;
+  role: string;
+  status: string;
+  requested_by: string;
+  gym_name: string;
+  gym_city: string;
+  gym_sports: string[];
+  lat: number;
+  lng: number;
+  rating: number;
+  review_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Checkin {
+  id: number;
+  user_id: number;
+  gym_id: number;
+  points: number;
+  method: string;
+  gym_name: string;
+  gym_city: string;
+  lat: number;
+  lng: number;
+  gym_sports: string[];
+  created_at: string;
+}
+
+export interface PassportGym {
+  id: number;
+  name: string;
+  city: string;
+  state: string;
+  lat: number;
+  lng: number;
+  sports: string[];
+  visit_count: number;
+  total_points: number;
+  first_visit: string;
+  last_visit: string;
+}
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface GymPromotion {
+  id: number;
+  gym_id: number;
+  title: string;
+  description: string;
+  type: string;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: number;
+  gym_name?: string;
+  gym_city?: string;
+  gym_state?: string;
+  gym_sports?: string[];
+  lat?: number;
+  lng?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GymAnnouncement {
+  id: number;
+  gym_id: number;
+  author_id: number;
+  title: string;
+  body: string;
+  pinned: number;
+  author_name: string;
+  author_avatar: string;
+  created_at: string;
+}
+
+export interface DiscoverGym extends Gym {
+  distance_km: number | null;
+  active_promotions?: number;
+}
+
+export interface IdentityVerification {
+  id: number;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  created_at: string;
+  reviewed_at?: string;
+  reviewer_notes?: string;
+}
+
+export interface TrustScore {
+  percentage: number;
+  total_ratings: number;
+  locked: boolean;
+  sessions_remaining?: number;
+}
+
+export interface BlockedUser {
+  id: number;
+  user_id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface AdminPendingIdentity {
+  id: number;
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  id_photo: string;
+  selfie_photo: string;
+  created_at: string;
 }
 
 /** Check if a subscription plan grants premium access */

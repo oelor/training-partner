@@ -201,16 +201,16 @@ function ProfileForm() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 animate-slide-up">
         <div>
-          <h1 className="font-heading text-3xl lg:text-4xl text-white mb-2">YOUR PROFILE</h1>
+          <h1 className="font-heading text-3xl lg:text-4xl text-white mb-2">YOUR <span className="gradient-text">PROFILE</span></h1>
           <p className="text-text-secondary">Complete your profile to get better matches</p>
         </div>
 
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
+          className="flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all bg-primary text-white hover:bg-primary/90 disabled:opacity-50 btn-glow"
         >
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           {saving ? 'Saving...' : 'Save Profile'}
@@ -224,9 +224,9 @@ function ProfileForm() {
       )}
 
       {/* Basic Info */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in">
         <h2 className="font-heading text-xl text-white mb-6 flex items-center gap-2">
-          <User className="w-5 h-5 text-primary" />
+          <User className="w-5 h-5 text-primary animate-float" />
           BASIC INFO
         </h2>
 
@@ -292,14 +292,14 @@ function ProfileForm() {
       </div>
 
       {/* Sports */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in" style={{ animationDelay: '0.1s' }}>
         <h2 className="font-heading text-xl text-white mb-6">COMBAT SPORTS</h2>
         <div className="flex flex-wrap gap-3">
           {sportsList.map(sport => (
             <button
               key={sport}
               onClick={() => toggleSport(sport)}
-              className={`px-4 py-2 rounded-full border transition-colors ${
+              className={`px-4 py-2 rounded-full border transition-all card-hover hover:scale-105 ${
                 profile.sports.includes(sport)
                   ? 'bg-primary border-primary text-white'
                   : 'border-border text-text-secondary hover:border-primary hover:text-white'
@@ -312,9 +312,9 @@ function ProfileForm() {
       </div>
 
       {/* Skill Level & Weight Class */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in" style={{ animationDelay: '0.2s' }}>
         <h2 className="font-heading text-xl text-white mb-6 flex items-center gap-2">
-          <Target className="w-5 h-5 text-primary" />
+          <Target className="w-5 h-5 text-primary animate-float" />
           SKILL DETAILS
         </h2>
 
@@ -364,14 +364,14 @@ function ProfileForm() {
       </div>
 
       {/* Training Goals */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in" style={{ animationDelay: '0.3s' }}>
         <h2 className="font-heading text-xl text-white mb-6">TRAINING GOALS</h2>
         <div className="flex flex-wrap gap-3">
           {trainingGoals.map(goal => (
             <button
               key={goal}
               onClick={() => toggleGoal(goal)}
-              className={`px-4 py-2 rounded-full border transition-colors ${
+              className={`px-4 py-2 rounded-full border transition-all card-hover hover:scale-105 ${
                 profile.trainingGoals.includes(goal)
                   ? 'bg-accent border-accent text-background'
                   : 'border-border text-text-secondary hover:border-accent hover:text-white'
@@ -384,9 +384,9 @@ function ProfileForm() {
       </div>
 
       {/* Availability */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in" style={{ animationDelay: '0.4s' }}>
         <h2 className="font-heading text-xl text-white mb-6 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-primary" />
+          <Clock className="w-5 h-5 text-primary animate-float" />
           AVAILABILITY
         </h2>
 
@@ -418,7 +418,7 @@ function ProfileForm() {
       </div>
 
       {/* Bio */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="bg-surface border border-border rounded-xl p-6 animate-fade-in" style={{ animationDelay: '0.5s' }}>
         <h2 className="font-heading text-xl text-white mb-6">ABOUT YOU</h2>
         <label htmlFor="bio" className="sr-only">About You</label>
         <textarea
@@ -436,7 +436,7 @@ function ProfileForm() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-8 py-3 rounded-lg font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-2 px-8 py-3 rounded-lg font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors btn-glow"
         >
           {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
           {saving ? 'Saving...' : 'Save Profile'}

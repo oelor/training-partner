@@ -15,6 +15,8 @@ import {
   Menu,
   X,
   Crown,
+  Trophy,
+  Building2,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api from '@/lib/api'
@@ -28,6 +30,7 @@ const navItems = [
 ]
 
 const secondaryNav = [
+  { href: '/app/passport', icon: Trophy, label: 'Passport' },
   { href: '/app/bookings', icon: Crown, label: 'Bookings' },
   { href: '/app/community', icon: Users, label: 'Community' },
   { href: '/app/notifications', icon: Bell, label: 'Notifications' },
@@ -144,6 +147,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 )}
               </Link>
             ))}
+
+            {user.role === 'gym_owner' && (
+              <Link
+                href="/app/gym-dashboard"
+                onClick={() => setSidebarOpen(false)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive('/app/gym-dashboard')
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-text-secondary hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Building2 className="w-5 h-5 flex-shrink-0" />
+                Gym Dashboard
+              </Link>
+            )}
 
             <div className="pt-4 pb-2 px-3">
               <span className="text-xs text-text-secondary uppercase tracking-wider">More</span>
