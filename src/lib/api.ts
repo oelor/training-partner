@@ -905,6 +905,109 @@ class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  // Privacy Settings
+  async getPrivacySettings() {
+    return this.request<{ ok: boolean; settings: PrivacySettings }>('/api/account/privacy');
+  }
+
+  async updatePrivacySettings(settings: Partial<PrivacySettings>) {
+    return this.request<{ ok: boolean; settings: PrivacySettings }>('/api/account/privacy', {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
+    });
+  }
+
+  // Trusted Contacts
+  async getTrustedContacts() {
+    return this.request<{ ok: boolean; contacts: TrustedContact[]; pending_incoming: TrustRequest[]; pending_outgoing: TrustRequest[] }>('/api/trusted-contacts');
+  }
+
+  async sendTrustRequest(userId: number, trustGroup: string) {
+    return this.request<{ ok: boolean; message: string }>('/api/trusted-contacts', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, trust_group: trustGroup }),
+    });
+  }
+
+  async respondToTrustRequest(id: number, status: 'accepted' | 'declined' | 'blocked') {
+    return this.request<{ ok: boolean; message: string }>(`/api/trusted-contacts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async removeTrustedContact(id: number) {
+    return this.request<{ ok: boolean; message: string }>(`/api/trusted-contacts/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getTrustStatus(userId: number) {
+    return this.request<{ ok: boolean; status: string; contact: { id: number; trust_group: string; is_requester: boolean } | null }>(`/api/trusted-contacts/status/${userId}`);
+  }
+
+  // Teams
+  async getMyTeams() {
+    return this.request<{ ok: boolean; teams: Team[] }>('/api/teams');
+  }
+
+  async createTeam(data: { name: string; description?: string; sport?: string; visibility_policy?: string; is_public?: boolean; max_members?: number }) {
+    return this.request<{ ok: boolean; team_id: number; message: string }>('/api/teams', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getTeam(id: number) {
+    return this.request<{ ok: boolean; team: Team; members: TeamMember[] }>(`/api/teams/${id}`);
+  }
+
+  async joinTeam(id: number) {
+    return this.request<{ ok: boolean; message: string }>(`/api/teams/${id}/join`, {
+      method: 'POST',
+    });
+  }
+
+  async addTeamMember(teamId: number, userId: number) {
+    return this.request<{ ok: boolean; message: string }>(`/api/teams/${teamId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  }
+
+  async removeTeamMember(teamId: number, userId: number) {
+    return this.request<{ ok: boolean; message: string }>(`/api/teams/${teamId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Badges
+  async requestBadge(data: BadgeRequest) {
+    return this.request<{ ok: boolean; message: string }>('/api/badges', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMyBadges() {
+    return this.request<{ ok: boolean; badges: UserBadge[] }>('/api/badges/mine');
+  }
+
+  async getUserBadges(userId: number) {
+    return this.request<{ ok: boolean; badges: UserBadge[] }>(`/api/users/${userId}/badges`);
+  }
+
+  async adminGetPendingBadges() {
+    return this.request<{ ok: boolean; badges: (UserBadge & { display_name: string; email: string })[] }>('/api/admin/badges');
+  }
+
+  async adminResolveBadge(id: number, data: { status: 'verified' | 'rejected'; notes?: string }) {
+    return this.request<{ ok: boolean; message: string }>(`/api/admin/badges/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export class ApiError extends Error {
@@ -1521,6 +1624,90 @@ export interface IntegrationProvider {
   description: string;
   status: 'coming_soon' | 'active' | 'disconnected';
   on_waitlist: boolean;
+}
+
+export interface PrivacySettings {
+  privacy_mode: 'open' | 'standard' | 'private' | 'custom';
+  vis_photo: string;
+  vis_bio: string;
+  vis_location_city: string;
+  vis_location_exact: string;
+  vis_sports: string;
+  vis_schedule: string;
+  vis_contact: string;
+  vis_training_logs: string;
+}
+
+export interface TrustedContact {
+  id: number;
+  contact_user_id: number;
+  display_name: string;
+  avatar_url: string;
+  verification_tier: string;
+  trust_group: string;
+  created_at: string;
+}
+
+export interface TrustRequest {
+  id: number;
+  contact_user_id: number;
+  display_name: string;
+  avatar_url: string;
+  verification_tier: string;
+  trust_group: string;
+  created_at: string;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  description: string;
+  sport: string;
+  creator_id: number;
+  visibility_policy: string;
+  is_public: number;
+  max_members: number;
+  created_at: string;
+  my_role?: string;
+  member_count?: number;
+}
+
+export interface TeamMember {
+  id: number;
+  user_id: number;
+  display_name: string;
+  avatar_url: string;
+  verification_tier: string;
+  role: string;
+  joined_at: string;
+}
+
+export interface UserBadge {
+  id: number;
+  user_id: number;
+  badge_type: 'competition' | 'coaching';
+  badge_level: string;
+  sport: string;
+  title: string;
+  organization: string;
+  year: number;
+  evidence_url: string;
+  evidence_notes: string;
+  status: 'pending' | 'verified' | 'rejected';
+  verified_by: number | null;
+  verified_at: string | null;
+  created_at: string;
+}
+
+export interface BadgeRequest {
+  badge_type: 'competition' | 'coaching';
+  badge_level: string;
+  sport: string;
+  title: string;
+  organization?: string;
+  year?: number;
+  evidence_url?: string;
+  evidence_notes?: string;
 }
 
 /** Check if a subscription plan grants premium access */

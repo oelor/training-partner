@@ -1041,15 +1041,10 @@ async function handleUpdateProfile(request, env) {
 }
 
 async function handleGetProfile(request, env, userId) {
-  const profile = await env.DB.prepare(`
-    SELECT u.id, u.display_name, u.city, u.avatar_url, u.role, u.created_at,
-           u.verification_tier, u.verification_sport, u.verification_title,
-           p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.availability, p.age, p.location
-    FROM users u
-    LEFT JOIN user_profiles p ON u.id = p.user_id
-    WHERE u.id = ?
-  `).bind(userId).first();
+  const viewer = await getUser(request, env);
+  const viewerId = viewer ? viewer.id : null;
 
+  const profile = await getVisibleProfile(viewerId, userId, env);
   if (!profile) return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
 
   return corsJson({
@@ -1237,7 +1232,28 @@ async function handleGetPartners(request, env) {
 
   const results = await env.DB.prepare(query).bind(...params).all();
 
-  let partners = (results.results || []).map(r => ({
+  // Apply privacy filtering per partner
+  const rawPartners = results.results || [];
+  const filteredPartners = [];
+  for (const r of rawPartners) {
+    const visible = await getVisibleProfile(user.id, r.id, env);
+    if (!visible) continue;
+    filteredPartners.push({
+      ...r,
+      display_name: visible.display_name,
+      city: visible.city,
+      avatar_url: visible.avatar_url,
+      bio: visible.bio,
+      sports: visible.sports,
+      skill_level: visible.skill_level,
+      weight_class: visible.weight_class,
+      training_goals: visible.training_goals,
+      experience_years: visible.experience_years,
+      location: visible.location,
+    });
+  }
+
+  let partners = filteredPartners.map(r => ({
     id: r.id,
     name: r.display_name,
     city: r.city || r.location,
@@ -1283,15 +1299,7 @@ async function handleGetPartnerDetail(request, env, partnerId) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
 
-  const partner = await env.DB.prepare(`
-    SELECT u.id, u.display_name, u.city, u.avatar_url, u.instagram_username, u.created_at,
-           u.verification_tier, u.verification_sport, u.verification_title, u.verified,
-           p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.availability, p.location
-    FROM users u
-    LEFT JOIN user_profiles p ON u.id = p.user_id
-    WHERE u.id = ?
-  `).bind(partnerId).first();
-
+  const partner = await getVisibleProfile(user.id, partnerId, env);
   if (!partner) return corsJson({ ok: false, error: 'Partner not found' }, { status: 404 }, request, env);
 
   // Get match score
@@ -6100,6 +6108,604 @@ async function handleToggleIntegrationNotify(request, env, provider) {
   }
 }
 
+// ─── Privacy & Visibility Helpers ─────────────────────────────────────────────
+
+const PRIVACY_PRESETS = {
+  open: {
+    vis_photo: 'public', vis_bio: 'public', vis_location_city: 'public',
+    vis_location_exact: 'public', vis_sports: 'public', vis_schedule: 'community',
+    vis_contact: 'community', vis_training_logs: 'community',
+  },
+  standard: {
+    vis_photo: 'public', vis_bio: 'public', vis_location_city: 'public',
+    vis_location_exact: 'community', vis_sports: 'public', vis_schedule: 'community',
+    vis_contact: 'trusted', vis_training_logs: 'trusted',
+  },
+  private: {
+    vis_photo: 'community', vis_bio: 'community', vis_location_city: 'hidden',
+    vis_location_exact: 'hidden', vis_sports: 'public', vis_schedule: 'trusted',
+    vis_contact: 'trusted', vis_training_logs: 'hidden',
+  },
+};
+
+const VIS_FIELDS = ['vis_photo', 'vis_bio', 'vis_location_city', 'vis_location_exact', 'vis_sports', 'vis_schedule', 'vis_contact', 'vis_training_logs'];
+const VIS_LEVELS = ['public', 'community', 'trusted', 'hidden'];
+
+async function getVisibleProfile(viewerId, profileUserId, env) {
+  // Fetch profile user with privacy fields
+  const profileUser = await env.DB.prepare(`
+    SELECT u.id, u.display_name, u.city, u.avatar_url, u.role, u.created_at,
+           u.instagram_username, u.verification_tier, u.verification_sport, u.verification_title, u.verified,
+           u.privacy_mode, u.vis_photo, u.vis_bio, u.vis_location_city, u.vis_location_exact,
+           u.vis_sports, u.vis_schedule, u.vis_contact, u.vis_training_logs,
+           p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.availability, p.location, p.age
+    FROM users u
+    LEFT JOIN user_profiles p ON u.id = p.user_id
+    WHERE u.id = ?
+  `).bind(profileUserId).first();
+
+  if (!profileUser) return null;
+
+  // User viewing own profile always sees everything
+  if (viewerId === profileUserId) {
+    return profileUser;
+  }
+
+  // Determine relationship
+  let isTrusted = false;
+  let isCommunity = false;
+
+  if (viewerId) {
+    // Check trusted contacts (accepted, either direction)
+    const trust = await env.DB.prepare(`
+      SELECT id FROM trusted_contacts
+      WHERE status = 'accepted'
+        AND ((requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?))
+    `).bind(viewerId, profileUserId, profileUserId, viewerId).first();
+    isTrusted = !!trust;
+
+    // Check same team membership
+    if (!isTrusted) {
+      const sameTeam = await env.DB.prepare(`
+        SELECT tm1.team_id FROM team_members tm1
+        JOIN team_members tm2 ON tm1.team_id = tm2.team_id
+        WHERE tm1.user_id = ? AND tm2.user_id = ?
+        LIMIT 1
+      `).bind(viewerId, profileUserId).first();
+      isCommunity = !!sameTeam;
+    }
+    // Trusted implies community access
+    if (isTrusted) isCommunity = true;
+  }
+
+  function canSee(visLevel) {
+    if (visLevel === 'public') return true;
+    if (visLevel === 'community') return isCommunity || isTrusted;
+    if (visLevel === 'trusted') return isTrusted;
+    return false; // 'hidden'
+  }
+
+  // Build filtered profile
+  const filtered = { ...profileUser };
+
+  if (!canSee(profileUser.vis_photo || 'public')) {
+    filtered.avatar_url = '';
+  }
+  if (!canSee(profileUser.vis_bio || 'public')) {
+    filtered.bio = null;
+  }
+  if (!canSee(profileUser.vis_location_city || 'public')) {
+    filtered.city = null;
+    filtered.location = null;
+  }
+  if (!canSee(profileUser.vis_location_exact || 'community')) {
+    // Keep city but hide exact location (location field from profiles)
+    filtered.location = null;
+  }
+  if (!canSee(profileUser.vis_sports || 'public')) {
+    filtered.sports = '[]';
+    filtered.skill_level = null;
+    filtered.weight_class = null;
+    filtered.training_goals = '[]';
+    filtered.experience_years = null;
+  }
+  if (!canSee(profileUser.vis_schedule || 'community')) {
+    filtered.availability = '[]';
+  }
+  if (!canSee(profileUser.vis_contact || 'trusted')) {
+    filtered.instagram_username = null;
+  }
+
+  // Remove privacy fields from response
+  for (const f of VIS_FIELDS) delete filtered[f];
+  delete filtered.privacy_mode;
+
+  return filtered;
+}
+
+// ─── Privacy Routes ──────────────────────────────────────────────────────────
+
+async function handleGetPrivacySettings(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const settings = await env.DB.prepare(
+    'SELECT privacy_mode, vis_photo, vis_bio, vis_location_city, vis_location_exact, vis_sports, vis_schedule, vis_contact, vis_training_logs FROM users WHERE id = ?'
+  ).bind(user.id).first();
+
+  return corsJson({ ok: true, settings: settings || {} }, {}, request, env);
+}
+
+async function handleUpdatePrivacySettings(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const { privacy_mode } = body;
+  const validModes = ['open', 'standard', 'private', 'custom'];
+  if (privacy_mode && !validModes.includes(privacy_mode)) {
+    return corsJson({ ok: false, error: 'Invalid privacy mode' }, { status: 400 }, request, env);
+  }
+
+  let updates = {};
+
+  if (privacy_mode && privacy_mode !== 'custom' && PRIVACY_PRESETS[privacy_mode]) {
+    updates = { privacy_mode, ...PRIVACY_PRESETS[privacy_mode] };
+  } else if (privacy_mode === 'custom') {
+    updates.privacy_mode = 'custom';
+    for (const field of VIS_FIELDS) {
+      if (body[field] && VIS_LEVELS.includes(body[field])) {
+        updates[field] = body[field];
+      }
+    }
+  } else {
+    // No mode change, just update individual fields
+    for (const field of VIS_FIELDS) {
+      if (body[field] && VIS_LEVELS.includes(body[field])) {
+        updates[field] = body[field];
+      }
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return corsJson({ ok: false, error: 'No valid fields to update' }, { status: 400 }, request, env);
+  }
+
+  const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  const values = Object.values(updates);
+  await env.DB.prepare(`UPDATE users SET ${setClauses} WHERE id = ?`).bind(...values, user.id).run();
+
+  // Return updated settings
+  const settings = await env.DB.prepare(
+    'SELECT privacy_mode, vis_photo, vis_bio, vis_location_city, vis_location_exact, vis_sports, vis_schedule, vis_contact, vis_training_logs FROM users WHERE id = ?'
+  ).bind(user.id).first();
+
+  return corsJson({ ok: true, settings }, {}, request, env);
+}
+
+// ─── Trusted Contacts Routes ─────────────────────────────────────────────────
+
+async function handleSendTrustRequest(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const allowed = await checkRateLimit(env, `trust_req:${user.id}`, 10, 3600);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many requests. Try again later.' }, { status: 429 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.user_id) return corsJson({ ok: false, error: 'user_id required' }, { status: 400 }, request, env);
+
+  const recipientId = parseInt(body.user_id);
+  if (recipientId === user.id) return corsJson({ ok: false, error: 'Cannot send request to yourself' }, { status: 400 }, request, env);
+
+  const validGroups = ['training_partner', 'coach', 'competitor', 'friend'];
+  const trustGroup = validGroups.includes(body.trust_group) ? body.trust_group : 'training_partner';
+
+  // Check recipient exists
+  const recipient = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(recipientId).first();
+  if (!recipient) return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
+
+  // Check for existing request in either direction
+  const existing = await env.DB.prepare(
+    'SELECT id, status FROM trusted_contacts WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'
+  ).bind(user.id, recipientId, recipientId, user.id).first();
+
+  if (existing) {
+    if (existing.status === 'blocked') return corsJson({ ok: false, error: 'Cannot send request' }, { status: 403 }, request, env);
+    if (existing.status === 'accepted') return corsJson({ ok: false, error: 'Already trusted contacts' }, { status: 400 }, request, env);
+    if (existing.status === 'pending') return corsJson({ ok: false, error: 'Request already pending' }, { status: 400 }, request, env);
+    // If declined, allow re-request by updating
+    await env.DB.prepare(
+      "UPDATE trusted_contacts SET status = 'pending', requester_id = ?, recipient_id = ?, trust_group = ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(user.id, recipientId, trustGroup, existing.id).run();
+    return corsJson({ ok: true, message: 'Trust request sent' }, {}, request, env);
+  }
+
+  await env.DB.prepare(
+    "INSERT INTO trusted_contacts (requester_id, recipient_id, trust_group, status) VALUES (?, ?, ?, 'pending')"
+  ).bind(user.id, recipientId, trustGroup).run();
+
+  return corsJson({ ok: true, message: 'Trust request sent' }, {}, request, env);
+}
+
+async function handleGetTrustedContacts(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Accepted contacts
+  const accepted = await env.DB.prepare(`
+    SELECT tc.id, tc.trust_group, tc.created_at,
+           CASE WHEN tc.requester_id = ? THEN tc.recipient_id ELSE tc.requester_id END as contact_user_id,
+           u.display_name, u.avatar_url, u.verification_tier
+    FROM trusted_contacts tc
+    JOIN users u ON u.id = (CASE WHEN tc.requester_id = ? THEN tc.recipient_id ELSE tc.requester_id END)
+    WHERE (tc.requester_id = ? OR tc.recipient_id = ?) AND tc.status = 'accepted'
+    ORDER BY tc.updated_at DESC
+  `).bind(user.id, user.id, user.id, user.id).all();
+
+  // Pending incoming requests
+  const pending = await env.DB.prepare(`
+    SELECT tc.id, tc.trust_group, tc.created_at, tc.requester_id as contact_user_id,
+           u.display_name, u.avatar_url, u.verification_tier
+    FROM trusted_contacts tc
+    JOIN users u ON u.id = tc.requester_id
+    WHERE tc.recipient_id = ? AND tc.status = 'pending'
+    ORDER BY tc.created_at DESC
+  `).bind(user.id).all();
+
+  // Pending outgoing requests
+  const outgoing = await env.DB.prepare(`
+    SELECT tc.id, tc.trust_group, tc.created_at, tc.recipient_id as contact_user_id,
+           u.display_name, u.avatar_url, u.verification_tier
+    FROM trusted_contacts tc
+    JOIN users u ON u.id = tc.recipient_id
+    WHERE tc.requester_id = ? AND tc.status = 'pending'
+    ORDER BY tc.created_at DESC
+  `).bind(user.id).all();
+
+  return corsJson({
+    ok: true,
+    contacts: accepted.results || [],
+    pending_incoming: pending.results || [],
+    pending_outgoing: outgoing.results || [],
+  }, {}, request, env);
+}
+
+async function handleRespondTrustRequest(request, env, contactId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.status) return corsJson({ ok: false, error: 'status required' }, { status: 400 }, request, env);
+
+  const validStatuses = ['accepted', 'declined', 'blocked'];
+  if (!validStatuses.includes(body.status)) return corsJson({ ok: false, error: 'Invalid status' }, { status: 400 }, request, env);
+
+  // Must be the recipient
+  const contact = await env.DB.prepare(
+    'SELECT id, recipient_id FROM trusted_contacts WHERE id = ? AND status = ?'
+  ).bind(contactId, 'pending').first();
+
+  if (!contact) return corsJson({ ok: false, error: 'Request not found' }, { status: 404 }, request, env);
+  if (contact.recipient_id !== user.id) return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+
+  await env.DB.prepare(
+    "UPDATE trusted_contacts SET status = ?, updated_at = datetime('now') WHERE id = ?"
+  ).bind(body.status, contactId).run();
+
+  return corsJson({ ok: true, message: `Request ${body.status}` }, {}, request, env);
+}
+
+async function handleDeleteTrustedContact(request, env, contactId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const contact = await env.DB.prepare(
+    'SELECT id, requester_id, recipient_id FROM trusted_contacts WHERE id = ?'
+  ).bind(contactId).first();
+
+  if (!contact) return corsJson({ ok: false, error: 'Contact not found' }, { status: 404 }, request, env);
+  if (contact.requester_id !== user.id && contact.recipient_id !== user.id) {
+    return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+  }
+
+  await env.DB.prepare('DELETE FROM trusted_contacts WHERE id = ?').bind(contactId).run();
+  return corsJson({ ok: true, message: 'Contact removed' }, {}, request, env);
+}
+
+// Check trust status between current user and another user
+async function handleGetTrustStatus(request, env, userId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const contact = await env.DB.prepare(
+    'SELECT id, status, trust_group, requester_id, recipient_id FROM trusted_contacts WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'
+  ).bind(user.id, parseInt(userId), parseInt(userId), user.id).first();
+
+  if (!contact) return corsJson({ ok: true, status: 'none', contact: null }, {}, request, env);
+
+  return corsJson({
+    ok: true,
+    status: contact.status,
+    contact: {
+      id: contact.id,
+      trust_group: contact.trust_group,
+      is_requester: contact.requester_id === user.id,
+    },
+  }, {}, request, env);
+}
+
+// ─── Teams Routes ────────────────────────────────────────────────────────────
+
+async function handleCreateTeam(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const allowed = await checkRateLimit(env, `team_create:${user.id}`, 3, 86400);
+  if (!allowed) return corsJson({ ok: false, error: 'Max 3 teams per day' }, { status: 429 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.name) return corsJson({ ok: false, error: 'name required' }, { status: 400 }, request, env);
+
+  const name = sanitize(body.name, 100);
+  const description = sanitize(body.description || '', 500);
+  const sport = sanitize(body.sport || '', 100);
+  const visibilityPolicy = ['open', 'standard', 'private'].includes(body.visibility_policy) ? body.visibility_policy : 'standard';
+  const isPublic = body.is_public === false ? 0 : 1;
+  const maxMembers = Math.min(Math.max(parseInt(body.max_members) || 50, 2), 200);
+
+  const result = await env.DB.prepare(
+    'INSERT INTO teams (name, description, sport, creator_id, visibility_policy, is_public, max_members) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).bind(name, description, sport, user.id, visibilityPolicy, isPublic, maxMembers).run();
+
+  const teamId = result.meta?.last_row_id;
+
+  // Auto-add creator as owner
+  await env.DB.prepare(
+    "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'owner')"
+  ).bind(teamId, user.id).run();
+
+  return corsJson({ ok: true, team_id: teamId, message: 'Team created' }, { status: 201 }, request, env);
+}
+
+async function handleGetMyTeams(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const teams = await env.DB.prepare(`
+    SELECT t.*, tm.role as my_role,
+           (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+    FROM teams t
+    JOIN team_members tm ON tm.team_id = t.id AND tm.user_id = ?
+    ORDER BY t.created_at DESC
+  `).bind(user.id).all();
+
+  return corsJson({ ok: true, teams: teams.results || [] }, {}, request, env);
+}
+
+async function handleGetTeamDetail(request, env, teamId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Check membership
+  const membership = await env.DB.prepare(
+    'SELECT role FROM team_members WHERE team_id = ? AND user_id = ?'
+  ).bind(teamId, user.id).first();
+
+  if (!membership) return corsJson({ ok: false, error: 'Not a member of this team' }, { status: 403 }, request, env);
+
+  const team = await env.DB.prepare('SELECT * FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) return corsJson({ ok: false, error: 'Team not found' }, { status: 404 }, request, env);
+
+  const members = await env.DB.prepare(`
+    SELECT tm.id, tm.role, tm.joined_at, u.id as user_id, u.display_name, u.avatar_url, u.verification_tier
+    FROM team_members tm
+    JOIN users u ON u.id = tm.user_id
+    WHERE tm.team_id = ?
+    ORDER BY tm.role DESC, tm.joined_at ASC
+  `).bind(teamId).all();
+
+  return corsJson({
+    ok: true,
+    team: { ...team, my_role: membership.role },
+    members: members.results || [],
+  }, {}, request, env);
+}
+
+async function handleAddTeamMember(request, env, teamId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Check admin/owner
+  const myRole = await env.DB.prepare(
+    'SELECT role FROM team_members WHERE team_id = ? AND user_id = ?'
+  ).bind(teamId, user.id).first();
+  if (!myRole || (myRole.role !== 'owner' && myRole.role !== 'admin')) {
+    return corsJson({ ok: false, error: 'Only admins can add members' }, { status: 403 }, request, env);
+  }
+
+  const body = await readJson(request);
+  if (!body || !body.user_id) return corsJson({ ok: false, error: 'user_id required' }, { status: 400 }, request, env);
+
+  const targetId = parseInt(body.user_id);
+
+  // Check team max members
+  const team = await env.DB.prepare('SELECT max_members FROM teams WHERE id = ?').bind(teamId).first();
+  const count = await env.DB.prepare('SELECT COUNT(*) as c FROM team_members WHERE team_id = ?').bind(teamId).first();
+  if (count.c >= (team?.max_members || 50)) {
+    return corsJson({ ok: false, error: 'Team is full' }, { status: 400 }, request, env);
+  }
+
+  // Check user exists
+  const targetUser = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(targetId).first();
+  if (!targetUser) return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
+
+  try {
+    await env.DB.prepare(
+      "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'member')"
+    ).bind(teamId, targetId).run();
+  } catch (e) {
+    if (e.message?.includes('UNIQUE')) return corsJson({ ok: false, error: 'Already a member' }, { status: 400 }, request, env);
+    throw e;
+  }
+
+  return corsJson({ ok: true, message: 'Member added' }, {}, request, env);
+}
+
+async function handleJoinTeam(request, env, teamId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const team = await env.DB.prepare('SELECT is_public, max_members FROM teams WHERE id = ?').bind(teamId).first();
+  if (!team) return corsJson({ ok: false, error: 'Team not found' }, { status: 404 }, request, env);
+  if (!team.is_public) return corsJson({ ok: false, error: 'This team is invite-only' }, { status: 403 }, request, env);
+
+  const count = await env.DB.prepare('SELECT COUNT(*) as c FROM team_members WHERE team_id = ?').bind(teamId).first();
+  if (count.c >= (team.max_members || 50)) return corsJson({ ok: false, error: 'Team is full' }, { status: 400 }, request, env);
+
+  try {
+    await env.DB.prepare(
+      "INSERT INTO team_members (team_id, user_id, role) VALUES (?, ?, 'member')"
+    ).bind(teamId, user.id).run();
+  } catch (e) {
+    if (e.message?.includes('UNIQUE')) return corsJson({ ok: false, error: 'Already a member' }, { status: 400 }, request, env);
+    throw e;
+  }
+
+  return corsJson({ ok: true, message: 'Joined team' }, {}, request, env);
+}
+
+async function handleRemoveTeamMember(request, env, teamId, userId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const targetUserId = parseInt(userId);
+
+  // Allow self-removal (leave) or admin/owner removal
+  if (targetUserId !== user.id) {
+    const myRole = await env.DB.prepare(
+      'SELECT role FROM team_members WHERE team_id = ? AND user_id = ?'
+    ).bind(teamId, user.id).first();
+    if (!myRole || (myRole.role !== 'owner' && myRole.role !== 'admin')) {
+      return corsJson({ ok: false, error: 'Not authorized' }, { status: 403 }, request, env);
+    }
+  }
+
+  // Prevent owner from being removed
+  const targetRole = await env.DB.prepare(
+    'SELECT role FROM team_members WHERE team_id = ? AND user_id = ?'
+  ).bind(teamId, targetUserId).first();
+  if (targetRole?.role === 'owner' && targetUserId !== user.id) {
+    return corsJson({ ok: false, error: 'Cannot remove the team owner' }, { status: 403 }, request, env);
+  }
+
+  await env.DB.prepare(
+    'DELETE FROM team_members WHERE team_id = ? AND user_id = ?'
+  ).bind(teamId, targetUserId).run();
+
+  return corsJson({ ok: true, message: 'Member removed' }, {}, request, env);
+}
+
+// ─── Badge Routes ────────────────────────────────────────────────────────────
+
+const COMPETITION_LEVELS = ['state', 'national', 'international', 'world_olympic'];
+const COACHING_LEVELS = ['youth', 'high_school', 'university', 'professional'];
+
+async function handleRequestBadge(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const allowed = await checkRateLimit(env, `badge_req:${user.id}`, 5, 86400);
+  if (!allowed) return corsJson({ ok: false, error: 'Max 5 badge requests per day' }, { status: 429 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const { badge_type, badge_level, sport, title, organization, year, evidence_url, evidence_notes } = body;
+
+  if (!badge_type || !badge_level || !sport || !title) {
+    return corsJson({ ok: false, error: 'badge_type, badge_level, sport, and title are required' }, { status: 400 }, request, env);
+  }
+
+  if (badge_type !== 'competition' && badge_type !== 'coaching') {
+    return corsJson({ ok: false, error: 'badge_type must be competition or coaching' }, { status: 400 }, request, env);
+  }
+
+  const validLevels = badge_type === 'competition' ? COMPETITION_LEVELS : COACHING_LEVELS;
+  if (!validLevels.includes(badge_level)) {
+    return corsJson({ ok: false, error: `Invalid badge_level for ${badge_type}. Must be: ${validLevels.join(', ')}` }, { status: 400 }, request, env);
+  }
+
+  await env.DB.prepare(
+    "INSERT INTO user_badges (user_id, badge_type, badge_level, sport, title, organization, year, evidence_url, evidence_notes, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+  ).bind(
+    user.id, badge_type, badge_level, sanitize(sport, 100), sanitize(title, 200),
+    sanitize(organization || '', 200), year ? parseInt(year) : null,
+    sanitize(evidence_url || '', 500), sanitize(evidence_notes || '', 1000)
+  ).run();
+
+  return corsJson({ ok: true, message: 'Badge request submitted for review' }, { status: 201 }, request, env);
+}
+
+async function handleGetMyBadges(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const badges = await env.DB.prepare(
+    'SELECT * FROM user_badges WHERE user_id = ? ORDER BY created_at DESC'
+  ).bind(user.id).all();
+
+  return corsJson({ ok: true, badges: badges.results || [] }, {}, request, env);
+}
+
+async function handleGetUserBadges(request, env, userId) {
+  const badges = await env.DB.prepare(
+    "SELECT id, badge_type, badge_level, sport, title, organization, year, verified_at FROM user_badges WHERE user_id = ? AND status = 'verified' ORDER BY year DESC"
+  ).bind(parseInt(userId)).all();
+
+  return corsJson({ ok: true, badges: badges.results || [] }, {}, request, env);
+}
+
+async function handleAdminGetPendingBadges(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'admin') return corsJson({ ok: false, error: 'Admin only' }, { status: 403 }, request, env);
+
+  const badges = await env.DB.prepare(`
+    SELECT ub.*, u.display_name, u.email
+    FROM user_badges ub
+    JOIN users u ON u.id = ub.user_id
+    WHERE ub.status = 'pending'
+    ORDER BY ub.created_at ASC
+  `).all();
+
+  return corsJson({ ok: true, badges: badges.results || [] }, {}, request, env);
+}
+
+async function handleAdminResolveBadge(request, env, badgeId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+  if (user.role !== 'admin') return corsJson({ ok: false, error: 'Admin only' }, { status: 403 }, request, env);
+
+  const body = await readJson(request);
+  if (!body || !body.status) return corsJson({ ok: false, error: 'status required' }, { status: 400 }, request, env);
+
+  if (body.status !== 'verified' && body.status !== 'rejected') {
+    return corsJson({ ok: false, error: 'status must be verified or rejected' }, { status: 400 }, request, env);
+  }
+
+  const badge = await env.DB.prepare('SELECT id FROM user_badges WHERE id = ?').bind(badgeId).first();
+  if (!badge) return corsJson({ ok: false, error: 'Badge not found' }, { status: 404 }, request, env);
+
+  await env.DB.prepare(
+    "UPDATE user_badges SET status = ?, verified_by = ?, verified_at = datetime('now') WHERE id = ?"
+  ).bind(body.status, user.id, badgeId).run();
+
+  return corsJson({ ok: true, message: `Badge ${body.status}` }, {}, request, env);
+}
+
 // ─── Observability ────────────────────────────────────────────────────────────
 
 // Non-blocking request logger — uses waitUntil to avoid slowing responses
@@ -6608,6 +7214,60 @@ export default {
       // Admin Analytics (observability dashboard)
       if (path === '/api/admin/analytics' && method === 'GET') return handleAdminAnalytics(request, env);
       if (path === '/api/admin/errors' && method === 'GET') return handleAdminErrors(request, env);
+
+      // Privacy Settings
+      if (path === '/api/account/privacy' && method === 'GET') return handleGetPrivacySettings(request, env);
+      if (path === '/api/account/privacy' && method === 'PATCH') return handleUpdatePrivacySettings(request, env);
+
+      // Trusted Contacts
+      if (path === '/api/trusted-contacts' && method === 'POST') return handleSendTrustRequest(request, env);
+      if (path === '/api/trusted-contacts' && method === 'GET') return handleGetTrustedContacts(request, env);
+      if (path.match(/^\/api\/trusted-contacts\/(\d+)$/) && method === 'PATCH') {
+        const id = parseInt(path.split('/')[3]);
+        return handleRespondTrustRequest(request, env, id);
+      }
+      if (path.match(/^\/api\/trusted-contacts\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeleteTrustedContact(request, env, id);
+      }
+      if (path.match(/^\/api\/trusted-contacts\/status\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[4]);
+        return handleGetTrustStatus(request, env, id);
+      }
+
+      // Teams
+      if (path === '/api/teams' && method === 'POST') return handleCreateTeam(request, env);
+      if (path === '/api/teams' && method === 'GET') return handleGetMyTeams(request, env);
+      if (path.match(/^\/api\/teams\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetTeamDetail(request, env, id);
+      }
+      if (path.match(/^\/api\/teams\/(\d+)\/members$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleAddTeamMember(request, env, id);
+      }
+      if (path.match(/^\/api\/teams\/(\d+)\/join$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleJoinTeam(request, env, id);
+      }
+      if (path.match(/^\/api\/teams\/(\d+)\/members\/(\d+)$/) && method === 'DELETE') {
+        const teamId = parseInt(path.split('/')[3]);
+        const userId = path.split('/')[5];
+        return handleRemoveTeamMember(request, env, teamId, userId);
+      }
+
+      // Badges
+      if (path === '/api/badges' && method === 'POST') return handleRequestBadge(request, env);
+      if (path === '/api/badges/mine' && method === 'GET') return handleGetMyBadges(request, env);
+      if (path.match(/^\/api\/users\/(\d+)\/badges$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetUserBadges(request, env, id);
+      }
+      if (path === '/api/admin/badges' && method === 'GET') return handleAdminGetPendingBadges(request, env);
+      if (path.match(/^\/api\/admin\/badges\/(\d+)$/) && method === 'PATCH') {
+        const id = parseInt(path.split('/')[4]);
+        return handleAdminResolveBadge(request, env, id);
+      }
 
       // Fallback to static assets
       if (env.ASSETS) return env.ASSETS.fetch(request);

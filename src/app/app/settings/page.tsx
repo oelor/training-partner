@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing, Download, Flag, MessageCircle } from 'lucide-react'
+import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing, Download, Flag, MessageCircle, Eye, Lock, Sliders, UserPlus, UserCheck, Clock, Medal, GraduationCap, Award, Trophy } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api, { isPremiumPlan, IdentityVerification, BlockedUser, IntegrationProvider, UserReport, MessagePreferences } from '@/lib/api'
+import api, { isPremiumPlan, IdentityVerification, BlockedUser, IntegrationProvider, UserReport, MessagePreferences, PrivacySettings, TrustedContact, TrustRequest, UserBadge } from '@/lib/api'
 import { useToast } from '@/components/toast'
 
 export default function SettingsPage() {
@@ -71,6 +71,34 @@ export default function SettingsPage() {
   const [msgPrefsLoading, setMsgPrefsLoading] = useState(true)
   const [msgPrefsSaving, setMsgPrefsSaving] = useState(false)
 
+  // Privacy Settings state
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null)
+  const [privacyLoading, setPrivacyLoading] = useState(true)
+  const [privacySaving, setPrivacySaving] = useState(false)
+
+  // Trusted Contacts state
+  const [trustedContacts, setTrustedContacts] = useState<TrustedContact[]>([])
+  const [pendingIncoming, setPendingIncoming] = useState<TrustRequest[]>([])
+  const [pendingOutgoing, setPendingOutgoing] = useState<TrustRequest[]>([])
+  const [contactsLoading, setContactsLoading] = useState(true)
+  const [respondingId, setRespondingId] = useState<number | null>(null)
+
+  // Badges state
+  const [myBadges, setMyBadges] = useState<UserBadge[]>([])
+  const [badgesLoading, setBadgesLoading] = useState(true)
+  const [badgeFormOpen, setBadgeFormOpen] = useState(false)
+  const [badgeSubmitting, setBadgeSubmitting] = useState(false)
+  const [badgeForm, setBadgeForm] = useState({
+    badge_type: 'competition' as 'competition' | 'coaching',
+    badge_level: '',
+    sport: '',
+    title: '',
+    organization: '',
+    year: '',
+    evidence_url: '',
+    evidence_notes: '',
+  })
+
   const loadIdentityStatus = useCallback(async () => {
     try {
       const res = await api.getIdentityStatus()
@@ -111,13 +139,42 @@ export default function SettingsPage() {
     finally { setMsgPrefsLoading(false) }
   }, [])
 
+  const loadPrivacySettings = useCallback(async () => {
+    try {
+      const res = await api.getPrivacySettings()
+      setPrivacySettings(res.settings)
+    } catch { /* */ }
+    finally { setPrivacyLoading(false) }
+  }, [])
+
+  const loadTrustedContacts = useCallback(async () => {
+    try {
+      const res = await api.getTrustedContacts()
+      setTrustedContacts(res.contacts)
+      setPendingIncoming(res.pending_incoming)
+      setPendingOutgoing(res.pending_outgoing)
+    } catch { /* */ }
+    finally { setContactsLoading(false) }
+  }, [])
+
+  const loadMyBadges = useCallback(async () => {
+    try {
+      const res = await api.getMyBadges()
+      setMyBadges(res.badges)
+    } catch { /* */ }
+    finally { setBadgesLoading(false) }
+  }, [])
+
   useEffect(() => {
     loadIdentityStatus()
     loadBlocks()
     loadIntegrations()
     loadMyReports()
     loadMessagePreferences()
-  }, [loadIdentityStatus, loadBlocks, loadIntegrations, loadMyReports, loadMessagePreferences])
+    loadPrivacySettings()
+    loadTrustedContacts()
+    loadMyBadges()
+  }, [loadIdentityStatus, loadBlocks, loadIntegrations, loadMyReports, loadMessagePreferences, loadPrivacySettings, loadTrustedContacts, loadMyBadges])
 
   useEffect(() => {
     if (user) {
@@ -318,7 +375,9 @@ export default function SettingsPage() {
     { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'blocked', label: 'Blocked Users', icon: Ban },
     { id: 'reports', label: 'My Reports', icon: Flag },
-    { id: 'privacy', label: 'Privacy', icon: Shield },
+    { id: 'privacy', label: 'Privacy', icon: Eye },
+    { id: 'contacts', label: 'Trusted Contacts', icon: UserPlus },
+    { id: 'badges', label: 'Badges', icon: Medal },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'help', label: 'Help', icon: HelpCircle },
   ]
@@ -1087,28 +1146,516 @@ export default function SettingsPage() {
           {activeTab === 'privacy' && (
             <div className="space-y-6">
               <h2 className="font-heading text-xl text-white mb-6">PRIVACY SETTINGS</h2>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between py-4 border-b border-border">
-                  <div>
-                    <div className="text-white font-medium">Profile Visibility</div>
-                    <div className="text-text-secondary text-sm">Who can see your profile</div>
-                  </div>
-                  <label htmlFor="profileVisibility" className="sr-only">Profile Visibility</label>
-                  <select id="profileVisibility" className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm">
-                    <option>All Members</option>
-                    <option>Partners Only</option>
-                  </select>
+
+              {privacyLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
                 </div>
-                <div className="flex items-center justify-between py-4 border-b border-border">
-                  <div>
-                    <div className="text-white font-medium">Show Location</div>
-                    <div className="text-text-secondary text-sm">Allow others to see your approximate location</div>
+              ) : (
+                <>
+                  {/* Profile Mode selector */}
+                  <div className="space-y-3">
+                    <div className="text-white font-medium mb-2">Profile Visibility Mode</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {([
+                        { id: 'open', label: 'Open', desc: 'Everyone can see your full profile', icon: Eye, color: 'text-green-400 border-green-500/50 bg-green-500/10' },
+                        { id: 'standard', label: 'Standard', desc: 'Basics public, details for team/contacts', icon: Eye, color: 'text-blue-400 border-blue-500/50 bg-blue-500/10' },
+                        { id: 'private', label: 'Private', desc: 'Minimal public, most hidden', icon: Lock, color: 'text-orange-400 border-orange-500/50 bg-orange-500/10' },
+                        { id: 'custom', label: 'Custom', desc: 'Control each field individually', icon: Sliders, color: 'text-purple-400 border-purple-500/50 bg-purple-500/10' },
+                      ] as const).map(mode => (
+                        <button
+                          key={mode.id}
+                          onClick={() => {
+                            if (mode.id === 'custom') {
+                              setPrivacySettings(prev => prev ? { ...prev, privacy_mode: 'custom' } : null)
+                            } else {
+                              setPrivacySaving(true)
+                              api.updatePrivacySettings({ privacy_mode: mode.id }).then(res => {
+                                setPrivacySettings(res.settings)
+                                toast.success('Privacy mode updated')
+                              }).catch(() => toast.error('Failed to update privacy settings')).finally(() => setPrivacySaving(false))
+                            }
+                          }}
+                          disabled={privacySaving}
+                          className={`text-left p-4 rounded-xl border transition-all ${
+                            privacySettings?.privacy_mode === mode.id
+                              ? mode.color + ' ring-1 ring-current'
+                              : 'border-border bg-surface hover:border-text-secondary'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <mode.icon className="w-4 h-4" />
+                            <span className="text-white font-medium text-sm">{mode.label}</span>
+                          </div>
+                          <p className="text-text-secondary text-xs">{mode.desc}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <button className="w-12 h-6 bg-accent rounded-full">
-                    <div className="w-5 h-5 bg-white rounded-full translate-x-6" />
-                  </button>
+
+                  {/* Per-field controls */}
+                  {privacySettings?.privacy_mode === 'custom' && (
+                    <div className="space-y-3 mt-6">
+                      <div className="text-white font-medium mb-2">Field-Level Controls</div>
+                      {([
+                        { field: 'vis_photo', label: 'Photo' },
+                        { field: 'vis_bio', label: 'Bio' },
+                        { field: 'vis_location_city', label: 'City' },
+                        { field: 'vis_location_exact', label: 'Exact Location' },
+                        { field: 'vis_sports', label: 'Sports & Experience' },
+                        { field: 'vis_schedule', label: 'Training Schedule' },
+                        { field: 'vis_contact', label: 'Contact Info' },
+                        { field: 'vis_training_logs', label: 'Training Logs' },
+                      ] as const).map(({ field, label }) => (
+                        <div key={field} className="flex items-center justify-between py-3 border-b border-border">
+                          <span className="text-white text-sm">{label}</span>
+                          <label htmlFor={`privacy-${field}`} className="sr-only">{label} visibility</label>
+                          <select
+                            id={`privacy-${field}`}
+                            value={(privacySettings as unknown as Record<string, string>)?.[field] || 'public'}
+                            onChange={e => {
+                              setPrivacySettings(prev => prev ? { ...prev, [field]: e.target.value } as PrivacySettings : null)
+                            }}
+                            className="bg-background border border-border rounded-lg py-1.5 px-3 text-white text-sm"
+                          >
+                            <option value="public">Public</option>
+                            <option value="community">Community</option>
+                            <option value="trusted">Trusted Only</option>
+                            <option value="hidden">Hidden</option>
+                          </select>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setPrivacySaving(true)
+                          api.updatePrivacySettings({ ...privacySettings, privacy_mode: 'custom' }).then(res => {
+                            setPrivacySettings(res.settings)
+                            toast.success('Privacy settings saved')
+                          }).catch(() => toast.error('Failed to save')).finally(() => setPrivacySaving(false))
+                        }}
+                        disabled={privacySaving}
+                        className="w-full bg-primary text-white py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 mt-4"
+                      >
+                        {privacySaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        Save Custom Settings
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 mt-4">
+                    <p className="text-blue-400 text-xs">
+                      <strong>Visibility levels:</strong> Public = everyone, Community = team members & trusted contacts, Trusted = accepted trusted contacts only, Hidden = only you.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'contacts' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">TRUSTED CONTACTS</h2>
+
+              {contactsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* Incoming requests */}
+                  {pendingIncoming.length > 0 && (
+                    <div>
+                      <h3 className="text-text-secondary text-sm font-medium mb-3">Incoming Requests</h3>
+                      <div className="space-y-2">
+                        {pendingIncoming.map(req => (
+                          <div key={req.id} className="bg-surface border border-border rounded-lg p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold">
+                                {req.avatar_url ? (
+                                  <img src={req.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  req.display_name?.charAt(0)?.toUpperCase() || '?'
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-white text-sm font-medium">{req.display_name}</div>
+                                <div className="text-text-secondary text-xs capitalize">{req.trust_group?.replace('_', ' ')}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  setRespondingId(req.id)
+                                  try {
+                                    await api.respondToTrustRequest(req.id, 'accepted')
+                                    toast.success('Contact accepted')
+                                    loadTrustedContacts()
+                                  } catch { toast.error('Failed to accept') }
+                                  finally { setRespondingId(null) }
+                                }}
+                                disabled={respondingId === req.id}
+                                className="bg-green-500/20 text-green-400 px-3 py-1.5 rounded-lg text-sm hover:bg-green-500/30 transition-colors"
+                              >
+                                {respondingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Accept'}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setRespondingId(req.id)
+                                  try {
+                                    await api.respondToTrustRequest(req.id, 'declined')
+                                    toast.success('Request declined')
+                                    loadTrustedContacts()
+                                  } catch { toast.error('Failed to decline') }
+                                  finally { setRespondingId(null) }
+                                }}
+                                disabled={respondingId === req.id}
+                                className="bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/30 transition-colors"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pending outgoing */}
+                  {pendingOutgoing.length > 0 && (
+                    <div>
+                      <h3 className="text-text-secondary text-sm font-medium mb-3">Pending Sent Requests</h3>
+                      <div className="space-y-2">
+                        {pendingOutgoing.map(req => (
+                          <div key={req.id} className="bg-surface border border-border rounded-lg p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold">
+                                {req.avatar_url ? (
+                                  <img src={req.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  req.display_name?.charAt(0)?.toUpperCase() || '?'
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-white text-sm font-medium">{req.display_name}</div>
+                                <div className="text-yellow-400 text-xs flex items-center gap-1">
+                                  <Clock className="w-3 h-3" /> Pending
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api.removeTrustedContact(req.id)
+                                  toast.success('Request cancelled')
+                                  loadTrustedContacts()
+                                } catch { toast.error('Failed to cancel') }
+                              }}
+                              className="text-text-secondary hover:text-red-400 text-sm transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Accepted contacts by group */}
+                  {trustedContacts.length > 0 ? (
+                    <div>
+                      <h3 className="text-text-secondary text-sm font-medium mb-3">Your Trusted Contacts ({trustedContacts.length})</h3>
+                      <div className="space-y-2">
+                        {trustedContacts.map(contact => (
+                          <div key={contact.id} className="bg-surface border border-border rounded-lg p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold">
+                                {contact.avatar_url ? (
+                                  <img src={contact.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                  contact.display_name?.charAt(0)?.toUpperCase() || '?'
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-white text-sm font-medium">{contact.display_name}</div>
+                                <div className="text-text-secondary text-xs capitalize flex items-center gap-1">
+                                  <UserCheck className="w-3 h-3 text-green-400" />
+                                  {contact.trust_group?.replace('_', ' ')}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Remove this trusted contact?')) return
+                                try {
+                                  await api.removeTrustedContact(contact.id)
+                                  toast.success('Contact removed')
+                                  loadTrustedContacts()
+                                } catch { toast.error('Failed to remove') }
+                              }}
+                              className="text-text-secondary hover:text-red-400 text-sm transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : pendingIncoming.length === 0 && pendingOutgoing.length === 0 ? (
+                    <div className="text-center py-8">
+                      <UserPlus className="w-12 h-12 text-text-secondary mx-auto mb-3" />
+                      <div className="text-white font-medium mb-1">No trusted contacts yet</div>
+                      <div className="text-text-secondary text-sm">Visit a partner&apos;s profile to send a trust request</div>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'badges' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">BADGES & CREDENTIALS</h2>
+
+              {badgesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : (
+                <>
+                  {/* Existing badges */}
+                  {myBadges.length > 0 && (
+                    <div className="space-y-2">
+                      {myBadges.map(badge => (
+                        <div key={badge.id} className="bg-surface border border-border rounded-lg p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              badge.badge_type === 'competition' ? 'bg-yellow-500/20' : 'bg-purple-500/20'
+                            }`}>
+                              {badge.badge_type === 'competition' ? (
+                                <Medal className={`w-5 h-5 ${badge.status === 'verified' ? 'text-yellow-400' : 'text-text-secondary'}`} />
+                              ) : (
+                                <GraduationCap className={`w-5 h-5 ${badge.status === 'verified' ? 'text-purple-400' : 'text-text-secondary'}`} />
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-white text-sm font-medium">{badge.title}</div>
+                              <div className="text-text-secondary text-xs">
+                                {badge.sport} {badge.organization ? `- ${badge.organization}` : ''} {badge.year ? `(${badge.year})` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            {badge.status === 'verified' && (
+                              <span className="inline-flex items-center gap-1 text-green-400 text-xs bg-green-500/20 px-2 py-1 rounded-full">
+                                <CheckCircle className="w-3 h-3" /> Verified
+                              </span>
+                            )}
+                            {badge.status === 'pending' && (
+                              <span className="inline-flex items-center gap-1 text-yellow-400 text-xs bg-yellow-500/20 px-2 py-1 rounded-full">
+                                <Clock className="w-3 h-3" /> Pending
+                              </span>
+                            )}
+                            {badge.status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 text-red-400 text-xs bg-red-500/20 px-2 py-1 rounded-full">
+                                <X className="w-3 h-3" /> Rejected
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Request new badge */}
+                  {!badgeFormOpen ? (
+                    <button
+                      onClick={() => setBadgeFormOpen(true)}
+                      className="w-full bg-surface border border-dashed border-border rounded-lg p-4 text-text-secondary hover:text-white hover:border-primary transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Award className="w-5 h-5" />
+                      Request a New Badge
+                    </button>
+                  ) : (
+                    <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+                      <h3 className="text-white font-medium flex items-center gap-2">
+                        <Award className="w-4 h-4 text-primary" />
+                        Request a Badge
+                      </h3>
+
+                      {/* Badge Type */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setBadgeForm(prev => ({ ...prev, badge_type: 'competition', badge_level: '' }))}
+                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                            badgeForm.badge_type === 'competition'
+                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
+                              : 'bg-background border border-border text-text-secondary hover:text-white'
+                          }`}
+                        >
+                          <Trophy className="w-4 h-4 inline mr-1" /> Competition
+                        </button>
+                        <button
+                          onClick={() => setBadgeForm(prev => ({ ...prev, badge_type: 'coaching', badge_level: '' }))}
+                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                            badgeForm.badge_type === 'coaching'
+                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                              : 'bg-background border border-border text-text-secondary hover:text-white'
+                          }`}
+                        >
+                          <GraduationCap className="w-4 h-4 inline mr-1" /> Coaching
+                        </button>
+                      </div>
+
+                      {/* Level */}
+                      <div>
+                        <label htmlFor="badge-level" className="text-text-secondary text-sm mb-1 block">Level</label>
+                        <select
+                          id="badge-level"
+                          value={badgeForm.badge_level}
+                          onChange={e => setBadgeForm(prev => ({ ...prev, badge_level: e.target.value }))}
+                          className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                        >
+                          <option value="">Select level...</option>
+                          {badgeForm.badge_type === 'competition' ? (
+                            <>
+                              <option value="state">State</option>
+                              <option value="national">National</option>
+                              <option value="international">International</option>
+                              <option value="world_olympic">World / Olympic</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="youth">Youth</option>
+                              <option value="high_school">High School</option>
+                              <option value="university">University</option>
+                              <option value="professional">Professional</option>
+                            </>
+                          )}
+                        </select>
+                      </div>
+
+                      {/* Sport */}
+                      <div>
+                        <label htmlFor="badge-sport" className="text-text-secondary text-sm mb-1 block">Sport</label>
+                        <select
+                          id="badge-sport"
+                          value={badgeForm.sport}
+                          onChange={e => setBadgeForm(prev => ({ ...prev, sport: e.target.value }))}
+                          className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                        >
+                          <option value="">Select sport...</option>
+                          {['Wrestling', 'BJJ', 'Judo', 'MMA', 'Boxing', 'Muay Thai', 'Karate', 'Taekwondo', 'Sambo', 'Other'].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Title */}
+                      <div>
+                        <label htmlFor="badge-title" className="text-text-secondary text-sm mb-1 block">Title / Achievement</label>
+                        <input
+                          id="badge-title"
+                          type="text"
+                          value={badgeForm.title}
+                          onChange={e => setBadgeForm(prev => ({ ...prev, title: e.target.value }))}
+                          placeholder="e.g. 2024 State Champion - 74kg Freestyle"
+                          className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Organization */}
+                      <div>
+                        <label htmlFor="badge-org" className="text-text-secondary text-sm mb-1 block">Organization (optional)</label>
+                        <input
+                          id="badge-org"
+                          type="text"
+                          value={badgeForm.organization}
+                          onChange={e => setBadgeForm(prev => ({ ...prev, organization: e.target.value }))}
+                          placeholder="e.g. USA Wrestling"
+                          className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Year */}
+                      <div>
+                        <label htmlFor="badge-year" className="text-text-secondary text-sm mb-1 block">Year (optional)</label>
+                        <input
+                          id="badge-year"
+                          type="number"
+                          value={badgeForm.year}
+                          onChange={e => setBadgeForm(prev => ({ ...prev, year: e.target.value }))}
+                          placeholder="2024"
+                          min="1950"
+                          max="2030"
+                          className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Evidence URL */}
+                      <div>
+                        <label htmlFor="badge-evidence" className="text-text-secondary text-sm mb-1 block">Evidence URL (optional)</label>
+                        <input
+                          id="badge-evidence"
+                          type="url"
+                          value={badgeForm.evidence_url}
+                          onChange={e => setBadgeForm(prev => ({ ...prev, evidence_url: e.target.value }))}
+                          placeholder="https://..."
+                          className="w-full bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                        />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            if (!badgeForm.badge_level || !badgeForm.sport || !badgeForm.title) {
+                              toast.error('Please fill in level, sport, and title')
+                              return
+                            }
+                            setBadgeSubmitting(true)
+                            try {
+                              await api.requestBadge({
+                                badge_type: badgeForm.badge_type,
+                                badge_level: badgeForm.badge_level,
+                                sport: badgeForm.sport,
+                                title: badgeForm.title,
+                                organization: badgeForm.organization || undefined,
+                                year: badgeForm.year ? parseInt(badgeForm.year) : undefined,
+                                evidence_url: badgeForm.evidence_url || undefined,
+                                evidence_notes: badgeForm.evidence_notes || undefined,
+                              })
+                              toast.success('Badge request submitted for review')
+                              setBadgeFormOpen(false)
+                              setBadgeForm({ badge_type: 'competition', badge_level: '', sport: '', title: '', organization: '', year: '', evidence_url: '', evidence_notes: '' })
+                              loadMyBadges()
+                            } catch { toast.error('Failed to submit badge request') }
+                            finally { setBadgeSubmitting(false) }
+                          }}
+                          disabled={badgeSubmitting}
+                          className="flex-1 bg-primary text-white py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                        >
+                          {badgeSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                          Submit Request
+                        </button>
+                        <button
+                          onClick={() => setBadgeFormOpen(false)}
+                          className="px-4 py-2.5 rounded-lg border border-border text-text-secondary hover:text-white transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {myBadges.length === 0 && !badgeFormOpen && (
+                    <div className="text-center py-4">
+                      <p className="text-text-secondary text-sm">
+                        Badges showcase your competition results and coaching credentials. They are reviewed and verified by our team.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 

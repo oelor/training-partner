@@ -6,11 +6,12 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, MessageCircle, MapPin, Trophy, Clock, Shield, Star,
-  Dumbbell, Target, Calendar, Ban, Loader2, UserCheck, ThumbsUp, ThumbsDown
+  Dumbbell, Target, Calendar, Ban, Loader2, UserCheck, ThumbsUp, ThumbsDown,
+  UserPlus, ChevronDown
 } from 'lucide-react'
 import { AlertTriangle, Instagram } from 'lucide-react'
 import ShareButton from '@/components/share-button'
-import api, { PartnerDetail } from '@/lib/api'
+import api, { PartnerDetail, UserBadge } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 import { ProfileSkeleton } from '@/components/skeleton'
@@ -18,6 +19,7 @@ import ReportDialog from '@/components/report-dialog'
 import MatchCompatibilityChart from '@/components/match-compatibility-chart'
 import VerificationBadge from '@/components/verification-badge'
 import TrustScoreComponent from '@/components/trust-score'
+import UserBadges from '@/components/user-badges'
 
 export default function PartnerDetailPage() {
   const params = useParams()
@@ -32,20 +34,30 @@ export default function PartnerDetailPage() {
   const [ratingSubmitted, setRatingSubmitted] = useState(false)
   const [submittingRating, setSubmittingRating] = useState(false)
   const [activity, setActivity] = useState<{ total_sessions: number; total_hours: number; sports_trained: number; gyms_visited: number; total_checkins: number; total_points: number; top_sports: { sport: string; sessions: number }[] } | null>(null)
+  const [trustStatus, setTrustStatus] = useState<string>('none')
+  const [trustContactId, setTrustContactId] = useState<number | null>(null)
+  const [trustSending, setTrustSending] = useState(false)
+  const [trustGroupOpen, setTrustGroupOpen] = useState(false)
+  const [partnerBadges, setPartnerBadges] = useState<UserBadge[]>([])
 
   const partnerId = Number(params.id)
 
   useEffect(() => {
     async function load() {
       try {
-        const [data, rateRes, activityRes] = await Promise.all([
+        const [data, rateRes, activityRes, trustRes, badgesRes] = await Promise.all([
           api.getPartnerDetail(partnerId),
           api.canRate(partnerId).catch(() => ({ can_rate: false, reason: '' })),
           api.getUserActivity(partnerId).catch(() => null),
+          api.getTrustStatus(partnerId).catch(() => ({ status: 'none', contact: null })),
+          api.getUserBadges(partnerId).catch(() => ({ badges: [] })),
         ])
         setPartner(data.partner)
         setCanRateUser(rateRes.can_rate)
         if (activityRes?.activity) setActivity(activityRes.activity)
+        setTrustStatus(trustRes.status)
+        if (trustRes.contact) setTrustContactId(trustRes.contact.id)
+        setPartnerBadges(badgesRes.badges || [])
       } catch {
         toast.error('Failed to load partner profile')
       } finally {
@@ -54,6 +66,20 @@ export default function PartnerDetailPage() {
     }
     if (partnerId) load()
   }, [partnerId, toast])
+
+  const handleSendTrust = async (group: string) => {
+    setTrustSending(true)
+    setTrustGroupOpen(false)
+    try {
+      await api.sendTrustRequest(partnerId, group)
+      setTrustStatus('pending')
+      toast.success('Trust request sent')
+    } catch {
+      toast.error('Failed to send request')
+    } finally {
+      setTrustSending(false)
+    }
+  }
 
   const handleMessage = () => {
     router.push(`/app/messages?user=${partnerId}`)
@@ -196,6 +222,13 @@ export default function PartnerDetailPage() {
               />
             </div>
 
+            {/* Badges */}
+            {partnerBadges.length > 0 && (
+              <div className="mb-3">
+                <UserBadges badges={partnerBadges} maxDisplay={3} />
+              </div>
+            )}
+
             {/* Action buttons */}
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
@@ -205,6 +238,45 @@ export default function PartnerDetailPage() {
                 <MessageCircle className="w-5 h-5" />
                 Send Message
               </button>
+
+              {/* Trust Request Button */}
+              {trustStatus === 'none' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setTrustGroupOpen(!trustGroupOpen)}
+                    disabled={trustSending}
+                    className="bg-surface border border-border text-text-secondary px-4 py-2.5 rounded-lg hover:text-blue-400 hover:border-blue-500/50 transition-colors flex items-center justify-center gap-2 w-full sm:w-auto"
+                  >
+                    {trustSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                    Add to Trusted
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  {trustGroupOpen && (
+                    <div className="absolute top-full left-0 mt-1 z-50 bg-surface border border-border rounded-lg shadow-xl overflow-hidden min-w-[180px]">
+                      {['training_partner', 'coach', 'competitor', 'friend'].map(group => (
+                        <button
+                          key={group}
+                          onClick={() => handleSendTrust(group)}
+                          className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-primary/10 transition-colors capitalize"
+                        >
+                          {group.replace('_', ' ')}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {trustStatus === 'pending' && (
+                <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 text-sm">
+                  <Clock className="w-4 h-4" /> Request Pending
+                </span>
+              )}
+              {trustStatus === 'accepted' && (
+                <span className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-green-400 bg-green-500/10 border border-green-500/30 text-sm">
+                  <UserCheck className="w-4 h-4" /> Trusted Contact
+                </span>
+              )}
+
               <button
                 onClick={handleBlock}
                 disabled={blocking}
