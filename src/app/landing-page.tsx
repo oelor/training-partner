@@ -17,12 +17,7 @@ import {
   Heart
 } from 'lucide-react'
 import {
-  MuayThaiSilhouette,
-  BoxingSilhouette,
-  JudoSilhouette,
   MMASilhouette,
-  WrestlingSilhouette,
-  BJJSilhouette,
   KickboxingSilhouette,
   GeneralFitnessSilhouette,
 } from '@/components/silhouettes'
@@ -252,7 +247,11 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface relative overflow-hidden">
-        <MuayThaiSilhouette glow className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] opacity-[0.15] z-0" />
+        {/* Neon atmospheric glow */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-[#FF4D00]/[0.06] blur-[120px]" />
+          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] rounded-full bg-[#FF6B35]/[0.04] blur-[100px]" />
+        </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -302,8 +301,11 @@ export default function LandingPage() {
 
       {/* How It Works — 3 bold steps */}
       <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <WrestlingSilhouette glow className="silhouette hidden md:block absolute right-[5%] top-1/2 -translate-y-1/2 w-[400px] opacity-[0.10] z-0" />
-        <KickboxingSilhouette glow className="silhouette hidden lg:block absolute left-[3%] top-1/3 w-[300px] opacity-[0.08] z-0" />
+        {/* Neon atmospheric glow */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute top-0 right-1/3 w-[600px] h-[600px] rounded-full bg-[#FF4D00]/[0.05] blur-[150px]" />
+          <div className="absolute bottom-1/4 left-0 w-[300px] h-[300px] rounded-full bg-[#FF6B35]/[0.04] blur-[80px]" />
+        </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -526,8 +528,12 @@ export default function LandingPage() {
 
       {/* Built For Athletes — Visual showcase */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <JudoSilhouette glow className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-96 opacity-[0.15] z-0 -rotate-3" />
-        <BoxingSilhouette glow className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-80 opacity-[0.15] z-0 rotate-3" />
+        {/* Neon atmospheric glow */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full bg-[#FF4D00]/[0.05] blur-[140px]" />
+          <div className="absolute bottom-0 left-1/6 w-[350px] h-[350px] rounded-full bg-[#FF6B35]/[0.03] blur-[100px]" />
+          <div className="absolute top-0 right-0 w-[250px] h-[250px] rounded-full bg-[#FF4D00]/[0.04] blur-[80px]" />
+        </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -599,7 +605,11 @@ export default function LandingPage() {
 
       {/* CTA Section with app mockup */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
-        <MMASilhouette glow className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-[28rem] opacity-[0.12] z-0" />
+        {/* Neon atmospheric glow */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-[#FF4D00]/[0.07] blur-[130px]" />
+          <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] rounded-full bg-[#FF6B35]/[0.04] blur-[100px]" />
+        </div>
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* App mockup — CSS phone */}

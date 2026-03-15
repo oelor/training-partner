@@ -10,7 +10,6 @@ import { GymCardSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { AdBanner } from '@/components/ad-banner'
 import { getSportColor } from '@/lib/sport-colors'
-import { SportSilhouette } from '@/components/silhouettes'
 
 const SPORTS = ['BJJ', 'MMA', 'Wrestling', 'Muay Thai', 'Boxing', 'Judo', 'Karate', 'Taekwondo', 'Kickboxing']
 
