@@ -2,7 +2,8 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { User, MapPin, Target, Clock, Save, Check, Loader2, Camera, X } from 'lucide-react'
+import { User, MapPin, Target, Clock, Save, Check, Loader2, Camera, X, Activity } from 'lucide-react'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import api from '@/lib/api'
 import { useToast } from '@/components/toast'
@@ -485,6 +486,25 @@ function ProfileForm() {
           rows={4}
           className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
         />
+      </div>
+
+      {/* Training Metrics */}
+      <div className="border border-dashed border-border rounded-xl p-6 bg-surface/50 animate-fade-in" style={{ animationDelay: '0.6s' }}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+            <Activity className="w-5 h-5 text-primary" />
+          </div>
+          <h2 className="font-heading text-xl text-white">TRAINING METRICS</h2>
+        </div>
+        <p className="text-text-secondary text-sm mb-3">
+          Connect a fitness tracker to see your training data here.
+        </p>
+        <Link
+          href="/app/settings"
+          className="text-primary text-sm hover:underline transition-colors"
+        >
+          Set up in Settings &rarr;
+        </Link>
       </div>
 
       {/* Save Button (bottom) */}

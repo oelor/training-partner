@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban } from 'lucide-react'
+import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api, { isPremiumPlan, IdentityVerification, BlockedUser } from '@/lib/api'
+import api, { isPremiumPlan, IdentityVerification, BlockedUser, IntegrationProvider } from '@/lib/api'
 import { useToast } from '@/components/toast'
 
 export default function SettingsPage() {
@@ -53,6 +53,11 @@ export default function SettingsPage() {
   const [blocksLoading, setBlocksLoading] = useState(true)
   const [unblockingId, setUnblockingId] = useState<number | null>(null)
 
+  // Integrations state
+  const [integrations, setIntegrations] = useState<IntegrationProvider[]>([])
+  const [integrationsLoading, setIntegrationsLoading] = useState(true)
+  const [togglingProvider, setTogglingProvider] = useState<string | null>(null)
+
   const loadIdentityStatus = useCallback(async () => {
     try {
       const res = await api.getIdentityStatus()
@@ -69,10 +74,19 @@ export default function SettingsPage() {
     finally { setBlocksLoading(false) }
   }, [])
 
+  const loadIntegrations = useCallback(async () => {
+    try {
+      const res = await api.getIntegrations()
+      setIntegrations(res.providers)
+    } catch { /* */ }
+    finally { setIntegrationsLoading(false) }
+  }, [])
+
   useEffect(() => {
     loadIdentityStatus()
     loadBlocks()
-  }, [loadIdentityStatus, loadBlocks])
+    loadIntegrations()
+  }, [loadIdentityStatus, loadBlocks, loadIntegrations])
 
   useEffect(() => {
     if (user) {
@@ -83,6 +97,21 @@ export default function SettingsPage() {
       })
     }
   }, [user])
+
+  const handleToggleNotify = async (providerId: string) => {
+    setTogglingProvider(providerId)
+    try {
+      const res = await api.toggleIntegrationNotify(providerId)
+      setIntegrations(prev => prev.map(p =>
+        p.id === providerId ? { ...p, on_waitlist: res.on_waitlist } : p
+      ))
+      toast.success(res.on_waitlist ? "You'll be notified when this integration launches!" : 'Notification removed')
+    } catch {
+      toast.error('Failed to update notification preference')
+    } finally {
+      setTogglingProvider(null)
+    }
+  }
 
   const handleFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -215,6 +244,7 @@ export default function SettingsPage() {
     { id: 'account', label: 'Account', icon: User },
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'subscription', label: 'Subscription', icon: Crown },
+    { id: 'integrations', label: 'Connected Apps', icon: Link2 },
     { id: 'identity', label: 'Verification', icon: Shield },
     { id: 'emergency', label: 'Emergency Contact', icon: Heart },
     { id: 'blocked', label: 'Blocked Users', icon: Ban },
@@ -480,6 +510,68 @@ export default function SettingsPage() {
                   >
                     {upgrading ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : 'Upgrade Now'}
                   </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'integrations' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">CONNECTED APPS</h2>
+              <p className="text-text-secondary text-sm">Connect your fitness trackers to sync training data automatically.</p>
+
+              {integrationsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {integrations.map(provider => {
+                    const colors: Record<string, string> = {
+                      whoop: '#EE5A24',
+                      withings: '#00B4D8',
+                      garmin: '#005DA6',
+                      fitbit: '#00B0B9',
+                    }
+                    const color = colors[provider.id] || '#888'
+                    return (
+                      <div key={provider.id} className="bg-background border border-border rounded-xl p-5 flex items-center gap-4">
+                        <div
+                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-heading text-lg shrink-0"
+                          style={{ backgroundColor: color }}
+                        >
+                          {provider.name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-white font-medium">{provider.name}</span>
+                            <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 font-medium">
+                              Coming Soon
+                            </span>
+                          </div>
+                          <p className="text-text-secondary text-sm">{provider.description}</p>
+                        </div>
+                        <button
+                          onClick={() => handleToggleNotify(provider.id)}
+                          disabled={togglingProvider === provider.id}
+                          className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            provider.on_waitlist
+                              ? 'bg-primary/10 text-primary border border-primary/30'
+                              : 'bg-background border border-border text-text-secondary hover:text-white hover:border-primary'
+                          }`}
+                        >
+                          {togglingProvider === provider.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : provider.on_waitlist ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            <BellRing className="w-4 h-4" />
+                          )}
+                          {provider.on_waitlist ? 'Notifying' : 'Notify Me'}
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
