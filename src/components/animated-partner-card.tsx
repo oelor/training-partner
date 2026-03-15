@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import { Star, MapPin, Zap } from 'lucide-react'
 import { Partner } from '@/lib/api'
+import VerificationBadge from '@/components/verification-badge'
 
 interface AnimatedPartnerCardProps {
   partner: Partner
@@ -56,12 +57,13 @@ export default function AnimatedPartnerCard({
         {/* Content Section */}
         <div className="p-4">
           <motion.h3
-            className="font-heading text-lg text-white mb-1 truncate"
+            className="font-heading text-lg text-white mb-1 truncate flex items-center gap-1.5"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: delay + 0.2 }}
           >
             {partner.name}
+            <VerificationBadge tier={partner.verification_tier || 'none'} sport={partner.verification_sport} title={partner.verification_title} size="sm" />
           </motion.h3>
 
           <motion.p

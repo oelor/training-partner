@@ -12,6 +12,7 @@ import api, { GymDetail, GymSession, GymMembership, GymPromotion, isPremiumPlan 
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 import { AdBanner } from '@/components/ad-banner'
+import ReportButton from '@/components/report-button'
 
 export default function GymDetailPage() {
   const params = useParams()
@@ -452,9 +453,15 @@ export default function GymDetailPage() {
                 {review.comment && (
                   <p className="text-text-secondary text-sm">{review.comment}</p>
                 )}
-                <span className="text-text-secondary text-xs mt-2 block">
-                  {new Date(review.created_at).toLocaleDateString()}
-                </span>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-text-secondary text-xs">
+                    {new Date(review.created_at).toLocaleDateString()}
+                  </span>
+                  <ReportButton
+                    contentType="gym_review"
+                    contentId={review.id}
+                  />
+                </div>
               </div>
             ))}
 

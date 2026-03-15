@@ -155,6 +155,18 @@ class ApiClient {
     return this.request<{ exported_at: string; user_id: number; data: Record<string, unknown> }>('/api/account/export')
   }
 
+  // Message Preferences
+  async getMessagePreferences() {
+    return this.request<{ ok: boolean; preferences: MessagePreferences }>('/api/account/message-preferences');
+  }
+
+  async updateMessagePreferences(prefs: Partial<MessagePreferences>) {
+    return this.request<{ ok: boolean; preferences: MessagePreferences }>('/api/account/message-preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(prefs),
+    });
+  }
+
   // Account Deletion
   async deleteAccount(confirmation: string) {
     return this.request<{ ok: boolean; message: string }>('/api/account/delete', {
@@ -163,12 +175,24 @@ class ApiClient {
     })
   }
 
-  // Report / Flag
+  // Report / Flag (legacy)
   async reportUser(userId: number, reason: string, details?: string) {
     return this.request<{ ok: boolean }>('/api/report', {
       method: 'POST',
       body: JSON.stringify({ user_id: userId, reason, details }),
     })
+  }
+
+  // Enhanced Reporting System
+  async submitReport(data: { reported_user_id?: number; content_type: string; content_id?: number; category: string; description: string; evidence_url?: string }) {
+    return this.request<{ ok: boolean; message: string }>('/api/reports', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getMyReports() {
+    return this.request<{ ok: boolean; reports: UserReport[] }>('/api/reports/mine')
   }
 
   // Avatar Upload
@@ -906,6 +930,9 @@ export interface User {
   instagram_username?: string;
   created_at?: string;
   is_verified?: boolean;
+  verification_tier?: string;
+  verification_sport?: string;
+  verification_title?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   emergency_contact_relation?: string;
@@ -940,12 +967,18 @@ export interface Partner {
   match: number;
   explanation: Record<string, unknown>;
   instagram_username?: string;
+  verification_tier?: string;
+  verification_sport?: string;
+  verification_title?: string;
 }
 
 export interface PartnerDetail extends Partner {
   availability: Array<{ day: string; time: string }>;
   created_at: string;
   is_verified?: boolean;
+  verification_tier?: string;
+  verification_sport?: string;
+  verification_title?: string;
 }
 
 export interface PartnerProfile {
@@ -962,6 +995,9 @@ export interface PartnerProfile {
   bio: string;
   availability: Array<{ day: string; time: string }>;
   created_at: string;
+  verification_tier?: string;
+  verification_sport?: string;
+  verification_title?: string;
 }
 
 export interface Gym {
@@ -1026,6 +1062,16 @@ export interface Conversation {
   last_message_at: string;
   is_mine: boolean;
   unread_count: number;
+  verification_tier?: string;
+  verification_sport?: string;
+  verification_title?: string;
+}
+
+export interface MessagePreferences {
+  verified_only: boolean;
+  min_tier: string;
+  max_distance_km: number;
+  sports_match: boolean;
 }
 
 export interface Message {
@@ -1119,15 +1165,32 @@ export interface AdminUser {
 export interface AdminReport {
   id: number;
   reporter_id: number;
-  reported_id: number;
+  reported_user_id: number;
   reporter_name: string;
   reporter_email: string;
   reported_name: string;
   reported_email: string;
-  reason: string;
-  details: string;
+  content_type: string;
+  category: string;
+  description: string;
+  evidence_url: string | null;
+  status: string;
+  admin_notes: string | null;
+  action_taken: string | null;
+  resolved_by: number | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface UserReport {
+  id: number;
+  content_type: string;
+  category: string;
+  description: string;
   status: string;
   created_at: string;
+  resolved_at: string | null;
+  reported_user_name: string | null;
 }
 
 export interface Comment {

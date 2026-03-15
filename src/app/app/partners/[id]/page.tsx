@@ -16,7 +16,7 @@ import { useToast } from '@/components/toast'
 import { ProfileSkeleton } from '@/components/skeleton'
 import ReportDialog from '@/components/report-dialog'
 import MatchCompatibilityChart from '@/components/match-compatibility-chart'
-import VerifiedBadge from '@/components/verified-badge'
+import VerificationBadge from '@/components/verification-badge'
 import TrustScoreComponent from '@/components/trust-score'
 
 export default function PartnerDetailPage() {
@@ -153,7 +153,7 @@ export default function PartnerDetailPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="font-heading text-3xl text-white">{partner.name}</h1>
-                  {partner.is_verified && <VerifiedBadge size="md" />}
+                  <VerificationBadge tier={partner.verification_tier || 'none'} sport={partner.verification_sport} title={partner.verification_title} size="md" />
                 </div>
                 <p className="text-text-secondary">
                   {partner.sport || partner.sports?.[0] || 'Combat Sports'}

@@ -6,6 +6,7 @@ import { MessageCircle, Send, ArrowLeft, Loader2, User } from 'lucide-react'
 import api, { Conversation, Message } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { Skeleton } from '@/components/skeleton'
+import VerificationBadge from '@/components/verification-badge'
 
 function MessagesContent() {
   const searchParams = useSearchParams()
@@ -139,7 +140,7 @@ function MessagesContent() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className="text-white font-medium text-sm truncate">{convo.name}</span>
+                      <span className="text-white font-medium text-sm truncate flex items-center gap-1">{convo.name} <VerificationBadge tier={convo.verification_tier || 'none'} sport={convo.verification_sport} title={convo.verification_title} size="sm" /></span>
                       {convo.unread_count > 0 && (
                         <span className="bg-primary text-white text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0">
                           {convo.unread_count}
@@ -171,7 +172,7 @@ function MessagesContent() {
                 <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold text-sm">
                   {activeConvo?.name?.charAt(0)?.toUpperCase() || '?'}
                 </div>
-                <span className="text-white font-medium">{activeConvo?.name || 'User'}</span>
+                <span className="text-white font-medium flex items-center gap-1.5">{activeConvo?.name || 'User'} <VerificationBadge tier={activeConvo?.verification_tier || 'none'} sport={activeConvo?.verification_sport} title={activeConvo?.verification_title} size="sm" /></span>
               </div>
 
               {/* Messages */}

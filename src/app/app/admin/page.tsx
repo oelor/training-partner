@@ -275,17 +275,18 @@ export default function AdminPage() {
               <div key={report.id} className="bg-surface border border-border rounded-xl p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <div className="text-white font-medium">{report.reason}</div>
+                    <div className="text-white font-medium capitalize">{report.category.replace(/_/g, ' ')}</div>
                     <div className="text-text-secondary text-xs mt-1">
                       {report.reporter_name} reported {report.reported_name}
+                      <span className="ml-1 text-text-secondary/60">({report.content_type.replace(/_/g, ' ')})</span>
                     </div>
                   </div>
                   <span className="text-xs text-text-secondary">
                     {new Date(report.created_at).toLocaleDateString()}
                   </span>
                 </div>
-                {report.details && (
-                  <p className="text-text-secondary text-sm mb-4">{report.details}</p>
+                {report.description && (
+                  <p className="text-text-secondary text-sm mb-4">{report.description}</p>
                 )}
                 <div className="flex gap-2">
                   <button

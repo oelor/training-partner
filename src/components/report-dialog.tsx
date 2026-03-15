@@ -5,36 +5,54 @@ import { X, AlertTriangle, Loader2 } from 'lucide-react'
 import api from '@/lib/api'
 import { useToast } from './toast'
 
-const REASONS = [
-  'Inappropriate behavior',
-  'Fake profile',
-  'Harassment or threats',
-  'Spam',
-  'Unsafe training practices',
-  'Other',
+const CATEGORIES = [
+  { value: 'harassment', label: 'Harassment or threats' },
+  { value: 'fake_profile', label: 'Fake profile' },
+  { value: 'impersonation', label: 'Impersonation' },
+  { value: 'spam', label: 'Spam' },
+  { value: 'inappropriate_content', label: 'Inappropriate content' },
+  { value: 'underage', label: 'Underage user' },
+  { value: 'other', label: 'Other' },
 ]
 
 interface ReportDialogProps {
   userId: number
   userName: string
   onClose: () => void
+  contentType?: string
+  contentId?: number
 }
 
-export default function ReportDialog({ userId, userName, onClose }: ReportDialogProps) {
+export default function ReportDialog({ userId, userName, onClose, contentType = 'profile', contentId }: ReportDialogProps) {
   const toast = useToast()
-  const [reason, setReason] = useState('')
-  const [details, setDetails] = useState('')
+  const [category, setCategory] = useState('')
+  const [description, setDescription] = useState('')
+  const [evidenceUrl, setEvidenceUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = async () => {
-    if (!reason) return
+    if (!category) return
+    if (description.length < 10) {
+      setError('Please provide at least 10 characters of detail')
+      return
+    }
     setSubmitting(true)
+    setError('')
     try {
-      await api.reportUser(userId, reason, details || undefined)
-      toast.success('Report submitted. We will review it promptly.')
+      const res = await api.submitReport({
+        reported_user_id: userId,
+        content_type: contentType,
+        content_id: contentId,
+        category,
+        description,
+        evidence_url: evidenceUrl || undefined,
+      })
+      toast.success(res.message || 'Report submitted. We will review it promptly.')
       onClose()
-    } catch {
-      toast.error('Failed to submit report. Please try again.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit report. Please try again.'
+      setError(message)
     } finally {
       setSubmitting(false)
     }
@@ -58,35 +76,55 @@ export default function ReportDialog({ userId, userName, onClose }: ReportDialog
           </div>
         </div>
 
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-3 py-2 rounded-lg text-sm mb-4">
+            {error}
+          </div>
+        )}
+
         <div className="space-y-4">
           <div>
             <label className="block text-text-secondary text-sm mb-2">Reason *</label>
             <div className="space-y-2">
-              {REASONS.map((r) => (
+              {CATEGORIES.map((cat) => (
                 <button
-                  key={r}
-                  onClick={() => setReason(r)}
+                  key={cat.value}
+                  onClick={() => setCategory(cat.value)}
                   className={`w-full text-left px-4 py-2.5 rounded-lg border transition-colors ${
-                    reason === r
+                    category === cat.value
                       ? 'border-red-500 bg-red-500/10 text-white'
                       : 'border-border text-text-secondary hover:border-red-500/50'
                   }`}
                 >
-                  {r}
+                  {cat.label}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <label htmlFor="report-details" className="block text-text-secondary text-sm mb-2">Additional details (optional)</label>
+            <label htmlFor="report-details" className="block text-text-secondary text-sm mb-2">
+              Details * <span className="text-text-secondary/60">({description.length}/500, min 10)</span>
+            </label>
             <textarea
               id="report-details"
-              value={details}
-              onChange={(e) => setDetails(e.target.value)}
-              placeholder="Provide any additional context..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value.slice(0, 500))}
+              placeholder="Please describe the issue in detail..."
               rows={3}
               className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors resize-none"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="report-evidence-url" className="block text-text-secondary text-sm mb-2">Evidence URL (optional)</label>
+            <input
+              id="report-evidence-url"
+              type="url"
+              value={evidenceUrl}
+              onChange={(e) => setEvidenceUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full bg-background border border-border rounded-lg py-3 px-4 text-white placeholder-text-secondary focus:border-primary transition-colors"
             />
           </div>
 
@@ -99,7 +137,7 @@ export default function ReportDialog({ userId, userName, onClose }: ReportDialog
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!reason || submitting}
+              disabled={!category || description.length < 10 || submitting}
               className="flex-1 py-3 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

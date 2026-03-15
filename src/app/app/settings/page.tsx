@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing, Download } from 'lucide-react'
+import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing, Download, Flag, MessageCircle } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import api, { isPremiumPlan, IdentityVerification, BlockedUser, IntegrationProvider } from '@/lib/api'
+import api, { isPremiumPlan, IdentityVerification, BlockedUser, IntegrationProvider, UserReport, MessagePreferences } from '@/lib/api'
 import { useToast } from '@/components/toast'
 
 export default function SettingsPage() {
@@ -62,6 +62,15 @@ export default function SettingsPage() {
   const [integrationsLoading, setIntegrationsLoading] = useState(true)
   const [togglingProvider, setTogglingProvider] = useState<string | null>(null)
 
+  // My Reports state
+  const [myReports, setMyReports] = useState<UserReport[]>([])
+  const [reportsLoading, setReportsLoading] = useState(true)
+
+  // Message Preferences state
+  const [msgPrefs, setMsgPrefs] = useState<MessagePreferences>({ verified_only: false, min_tier: 'none', max_distance_km: 0, sports_match: false })
+  const [msgPrefsLoading, setMsgPrefsLoading] = useState(true)
+  const [msgPrefsSaving, setMsgPrefsSaving] = useState(false)
+
   const loadIdentityStatus = useCallback(async () => {
     try {
       const res = await api.getIdentityStatus()
@@ -86,11 +95,29 @@ export default function SettingsPage() {
     finally { setIntegrationsLoading(false) }
   }, [])
 
+  const loadMyReports = useCallback(async () => {
+    try {
+      const res = await api.getMyReports()
+      setMyReports(res.reports)
+    } catch { /* */ }
+    finally { setReportsLoading(false) }
+  }, [])
+
+  const loadMessagePreferences = useCallback(async () => {
+    try {
+      const res = await api.getMessagePreferences()
+      setMsgPrefs(res.preferences)
+    } catch { /* */ }
+    finally { setMsgPrefsLoading(false) }
+  }, [])
+
   useEffect(() => {
     loadIdentityStatus()
     loadBlocks()
     loadIntegrations()
-  }, [loadIdentityStatus, loadBlocks, loadIntegrations])
+    loadMyReports()
+    loadMessagePreferences()
+  }, [loadIdentityStatus, loadBlocks, loadIntegrations, loadMyReports, loadMessagePreferences])
 
   useEffect(() => {
     if (user) {
@@ -263,6 +290,19 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSaveMessagePreferences = async () => {
+    setMsgPrefsSaving(true)
+    try {
+      const res = await api.updateMessagePreferences(msgPrefs)
+      setMsgPrefs(res.preferences)
+      toast.success('Message preferences saved')
+    } catch {
+      toast.error('Failed to save message preferences')
+    } finally {
+      setMsgPrefsSaving(false)
+    }
+  }
+
   const handleLogout = () => {
     logout()
     router.push('/')
@@ -275,7 +315,9 @@ export default function SettingsPage() {
     { id: 'integrations', label: 'Connected Apps', icon: Link2 },
     { id: 'identity', label: 'Verification', icon: Shield },
     { id: 'emergency', label: 'Emergency Contact', icon: Heart },
+    { id: 'messages', label: 'Messages', icon: MessageCircle },
     { id: 'blocked', label: 'Blocked Users', icon: Ban },
+    { id: 'reports', label: 'My Reports', icon: Flag },
     { id: 'privacy', label: 'Privacy', icon: Shield },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'help', label: 'Help', icon: HelpCircle },
@@ -842,6 +884,101 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {activeTab === 'messages' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">MESSAGE PREFERENCES</h2>
+              <p className="text-text-secondary text-sm mb-4">Control who can send you messages</p>
+
+              {msgPrefsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Verified Only Toggle */}
+                  <div className="flex items-center justify-between py-4 border-b border-border">
+                    <div>
+                      <div className="text-white font-medium">Only verified users</div>
+                      <div className="text-text-secondary text-sm">Only receive messages from verified users</div>
+                    </div>
+                    <button
+                      onClick={() => setMsgPrefs(p => ({ ...p, verified_only: !p.verified_only }))}
+                      className={`w-12 h-6 rounded-full transition-colors ${msgPrefs.verified_only ? 'bg-accent' : 'bg-border'}`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full transition-transform ${msgPrefs.verified_only ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {/* Minimum Tier Dropdown */}
+                  <div className="flex items-center justify-between py-4 border-b border-border">
+                    <div>
+                      <div className="text-white font-medium">Minimum verification tier</div>
+                      <div className="text-text-secondary text-sm">Set a minimum tier for who can message you</div>
+                    </div>
+                    <label htmlFor="minTier" className="sr-only">Minimum verification tier</label>
+                    <select
+                      id="minTier"
+                      value={msgPrefs.min_tier}
+                      onChange={(e) => setMsgPrefs(p => ({ ...p, min_tier: e.target.value }))}
+                      className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm"
+                    >
+                      <option value="none">None</option>
+                      <option value="verified">Verified</option>
+                      <option value="pro">Pro</option>
+                      <option value="champion">Champion</option>
+                    </select>
+                  </div>
+
+                  {/* Max Distance */}
+                  <div className="flex items-center justify-between py-4 border-b border-border">
+                    <div>
+                      <div className="text-white font-medium">Maximum distance</div>
+                      <div className="text-text-secondary text-sm">Only allow messages from nearby users (0 = no limit)</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="maxDistance" className="sr-only">Maximum distance in km</label>
+                      <input
+                        id="maxDistance"
+                        type="number"
+                        min="0"
+                        value={msgPrefs.max_distance_km}
+                        onChange={(e) => setMsgPrefs(p => ({ ...p, max_distance_km: Math.max(0, parseInt(e.target.value) || 0) }))}
+                        className="bg-background border border-border rounded-lg py-2 px-3 text-white text-sm w-24 text-right"
+                      />
+                      <span className="text-text-secondary text-sm">km</span>
+                    </div>
+                  </div>
+
+                  {/* Sports Match Toggle */}
+                  <div className="flex items-center justify-between py-4 border-b border-border">
+                    <div>
+                      <div className="text-white font-medium">Sports match required</div>
+                      <div className="text-text-secondary text-sm">Only receive messages from users who share your sports</div>
+                    </div>
+                    <button
+                      onClick={() => setMsgPrefs(p => ({ ...p, sports_match: !p.sports_match }))}
+                      className={`w-12 h-6 rounded-full transition-colors ${msgPrefs.sports_match ? 'bg-accent' : 'bg-border'}`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full transition-transform ${msgPrefs.sports_match ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="pt-4">
+                    <button
+                      onClick={handleSaveMessagePreferences}
+                      disabled={msgPrefsSaving}
+                      className="bg-accent hover:bg-accent/90 text-white px-6 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {msgPrefsSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      Save Preferences
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'blocked' && (
             <div className="space-y-6">
               <h2 className="font-heading text-xl text-white mb-6">BLOCKED USERS</h2>
@@ -878,6 +1015,68 @@ export default function SettingsPage() {
                         {unblockingId === blocked.user_id && <Loader2 className="w-3 h-3 animate-spin" />}
                         Unblock
                       </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <div className="space-y-6">
+              <h2 className="font-heading text-xl text-white mb-6">MY REPORTS</h2>
+              <p className="text-text-secondary text-sm">
+                Track the status of reports you&apos;ve submitted. Our team reviews all reports within 48 hours.
+              </p>
+              {reportsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : myReports.length === 0 ? (
+                <div className="text-center py-12 bg-background border border-border rounded-xl">
+                  <Flag className="w-12 h-12 text-text-secondary mx-auto mb-4" />
+                  <div className="text-white font-medium mb-1">No Reports</div>
+                  <div className="text-text-secondary text-sm">You haven&apos;t submitted any reports</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myReports.map((report) => (
+                    <div key={report.id} className="bg-background border border-border rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-white text-sm font-medium capitalize">
+                              {report.category.replace(/_/g, ' ')}
+                            </span>
+                            <span className="text-text-secondary text-xs">
+                              ({report.content_type.replace(/_/g, ' ')})
+                            </span>
+                          </div>
+                          {report.reported_user_name && (
+                            <div className="text-text-secondary text-xs mb-1">
+                              Reported: {report.reported_user_name}
+                            </div>
+                          )}
+                          <p className="text-text-secondary text-sm line-clamp-2">{report.description}</p>
+                          <div className="text-text-secondary text-xs mt-2">
+                            {new Date(report.created_at).toLocaleDateString()}
+                            {report.resolved_at && (
+                              <span> &mdash; Resolved {new Date(report.resolved_at).toLocaleDateString()}</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`flex-shrink-0 text-xs px-2.5 py-1 rounded-full font-medium ${
+                          report.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                          report.status === 'reviewing' ? 'bg-blue-500/20 text-blue-400' :
+                          report.status === 'actioned' ? 'bg-green-500/20 text-green-400' :
+                          'bg-zinc-500/20 text-zinc-400'
+                        }`}>
+                          {report.status === 'pending' ? 'Pending' :
+                           report.status === 'reviewing' ? 'Reviewing' :
+                           report.status === 'actioned' ? 'Actioned' :
+                           'Dismissed'}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>

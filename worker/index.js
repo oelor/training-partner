@@ -918,6 +918,9 @@ async function handleGetMe(request, env) {
       google_id: user.google_id || null,
       instagram_username: user.instagram_username || null,
       verified: user.verified || 0,
+      verification_tier: user.verification_tier || 'none',
+      verification_sport: user.verification_sport || null,
+      verification_title: user.verification_title || null,
       date_of_birth: user.date_of_birth || null,
       emergency_contact_name: user.emergency_contact_name || null,
       emergency_contact_phone: user.emergency_contact_phone || null,
@@ -1040,6 +1043,7 @@ async function handleUpdateProfile(request, env) {
 async function handleGetProfile(request, env, userId) {
   const profile = await env.DB.prepare(`
     SELECT u.id, u.display_name, u.city, u.avatar_url, u.role, u.created_at,
+           u.verification_tier, u.verification_sport, u.verification_title,
            p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.availability, p.age, p.location
     FROM users u
     LEFT JOIN user_profiles p ON u.id = p.user_id
@@ -1056,6 +1060,9 @@ async function handleGetProfile(request, env, userId) {
       city: profile.city || profile.location,
       avatar_url: profile.avatar_url,
       role: profile.role,
+      verification_tier: profile.verification_tier || 'none',
+      verification_sport: profile.verification_sport || null,
+      verification_title: profile.verification_title || null,
       sports: JSON.parse(profile.sports || '[]'),
       skill_level: profile.skill_level,
       weight_class: profile.weight_class,
@@ -1208,6 +1215,7 @@ async function handleGetPartners(request, env) {
   let query = `
     SELECT m.score, m.explanation, m.status,
            u.id, u.display_name, u.city, u.avatar_url,
+           u.verification_tier, u.verification_sport, u.verification_title, u.verified,
            p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.location
     FROM matches m
     JOIN users u ON (CASE WHEN m.user_a = ? THEN m.user_b ELSE m.user_a END) = u.id
@@ -1234,6 +1242,9 @@ async function handleGetPartners(request, env) {
     name: r.display_name,
     city: r.city || r.location,
     avatar_url: r.avatar_url,
+    verification_tier: r.verification_tier || 'none',
+    verification_sport: r.verification_sport || null,
+    verification_title: r.verification_title || null,
     sport: (() => {
       const sports = JSON.parse(r.sports || '[]');
       return sports[0] || '';
@@ -1274,6 +1285,7 @@ async function handleGetPartnerDetail(request, env, partnerId) {
 
   const partner = await env.DB.prepare(`
     SELECT u.id, u.display_name, u.city, u.avatar_url, u.instagram_username, u.created_at,
+           u.verification_tier, u.verification_sport, u.verification_title, u.verified,
            p.sports, p.skill_level, p.weight_class, p.training_goals, p.experience_years, p.bio, p.availability, p.location
     FROM users u
     LEFT JOIN user_profiles p ON u.id = p.user_id
@@ -1294,6 +1306,10 @@ async function handleGetPartnerDetail(request, env, partnerId) {
       name: partner.display_name,
       city: partner.city || partner.location,
       avatar_url: partner.avatar_url,
+      is_verified: (partner.verified === 1) || (partner.verification_tier && partner.verification_tier !== 'none'),
+      verification_tier: partner.verification_tier || 'none',
+      verification_sport: partner.verification_sport || null,
+      verification_title: partner.verification_title || null,
       sports: JSON.parse(partner.sports || '[]'),
       skill: partner.skill_level,
       weight: partner.weight_class,
@@ -1530,6 +1546,9 @@ async function handleGetConversations(request, env) {
       CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END as other_id,
       u.display_name as other_name,
       u.avatar_url as other_avatar,
+      u.verification_tier as other_verification_tier,
+      u.verification_sport as other_verification_sport,
+      u.verification_title as other_verification_title,
       m.content as last_message,
       m.created_at as last_message_at,
       m.sender_id as last_sender_id,
@@ -1552,6 +1571,9 @@ async function handleGetConversations(request, env) {
       user_id: c.other_id,
       name: c.other_name,
       avatar_url: c.other_avatar,
+      verification_tier: c.other_verification_tier || 'none',
+      verification_sport: c.other_verification_sport || null,
+      verification_title: c.other_verification_title || null,
       last_message: c.last_message,
       last_message_at: c.last_message_at,
       is_mine: c.last_sender_id === user.id,
@@ -1603,6 +1625,12 @@ async function handleGetMessages(request, env, otherUserId) {
   }, {}, request, env);
 }
 
+// Verification tier ordering for comparisons
+const TIER_ORDER = { 'none': 0, 'verified': 1, 'pro': 2, 'champion': 3 };
+function tierMeetsMinimum(senderTier, minTier) {
+  return (TIER_ORDER[senderTier] || 0) >= (TIER_ORDER[minTier] || 0);
+}
+
 async function handleSendMessage(request, env, receiverId) {
   const user = await getUser(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
@@ -1635,9 +1663,49 @@ async function handleSendMessage(request, env, receiverId) {
     return corsJson({ ok: false, error: 'You are sending messages too quickly. Please wait.' }, { status: 429 }, request, env);
   }
 
-  // Check receiver exists
-  const receiver = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(receiverId).first();
+  // Check receiver exists and get their message filter preferences
+  const receiver = await env.DB.prepare(
+    'SELECT id, verification_tier, msg_filter_verified_only, msg_filter_min_tier, msg_filter_max_distance_km, msg_filter_sports_match, city FROM users WHERE id = ?'
+  ).bind(receiverId).first();
   if (!receiver) return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
+
+  // Apply recipient's message filter preferences
+  const senderTier = user.verification_tier || 'none';
+
+  // Check verified-only filter
+  if (receiver.msg_filter_verified_only && senderTier === 'none') {
+    return corsJson({ ok: false, error: 'This user only accepts messages from verified users' }, { status: 403 }, request, env);
+  }
+
+  // Check minimum tier filter
+  if (receiver.msg_filter_min_tier && receiver.msg_filter_min_tier !== 'none') {
+    if (!tierMeetsMinimum(senderTier, receiver.msg_filter_min_tier)) {
+      return corsJson({ ok: false, error: 'This user only accepts messages from users with a higher verification tier' }, { status: 403 }, request, env);
+    }
+  }
+
+  // Check city match as distance proxy (if max_distance_km > 0)
+  if (receiver.msg_filter_max_distance_km > 0) {
+    const senderCity = (user.city || '').toLowerCase().trim();
+    const receiverCity = (receiver.city || '').toLowerCase().trim();
+    if (senderCity && receiverCity && senderCity !== receiverCity) {
+      return corsJson({ ok: false, error: 'This user only accepts messages from nearby users' }, { status: 403 }, request, env);
+    }
+  }
+
+  // Check sports match filter
+  if (receiver.msg_filter_sports_match) {
+    const [senderProfile, receiverProfile] = await Promise.all([
+      env.DB.prepare('SELECT sports FROM user_profiles WHERE user_id = ?').bind(user.id).first(),
+      env.DB.prepare('SELECT sports FROM user_profiles WHERE user_id = ?').bind(receiverId).first(),
+    ]);
+    const senderSports = JSON.parse(senderProfile?.sports || '[]');
+    const receiverSports = JSON.parse(receiverProfile?.sports || '[]');
+    const hasCommon = senderSports.some(s => receiverSports.includes(s));
+    if (senderSports.length > 0 && receiverSports.length > 0 && !hasCommon) {
+      return corsJson({ ok: false, error: 'This user only accepts messages from users who share their sports' }, { status: 403 }, request, env);
+    }
+  }
 
   const now = isoNow();
   const content = sanitize(body.content).slice(0, 2000);
@@ -2093,7 +2161,7 @@ async function handleResendVerification(request, env) {
   return corsJson({ ok: true }, {}, request, env);
 }
 
-// ─── Report User Route ──────────────────────────────────────────────────────
+// ─── Report User Route (Legacy — redirects to enhanced system) ───────────────
 
 async function handleReportUser(request, env) {
   const user = await getUser(request, env);
@@ -2104,36 +2172,232 @@ async function handleReportUser(request, env) {
     return corsJson({ ok: false, error: 'User ID is required' }, { status: 400 }, request, env);
   }
 
-  const reportedId = parseInt(body.user_id);
-  if (reportedId === user.id) {
-    return corsJson({ ok: false, error: 'Cannot report yourself' }, { status: 400 }, request, env);
-  }
+  // Map legacy reason to new category
+  const reasonToCategory = {
+    'Inappropriate behavior': 'inappropriate_content',
+    'Fake profile': 'fake_profile',
+    'Harassment or threats': 'harassment',
+    'Spam': 'spam',
+    'Unsafe training practices': 'other',
+    'Other': 'other',
+    'harassment': 'harassment',
+    'inappropriate_content': 'inappropriate_content',
+    'fake_identity': 'fake_profile',
+    'underage': 'underage',
+    'threatening_behavior': 'harassment',
+    'spam': 'spam',
+    'other': 'other',
+  };
 
-  // Rate limit: 5 reports per user per day
-  const allowed = await checkRateLimit(env, `report:${user.id}`, 5, 86400);
+  // Forward to enhanced report handler
+  const enhancedBody = {
+    reported_user_id: parseInt(body.user_id),
+    content_type: 'profile',
+    category: reasonToCategory[body.reason] || 'other',
+    description: sanitize(body.details || body.reason || 'No details provided').slice(0, 500),
+  };
+
+  // Temporarily replace request body for the enhanced handler
+  const syntheticRequest = new Request(request.url, {
+    method: 'POST',
+    headers: request.headers,
+    body: JSON.stringify(enhancedBody),
+  });
+
+  return handleSubmitReport(syntheticRequest, env);
+}
+
+// ─── Enhanced Reporting System ───────────────────────────────────────────────
+
+const REPORT_CATEGORIES = ['impersonation', 'harassment', 'spam', 'fake_profile', 'inappropriate_content', 'underage', 'other'];
+const REPORT_CONTENT_TYPES = ['profile', 'message', 'event', 'review', 'gym_review'];
+const REPORT_ACTIONS = ['warning', 'content_removed', 'restricted', 'banned'];
+
+// POST /api/reports — Submit a report
+async function handleSubmitReport(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Rate limit: 3 reports per user per 24 hours
+  const allowed = await checkRateLimit(env, `report:${user.id}`, 3, 86400);
   if (!allowed) {
-    return corsJson({ ok: false, error: 'Too many reports. Try again later.' }, { status: 429 }, request, env);
+    return corsJson({ ok: false, error: 'You have reached the report limit. Please try again later.' }, { status: 429 }, request, env);
   }
 
-  // Check reported user exists
-  const reported = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(reportedId).first();
-  if (!reported) {
-    return corsJson({ ok: false, error: 'User not found' }, { status: 404 }, request, env);
+  // Account age check: must be at least 24 hours old
+  const reporter = await env.DB.prepare('SELECT created_at FROM users WHERE id = ?').bind(user.id).first();
+  if (reporter) {
+    const accountAge = Date.now() - new Date(reporter.created_at).getTime();
+    if (accountAge < 24 * 60 * 60 * 1000) {
+      return corsJson({ ok: false, error: 'Your account must be at least 24 hours old to submit reports.' }, { status: 403 }, request, env);
+    }
   }
 
-  const validReasons = ['harassment', 'inappropriate_content', 'fake_identity', 'underage', 'threatening_behavior', 'spam', 'other'];
-  const reason = validReasons.includes(body.reason) ? body.reason : 'other';
-  const details = sanitize(body.details || '').slice(0, 2000);
+  const body = await readJson(request);
+  if (!body) {
+    return corsJson({ ok: false, error: 'Invalid request body' }, { status: 400 }, request, env);
+  }
+
+  const { reported_user_id, content_type, content_id, category, description, evidence_url } = body;
+
+  // Validate category
+  if (!category || !REPORT_CATEGORIES.includes(category)) {
+    return corsJson({ ok: false, error: 'Invalid report category' }, { status: 400 }, request, env);
+  }
+
+  // Validate content_type
+  if (!content_type || !REPORT_CONTENT_TYPES.includes(content_type)) {
+    return corsJson({ ok: false, error: 'Invalid content type' }, { status: 400 }, request, env);
+  }
+
+  // Validate description
+  const cleanDescription = sanitize(description || '').slice(0, 500);
+  if (!cleanDescription || cleanDescription.length < 10) {
+    return corsJson({ ok: false, error: 'Description must be between 10 and 500 characters' }, { status: 400 }, request, env);
+  }
+
+  // Cannot report yourself
+  if (reported_user_id && parseInt(reported_user_id) === user.id) {
+    return corsJson({ ok: false, error: 'You cannot report yourself' }, { status: 400 }, request, env);
+  }
+
+  // Check reported user exists (if provided)
+  let reportedUserId = null;
+  if (reported_user_id) {
+    reportedUserId = parseInt(reported_user_id);
+    const reported = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(reportedUserId).first();
+    if (!reported) {
+      return corsJson({ ok: false, error: 'Reported user not found' }, { status: 404 }, request, env);
+    }
+  }
+
+  // Check for duplicate report (same reporter + reported_user + content_type + content_id with non-dismissed status)
+  const contentIdVal = content_id ? parseInt(content_id) : null;
+  const duplicate = await env.DB.prepare(
+    `SELECT id FROM reports WHERE reporter_id = ? AND reported_user_id ${reportedUserId ? '= ?' : 'IS NULL'} AND content_type = ? AND content_id ${contentIdVal ? '= ?' : 'IS NULL'} AND status != 'dismissed'`
+  ).bind(...[user.id, ...(reportedUserId ? [reportedUserId] : []), content_type, ...(contentIdVal ? [contentIdVal] : [])]).first();
+
+  if (duplicate) {
+    return corsJson({ ok: false, error: 'You have already submitted a report for this content' }, { status: 409 }, request, env);
+  }
+
+  // Clean evidence URL
+  const cleanEvidenceUrl = evidence_url ? sanitize(evidence_url).slice(0, 500) : null;
+
   const now = isoNow();
 
   await env.DB.prepare(
-    'INSERT INTO reports (reporter_id, reported_id, reason, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).bind(user.id, reportedId, reason, details, 'pending', now).run();
+    'INSERT INTO reports (reporter_id, reported_user_id, content_type, content_id, category, description, evidence_url, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(user.id, reportedUserId, content_type, contentIdVal, category, cleanDescription, cleanEvidenceUrl, 'pending', now).run();
 
-  // Create a notification for admin review (user_id=1 assumed admin for now)
+  // Create a notification for admin review (user_id=1 assumed admin)
   await env.DB.prepare(
     'INSERT INTO notifications (user_id, type, title, body, data, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
-  ).bind(1, 'report', 'New User Report', `${user.display_name} reported user #${reportedId}: ${reason}`, JSON.stringify({ reporter_id: user.id, reported_id: reportedId }), now).run();
+  ).bind(1, 'report', 'New Report', `${user.display_name} reported ${content_type}${reportedUserId ? ' (user #' + reportedUserId + ')' : ''}: ${category}`, JSON.stringify({ reporter_id: user.id, reported_user_id: reportedUserId, content_type, category }), now).run();
+
+  return corsJson({ ok: true, message: 'Report submitted. Our team will review it within 48 hours.' }, {}, request, env);
+}
+
+// GET /api/reports/mine — User's own submitted reports
+async function handleGetMyReports(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const reports = await env.DB.prepare(`
+    SELECT r.id, r.content_type, r.category, r.description, r.status, r.created_at, r.resolved_at,
+      u.display_name as reported_user_name
+    FROM reports r
+    LEFT JOIN users u ON r.reported_user_id = u.id
+    WHERE r.reporter_id = ?
+    ORDER BY r.created_at DESC
+    LIMIT 20
+  `).bind(user.id).all();
+
+  return corsJson({ ok: true, reports: reports.results || [] }, {}, request, env);
+}
+
+// GET /api/admin/reports/enhanced — Admin view of all reports (enhanced)
+async function handleAdminReportsEnhanced(request, env) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const url = new URL(request.url);
+  const status = url.searchParams.get('status') || null;
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const perPage = 20;
+  const offset = (page - 1) * perPage;
+
+  let whereClause = '';
+  const bindings = [];
+  if (status) {
+    whereClause = 'WHERE r.status = ?';
+    bindings.push(status);
+  }
+
+  const countResult = await env.DB.prepare(
+    `SELECT COUNT(*) as total FROM reports r ${whereClause}`
+  ).bind(...bindings).first();
+
+  const pendingCount = await env.DB.prepare(
+    "SELECT COUNT(*) as cnt FROM reports WHERE status = 'pending'"
+  ).first();
+
+  const reports = await env.DB.prepare(`
+    SELECT r.*,
+      reporter.display_name as reporter_name, reporter.email as reporter_email,
+      reported.display_name as reported_name, reported.email as reported_email
+    FROM reports r
+    LEFT JOIN users reporter ON r.reporter_id = reporter.id
+    LEFT JOIN users reported ON r.reported_user_id = reported.id
+    ${whereClause}
+    ORDER BY r.created_at DESC
+    LIMIT ? OFFSET ?
+  `).bind(...bindings, perPage, offset).all();
+
+  return corsJson({
+    ok: true,
+    reports: reports.results || [],
+    total: countResult?.total || 0,
+    pending_count: pendingCount?.cnt || 0,
+    page,
+    per_page: perPage,
+  }, {}, request, env);
+}
+
+// PATCH /api/admin/reports/:id — Admin resolve a report
+async function handleAdminResolveReportEnhanced(request, env, reportId) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const body = await readJson(request);
+  if (!body || !body.status) {
+    return corsJson({ ok: false, error: 'Status is required' }, { status: 400 }, request, env);
+  }
+
+  const validStatuses = ['reviewing', 'actioned', 'dismissed'];
+  if (!validStatuses.includes(body.status)) {
+    return corsJson({ ok: false, error: 'Invalid status' }, { status: 400 }, request, env);
+  }
+
+  const report = await env.DB.prepare('SELECT * FROM reports WHERE id = ?').bind(reportId).first();
+  if (!report) {
+    return corsJson({ ok: false, error: 'Report not found' }, { status: 404 }, request, env);
+  }
+
+  const adminNotes = body.admin_notes ? sanitize(body.admin_notes).slice(0, 1000) : null;
+  const actionTaken = body.action_taken && REPORT_ACTIONS.includes(body.action_taken) ? body.action_taken : null;
+  const now = isoNow();
+
+  await env.DB.prepare(
+    'UPDATE reports SET status = ?, admin_notes = ?, action_taken = ?, resolved_by = ?, resolved_at = ? WHERE id = ?'
+  ).bind(body.status, adminNotes, actionTaken, user.id, now, reportId).run();
+
+  // If action is 'banned', set the reported user's role to 'banned'
+  if (actionTaken === 'banned' && report.reported_user_id) {
+    await env.DB.prepare(
+      "UPDATE users SET role = 'banned' WHERE id = ?"
+    ).bind(report.reported_user_id).run();
+  }
 
   return corsJson({ ok: true }, {}, request, env);
 }
@@ -2853,6 +3117,78 @@ async function handleAdminReviewIdentity(request, env, verificationId) {
   return corsJson({ ok: true }, {}, request, env);
 }
 
+// ─── Message Preferences Routes ──────────────────────────────────────────────
+
+async function handleGetMessagePreferences(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  return corsJson({
+    ok: true,
+    preferences: {
+      verified_only: user.msg_filter_verified_only === 1,
+      min_tier: user.msg_filter_min_tier || 'none',
+      max_distance_km: user.msg_filter_max_distance_km || 0,
+      sports_match: user.msg_filter_sports_match === 1,
+    }
+  }, {}, request, env);
+}
+
+async function handleUpdateMessagePreferences(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const validTiers = ['none', 'verified', 'pro', 'champion'];
+  const minTier = validTiers.includes(body.min_tier) ? body.min_tier : 'none';
+  const verifiedOnly = body.verified_only ? 1 : 0;
+  const maxDistanceKm = Math.max(0, parseInt(body.max_distance_km) || 0);
+  const sportsMatch = body.sports_match ? 1 : 0;
+
+  await env.DB.prepare(
+    'UPDATE users SET msg_filter_verified_only = ?, msg_filter_min_tier = ?, msg_filter_max_distance_km = ?, msg_filter_sports_match = ?, updated_at = ? WHERE id = ?'
+  ).bind(verifiedOnly, minTier, maxDistanceKm, sportsMatch, isoNow(), user.id).run();
+
+  return corsJson({
+    ok: true,
+    preferences: {
+      verified_only: verifiedOnly === 1,
+      min_tier: minTier,
+      max_distance_km: maxDistanceKm,
+      sports_match: sportsMatch === 1,
+    }
+  }, {}, request, env);
+}
+
+// ─── Admin Verification Tier Route ───────────────────────────────────────────
+
+async function handleAdminVerifyUser(request, env, userId) {
+  const { user, error } = await requireAdmin(request, env);
+  if (error) return error;
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const validTiers = ['none', 'verified', 'pro', 'champion'];
+  const tier = body.tier;
+  if (!validTiers.includes(tier)) {
+    return corsJson({ ok: false, error: 'Invalid tier. Must be one of: none, verified, pro, champion' }, { status: 400 }, request, env);
+  }
+
+  const sport = sanitize(body.sport || '').slice(0, 100);
+  const title = sanitize(body.title || '').slice(0, 200);
+  const verified = tier !== 'none' ? 1 : 0;
+  const now = isoNow();
+
+  await env.DB.prepare(
+    'UPDATE users SET verification_tier = ?, verification_sport = ?, verification_title = ?, verified = ?, updated_at = ? WHERE id = ?'
+  ).bind(tier, sport || null, title || null, verified, now, userId).run();
+
+  return corsJson({ ok: true, tier, sport, title }, {}, request, env);
+}
+
 // ─── Admin Routes ────────────────────────────────────────────────────────────
 
 async function requireAdmin(request, env) {
@@ -2928,43 +3264,13 @@ async function handleAdminUsers(request, env) {
 }
 
 async function handleAdminReports(request, env) {
-  const { user, error } = await requireAdmin(request, env);
-  if (error) return error;
-
-  const url = new URL(request.url);
-  const status = url.searchParams.get('status') || 'pending';
-
-  const reports = await env.DB.prepare(`
-    SELECT r.*,
-      reporter.display_name as reporter_name, reporter.email as reporter_email,
-      reported.display_name as reported_name, reported.email as reported_email
-    FROM reports r
-    LEFT JOIN users reporter ON r.reporter_id = reporter.id
-    LEFT JOIN users reported ON r.reported_id = reported.id
-    WHERE r.status = ?
-    ORDER BY r.created_at DESC
-    LIMIT 50
-  `).bind(status).all();
-
-  return corsJson({
-    ok: true,
-    reports: reports.results || [],
-  }, {}, request, env);
+  // Delegate to enhanced admin reports handler
+  return handleAdminReportsEnhanced(request, env);
 }
 
 async function handleAdminResolveReport(request, env, reportId) {
-  const { user, error } = await requireAdmin(request, env);
-  if (error) return error;
-
-  const body = await readJson(request);
-  const newStatus = body?.status || 'resolved';
-  const now = isoNow();
-
-  await env.DB.prepare(
-    'UPDATE reports SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?'
-  ).bind(newStatus, user.id, now, reportId).run();
-
-  return corsJson({ ok: true }, {}, request, env);
+  // Delegate to enhanced resolve handler
+  return handleAdminResolveReportEnhanced(request, env, reportId);
 }
 
 // ─── Existing Routes (kept) ──────────────────────────────────────────────────
@@ -5980,9 +6286,13 @@ export default {
       // Block, Report, Avatar
       if (path === '/api/block' && (method === 'POST' || method === 'GET' || method === 'DELETE')) return handleBlockUser(request, env);
       if (path === '/api/report' && method === 'POST') return handleReportUser(request, env);
+      if (path === '/api/reports' && method === 'POST') return handleSubmitReport(request, env);
+      if (path === '/api/reports/mine' && method === 'GET') return handleGetMyReports(request, env);
       if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
       if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
       if (path === '/api/account/export' && method === 'GET') return handleExportData(request, env);
+      if (path === '/api/account/message-preferences' && method === 'GET') return handleGetMessagePreferences(request, env);
+      if (path === '/api/account/message-preferences' && method === 'PATCH') return handleUpdateMessagePreferences(request, env);
 
       // R2 image serving
       if (method === 'GET' && path.startsWith('/api/images/')) {
@@ -6036,6 +6346,16 @@ export default {
       if (path.match(/^\/api\/admin\/reports\/(\d+)\/resolve$/) && method === 'POST') {
         const id = parseInt(path.split('/')[4]);
         return handleAdminResolveReport(request, env, id);
+      }
+      if (path.match(/^\/api\/admin\/reports\/(\d+)$/) && method === 'PATCH') {
+        const id = parseInt(path.split('/')[4]);
+        return handleAdminResolveReportEnhanced(request, env, id);
+      }
+
+      // Admin Verification Tier
+      if (path.match(/^\/api\/admin\/users\/(\d+)\/verify$/) && method === 'PATCH') {
+        const id = parseInt(path.split('/')[4]);
+        return handleAdminVerifyUser(request, env, id);
       }
 
       // Admin Identity Verification
