@@ -397,10 +397,10 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 text-left ${
                 activeTab === tab.id
-                  ? 'bg-primary text-white'
-                  : 'text-text-secondary hover:text-white hover:bg-surface'
+                  ? 'bg-white/10 backdrop-blur-sm border border-white/20 text-white shadow-lg'
+                  : 'text-text-secondary hover:text-white hover:bg-white/5 border border-transparent'
               }`}
             >
               <tab.icon className="w-5 h-5" />

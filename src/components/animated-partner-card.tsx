@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Star, MapPin, Zap } from 'lucide-react'
 import { Partner } from '@/lib/api'
 import VerificationBadge from '@/components/verification-badge'
+import { getSportColor } from '@/lib/sport-colors'
 
 interface AnimatedPartnerCardProps {
   partner: Partner
@@ -16,6 +17,7 @@ export default function AnimatedPartnerCard({
   delay = 0,
 }: AnimatedPartnerCardProps) {
   const matchPercent = partner.match ? Math.round(partner.match * 100) : null
+  const sportColors = getSportColor(partner.sport || 'default')
 
   return (
     <Link href={`/app/partners/${partner.id}`}>
@@ -23,12 +25,14 @@ export default function AnimatedPartnerCard({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
-        whileHover={{ y: -8, boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)' }}
-        className="bg-surface border border-border rounded-xl overflow-hidden cursor-pointer h-full"
+        whileHover={{ y: -8, boxShadow: `0 20px 40px ${sportColors.primary}15` }}
+        className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden cursor-pointer h-full transition-colors hover:border-white/20"
+        style={{ borderLeftWidth: '3px', borderLeftColor: sportColors.primary }}
       >
         {/* Avatar Section */}
         <motion.div
-          className="relative h-32 bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center overflow-hidden"
+          className="relative h-32 flex items-center justify-center overflow-hidden"
+          style={{ background: `linear-gradient(135deg, ${sportColors.primary}20, ${sportColors.secondary}20)` }}
           whileHover={{ scale: 1.05 }}
         >
           <div className="w-20 h-20 bg-primary/30 rounded-full flex items-center justify-center text-primary font-bold text-2xl">

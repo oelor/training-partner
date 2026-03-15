@@ -7,6 +7,9 @@ import type { AppEvent } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
 import { AdBanner } from '@/components/ad-banner'
+import { getSportColor } from '@/lib/sport-colors'
+import { SportSilhouette } from '@/components/silhouettes'
+import { NoEvents } from '@/components/empty-states'
 
 const SPORTS = ['BJJ', 'Wrestling', 'MMA', 'Boxing', 'Muay Thai', 'Judo', 'Kickboxing', 'Other']
 const TABS = ['Upcoming', 'My Events', 'Past'] as const
@@ -228,13 +231,20 @@ export default function EventsPage() {
     return (
       <div
         key={event.id}
-        className={`bg-surface border rounded-xl p-5 space-y-3 ${
+        className={`relative overflow-hidden bg-surface border rounded-xl p-5 space-y-3 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
           isPromoted || event.is_promoted
             ? 'border-yellow-500/50 bg-yellow-500/5 shadow-lg border-l-4 border-l-yellow-500'
-            : 'border-border'
+            : 'border-white/10 bg-white/5'
         }`}
         onClick={() => (isPromoted || event.is_promoted) ? handlePromotedEventClick(event.id) : undefined}
       >
+        {/* Sport silhouette watermark */}
+        {event.sport && (
+          <SportSilhouette
+            sport={event.sport}
+            className="absolute -right-4 -bottom-4 w-28 h-28 opacity-[0.04] pointer-events-none"
+          />
+        )}
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -262,7 +272,7 @@ export default function EventsPage() {
           </div>
 
           {event.sport && (
-            <span className="flex-shrink-0 px-2.5 py-1 bg-primary/15 text-primary text-xs font-medium rounded-full">
+            <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded-full ${getSportColor(event.sport).bg} ${getSportColor(event.sport).text}`}>
               {event.sport}
             </span>
           )}
@@ -524,10 +534,7 @@ export default function EventsPage() {
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       ) : events.length === 0 ? (
-        <div className="bg-surface border border-border rounded-xl p-12 text-center">
-          <Calendar className="w-12 h-12 text-text-secondary mx-auto mb-3" />
-          <p className="text-text-secondary">No upcoming events. Be the first to create one!</p>
-        </div>
+        <NoEvents />
       ) : (
         <div className="space-y-4">
           {events.map((event, index) => (

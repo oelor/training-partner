@@ -9,6 +9,8 @@ import { useAuth } from '@/lib/auth-context'
 import { GymCardSkeleton } from '@/components/skeleton'
 import { useToast } from '@/components/toast'
 import { AdBanner } from '@/components/ad-banner'
+import { getSportColor } from '@/lib/sport-colors'
+import { SportSilhouette } from '@/components/silhouettes'
 
 const SPORTS = ['BJJ', 'MMA', 'Wrestling', 'Muay Thai', 'Boxing', 'Judo', 'Karate', 'Taekwondo', 'Kickboxing']
 
@@ -281,16 +283,26 @@ export default function GymsPage() {
           {[...Array(4)].map((_, i) => <GymCardSkeleton key={i} />)}
         </div>
       ) : gyms.length === 0 ? (
-        <div className="text-center py-12">
-          <MapPin className="w-16 h-16 text-text-secondary mx-auto mb-4" />
-          <h3 className="font-heading text-xl text-white mb-2">No gyms found</h3>
-          <p className="text-text-secondary">
-            {hasActiveFilters ? 'Try adjusting your filters' : 'Try adjusting your search'}
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="animate-float mb-6">
+            <svg viewBox="0 0 200 200" className="w-48 h-48 text-text-secondary" fill="currentColor" aria-hidden="true">
+              <ellipse cx="100" cy="130" rx="70" ry="25" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.15" />
+              <rect x="80" y="48" width="40" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.2" />
+              <line x1="80" y1="58" x2="120" y2="58" stroke="currentColor" strokeWidth="2" opacity="0.2" />
+              <circle cx="92" cy="70" r="3" opacity="0.15" />
+              <circle cx="108" cy="70" r="3" opacity="0.15" />
+              <path d="M 92 78 Q 100 82 108 78" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.12" />
+              <line x1="60" y1="100" x2="140" y2="100" stroke="currentColor" strokeWidth="1" opacity="0.08" strokeDasharray="6 4" />
+            </svg>
+          </div>
+          <p className="text-white font-medium text-lg mb-2">No gyms found</p>
+          <p className="text-text-secondary text-sm mb-4">
+            {hasActiveFilters ? 'Try adjusting your filters to see more results' : 'Try adjusting your search'}
           </p>
           {hasActiveFilters && (
             <button
               onClick={() => { setSportFilter(''); setShowPromotions(false); setShowOpenMats(false); setUseLocation(false); setSearch('') }}
-              className="mt-4 text-primary hover:text-primary/80 transition-colors text-sm"
+              className="text-primary hover:text-primary/80 transition-colors text-sm"
             >
               Clear all filters
             </button>
@@ -302,8 +314,8 @@ export default function GymsPage() {
             <Link
               key={gym.id}
               href={`/app/gyms/${gym.id}`}
-              className={`bg-surface border rounded-xl p-5 card-hover cursor-pointer block ${
-                gym.premium && !isPremium ? 'border-accent/50' : 'border-border'
+              className={`rounded-2xl border bg-white/5 backdrop-blur-sm p-5 cursor-pointer block transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:shadow-lg hover:-translate-y-1 ${
+                gym.premium && !isPremium ? 'border-accent/50' : 'border-white/10'
               }`}
             >
               <div className="flex items-start justify-between mb-3">
@@ -340,11 +352,14 @@ export default function GymsPage() {
               </p>
 
               <div className="flex flex-wrap gap-2 mb-3">
-                {gym.sports?.map(sport => (
-                  <span key={sport} className="text-xs px-2 py-1 bg-background rounded-full text-text-secondary">
-                    {sport}
-                  </span>
-                ))}
+                {gym.sports?.map(sport => {
+                  const sc = getSportColor(sport)
+                  return (
+                    <span key={sport} className={`text-xs px-2.5 py-1 rounded-full ${sc.bg} ${sc.text}`}>
+                      {sport}
+                    </span>
+                  )
+                })}
               </div>
 
               <div className="flex items-center gap-4 text-sm text-text-secondary mb-3">

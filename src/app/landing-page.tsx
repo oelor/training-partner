@@ -17,11 +17,16 @@ import {
   Heart
 } from 'lucide-react'
 import {
-  MuayThaiKickSilhouette,
-  BoxerSilhouette,
-  JudoThrowSilhouette,
-  MMAFighterSilhouette
+  MuayThaiSilhouette,
+  BoxingSilhouette,
+  JudoSilhouette,
+  MMASilhouette,
+  WrestlingSilhouette,
+  BJJSilhouette,
+  KickboxingSilhouette,
+  GeneralFitnessSilhouette,
 } from '@/components/silhouettes'
+import { StatCard } from '@/components/ui/card-system'
 
 const combatSportSlugs: Record<string, string> = {
   'Wrestling': 'wrestling',
@@ -143,69 +148,88 @@ export default function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Hero background — visible silhouette atmosphere */}
+      <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[90vh] flex items-center">
+        {/* Background — dark gradient with radial glow */}
         <div className="absolute inset-0 z-0">
-          <div
-            className="absolute inset-0 bg-cover bg-no-repeat opacity-[0.30]"
-            style={{ backgroundImage: `url(${heroSrc})`, backgroundPosition: 'center 65%' }}
-          />
-          {/* Gradient overlays: fade edges but let center show through */}
-          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/40 to-background" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background/50 via-transparent to-background/50" />
+          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900" />
+          {/* Radial brand glow behind center */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/8 rounded-full blur-[120px]" />
+          <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-accent/5 rounded-full blur-[100px]" />
         </div>
-        <div className="max-w-7xl mx-auto relative z-10">
+
+        {/* Floating silhouettes — decorative, semi-transparent */}
+        <MuayThaiSilhouette
+          className="silhouette absolute left-[5%] top-[20%] w-40 md:w-56 text-white/[0.05] animate-float-slow z-0"
+          aria-hidden="true"
+        />
+        <WrestlingSilhouette
+          className="silhouette absolute right-[8%] top-[15%] w-48 md:w-64 text-white/[0.07] animate-float z-0"
+          aria-hidden="true"
+        />
+        <BJJSilhouette
+          className="silhouette absolute left-[15%] bottom-[10%] w-36 md:w-48 text-white/[0.04] animate-float-fast z-0 hidden md:block"
+          aria-hidden="true"
+        />
+        <BoxingSilhouette
+          className="silhouette absolute right-[12%] bottom-[18%] w-32 md:w-44 text-primary/[0.06] animate-float-slow z-0 hidden lg:block"
+          aria-hidden="true"
+        />
+
+        <div className="max-w-7xl mx-auto relative z-10 w-full">
           <div className="text-center">
-            <div className="inline-flex items-center gap-2 bg-surface px-4 py-2 rounded-full border border-border mb-8 animate-fade-in">
+            {/* Pill badge */}
+            <div className="inline-flex items-center gap-2 bg-white/5 backdrop-blur-sm px-5 py-2.5 rounded-full border border-white/10 mb-8 animate-slide-up-fade">
               <Zap className="w-4 h-4 text-accent" />
               <span className="text-sm text-text-secondary">Find your perfect training match</span>
             </div>
 
-            <h1 className="font-heading text-5xl sm:text-6xl lg:text-7xl text-white mb-6 animate-slide-up">
+            <h1 className="font-heading text-5xl sm:text-6xl lg:text-7xl xl:text-8xl text-white mb-6 animate-slide-up-fade delay-100">
               FIND YOUR PERFECT <span className="gradient-text">SPARRING PARTNER</span> NEAR YOU
             </h1>
 
-            <p className="text-xl text-text-secondary max-w-2xl mx-auto mb-10 animate-slide-up delay-100">
+            <p className="text-lg sm:text-xl text-text-secondary max-w-2xl mx-auto mb-10 animate-slide-up-fade delay-200">
               Connect with compatible training partners based on skill level, goals,
-              and schedule. Whether you&apos;re into combat sports, lifting, running, or just
-              need a gym buddy — find your match.
+              and schedule. Combat sports, lifting, running — find your match.
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up delay-200">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-slide-up-fade delay-300">
               <Link
                 href="/auth/signup"
-                className="w-full sm:w-auto bg-primary text-white px-8 py-4 rounded-md font-heading text-xl hover:bg-primary/90 transition-all btn-glow hover:scale-105"
+                className="w-full sm:w-auto bg-gradient-to-r from-primary to-[#FF6B35] text-white px-10 py-4 rounded-xl font-heading text-xl hover:shadow-lg hover:shadow-primary/25 transition-all btn-glow hover:scale-105 hover:-translate-y-0.5"
               >
                 START TRAINING FREE
               </Link>
               <Link
                 href="#how-it-works"
-                className="w-full sm:w-auto flex items-center justify-center gap-2 text-text-secondary hover:text-white transition-colors px-8 py-4"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 text-text-secondary hover:text-white transition-colors px-8 py-4 border border-white/10 rounded-xl hover:border-white/20 hover:bg-white/5"
               >
                 See How It Works <ChevronRight className="w-5 h-5" />
               </Link>
             </div>
 
-            {/* Value Props */}
-            <div className="grid grid-cols-3 gap-8 mt-20 max-w-lg mx-auto animate-slide-up delay-300">
-              <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">FREE</div>
-                <div className="text-text-secondary text-sm">To Get Started</div>
-              </div>
-              <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">50+</div>
-                <div className="text-text-secondary text-sm">Sports &amp; Activities</div>
-              </div>
-              <div>
-                <div className="font-heading text-3xl sm:text-4xl text-primary">24/7</div>
-                <div className="text-text-secondary text-sm">Find Partners</div>
-              </div>
+            {/* Stats row — glassmorphism cards with silhouette icons */}
+            <div className="grid grid-cols-3 gap-4 sm:gap-6 mt-20 max-w-2xl mx-auto animate-slide-up-fade delay-400">
+              <StatCard
+                value="FREE"
+                label="To Get Started"
+                icon={<GeneralFitnessSilhouette className="w-8 h-8 text-primary/60" />}
+              />
+              <StatCard
+                value="50+"
+                label="Sports & Activities"
+                icon={<KickboxingSilhouette className="w-8 h-8 text-primary/60" />}
+              />
+              <StatCard
+                value="24/7"
+                label="Find Partners"
+                icon={<MMASilhouette className="w-8 h-8 text-primary/60" />}
+              />
             </div>
 
-            {/* Hero Visual — abstract match visualization (no fake profiles) */}
-            <div className="mt-16 animate-slide-up delay-400 relative max-w-3xl mx-auto">
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10 pointer-events-none" />
-              <div className="bg-surface border border-border rounded-2xl p-6 shadow-2xl shadow-primary/10">
+            {/* Hero Visual — abstract match visualization */}
+            <div className="mt-16 animate-slide-up-fade delay-500 relative max-w-3xl mx-auto">
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-transparent to-transparent z-10 pointer-events-none rounded-2xl" />
+              <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 shadow-2xl shadow-primary/10">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
@@ -213,16 +237,15 @@ export default function LandingPage() {
                     </div>
                     <span className="font-heading text-sm text-white">SMART MATCHING</span>
                   </div>
-                  <span className="text-accent font-mono text-xs font-bold">LIVE</span>
+                  <span className="text-accent font-mono text-xs font-bold animate-glow-pulse">LIVE</span>
                 </div>
-                {/* Abstract matching visualization */}
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { sport: 'BJJ', level: 'Purple Belt', match: 94, color: 'primary' },
-                    { sport: 'Weightlifting', level: 'Intermediate', match: 91, color: 'accent' },
-                    { sport: 'Rucking', level: 'Advanced', match: 87, color: 'primary' },
+                    { sport: 'BJJ', level: 'Purple Belt', match: 94 },
+                    { sport: 'Weightlifting', level: 'Intermediate', match: 91 },
+                    { sport: 'Rucking', level: 'Advanced', match: 87 },
                   ].map((p, i) => (
-                    <div key={i} className="bg-background rounded-xl p-4 border border-border">
+                    <div key={i} className="bg-white/5 rounded-xl p-4 border border-white/10 transition-all hover:bg-white/10">
                       <div className="flex items-center justify-between mb-3">
                         <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
                           <Target className="w-5 h-5 text-primary" />
@@ -231,9 +254,8 @@ export default function LandingPage() {
                       </div>
                       <div className="text-white text-sm font-medium">{p.sport}</div>
                       <div className="text-text-secondary text-xs">{p.level} · Near you</div>
-                      {/* Match bar */}
-                      <div className="mt-2 h-1 bg-border rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full" style={{ width: `${p.match}%` }} />
+                      <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-primary to-accent rounded-full" style={{ width: `${p.match}%` }} />
                       </div>
                     </div>
                   ))}
@@ -246,7 +268,7 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface relative overflow-hidden">
-        <MuayThaiKickSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] text-white/[0.15] z-0" />
+        <MuayThaiSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] text-white/[0.15] z-0" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -258,7 +280,7 @@ export default function LandingPage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-background p-8 rounded-xl border border-border card-hover">
+            <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-8 transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:shadow-lg hover:-translate-y-1">
               <div className="w-14 h-14 bg-primary/20 rounded-lg flex items-center justify-center mb-6">
                 <Target className="w-7 h-7 text-primary" />
               </div>
@@ -269,7 +291,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="bg-background p-8 rounded-xl border border-border card-hover">
+            <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-8 transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:shadow-lg hover:-translate-y-1">
               <div className="w-14 h-14 bg-accent/20 rounded-lg flex items-center justify-center mb-6">
                 <MapPin className="w-7 h-7 text-accent" />
               </div>
@@ -280,7 +302,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="bg-background p-8 rounded-xl border border-border card-hover">
+            <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-8 transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:shadow-lg hover:-translate-y-1">
               <div className="w-14 h-14 bg-primary/20 rounded-lg flex items-center justify-center mb-6">
                 <Shield className="w-7 h-7 text-primary" />
               </div>
@@ -518,8 +540,8 @@ export default function LandingPage() {
 
       {/* Built For Athletes — Visual showcase */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <JudoThrowSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-96 text-primary/[0.15] z-0 -rotate-3" />
-        <BoxerSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-80 text-primary/[0.15] z-0 rotate-3" />
+        <JudoSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-96 text-primary/[0.15] z-0 -rotate-3" />
+        <BoxingSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-80 text-primary/[0.15] z-0 rotate-3" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -591,7 +613,7 @@ export default function LandingPage() {
 
       {/* CTA Section with app mockup */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
-        <MMAFighterSilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-[28rem] text-white/[0.12] z-0" />
+        <MMASilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-[28rem] text-white/[0.12] z-0" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* App mockup — CSS phone */}

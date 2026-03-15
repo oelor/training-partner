@@ -7,6 +7,7 @@ import api, { Conversation, Message } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { Skeleton } from '@/components/skeleton'
 import VerificationBadge from '@/components/verification-badge'
+import { NoMessages } from '@/components/empty-states'
 
 function MessagesContent() {
   const searchParams = useSearchParams()
@@ -120,19 +121,18 @@ function MessagesContent() {
                 ))}
               </div>
             ) : conversations.length === 0 ? (
-              <div className="p-8 text-center flex flex-col items-center justify-center h-full">
-                <MessageCircle className="w-12 h-12 text-text-secondary mx-auto mb-3 animate-float" />
-                <p className="text-text-secondary text-sm font-medium">No conversations yet</p>
-                <p className="text-text-secondary text-xs mt-1 mb-4">Find a training partner and send them a message</p>
-                <a href="/app/partners" className="text-primary text-xs font-medium hover:underline">Browse Partners</a>
+              <div className="p-4 flex flex-col items-center justify-center h-full">
+                <NoMessages className="py-6" />
               </div>
             ) : (
               conversations.map(convo => (
                 <button
                   key={convo.user_id}
                   onClick={() => setActiveUserId(convo.user_id)}
-                  className={`w-full flex items-center gap-3 p-4 hover:bg-background transition-colors text-left animate-fade-in card-hover ${
-                    activeUserId === convo.user_id ? 'bg-background border-l-2 border-primary' : ''
+                  className={`w-full flex items-center gap-3 p-4 transition-all duration-200 text-left ${
+                    activeUserId === convo.user_id
+                      ? 'bg-white/10 border-l-2 border-primary'
+                      : 'hover:bg-white/5'
                   }`}
                 >
                   <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0">

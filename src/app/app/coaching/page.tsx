@@ -9,6 +9,8 @@ import {
 import api, { CoachingListing } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/toast'
+import { getSportColor } from '@/lib/sport-colors'
+import { NoBookings } from '@/components/empty-states'
 
 const SPORTS = ['All', 'BJJ', 'MMA', 'Wrestling', 'Boxing', 'Judo', 'Muay Thai', 'Kickboxing']
 const SESSION_TYPES = [
@@ -134,24 +136,10 @@ export default function CoachingMarketplacePage() {
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       ) : listings.length === 0 ? (
-        <div className="text-center py-16">
-          <Users className="w-12 h-12 text-text-secondary mx-auto mb-4" />
-          <h3 className="font-heading text-xl text-white mb-2">No Listings Found</h3>
-          <p className="text-text-secondary mb-6">
-            {sport !== 'All' || sessionType
-              ? 'Try adjusting your filters to see more results.'
-              : 'Be the first to list your coaching services!'}
-          </p>
-          {user && (
-            <Link
-              href="/app/coaching/create"
-              className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg text-sm font-heading hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              CREATE LISTING
-            </Link>
-          )}
-        </div>
+        <NoBookings
+          ctaHref={user ? '/app/coaching/create' : undefined}
+          ctaText={user ? 'CREATE LISTING' : undefined}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {listings.map(listing => {
@@ -160,7 +148,7 @@ export default function CoachingMarketplacePage() {
               <Link
                 key={listing.id}
                 href={`/app/coaching/${listing.id}`}
-                className="bg-surface border border-border rounded-xl p-5 hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/5 group"
+                className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm p-5 transition-all duration-300 hover:bg-white/10 hover:border-white/20 hover:shadow-lg hover:-translate-y-1 group"
               >
                 {/* Coach info */}
                 <div className="flex items-center gap-3 mb-3">
@@ -187,7 +175,7 @@ export default function CoachingMarketplacePage() {
 
                 {/* Meta */}
                 <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-                  <span className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-full">
+                  <span className={`flex items-center gap-1 px-2 py-1 rounded-full ${getSportColor(listing.sport).bg} ${getSportColor(listing.sport).text}`}>
                     <Icon className="w-3 h-3" />
                     {SESSION_TYPE_LABELS[listing.session_type] || listing.session_type}
                   </span>
