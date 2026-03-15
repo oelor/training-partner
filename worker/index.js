@@ -437,6 +437,8 @@ async function ensureFullSchema(env) {
       `CREATE TABLE IF NOT EXISTS moderator_grants (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, granted_by INTEGER NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', notes TEXT DEFAULT '', granted_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       `CREATE TABLE IF NOT EXISTS image_reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, image_key TEXT NOT NULL, uploader_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'approved', reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
       `CREATE TABLE IF NOT EXISTS email_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, email_type TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+      // Coaching bookings (Stripe Connect)
+      `CREATE TABLE IF NOT EXISTS coaching_bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, coach_id INTEGER NOT NULL, student_id INTEGER NOT NULL, stripe_payment_intent TEXT, stripe_checkout_session TEXT, amount_cents INTEGER NOT NULL, platform_fee_cents INTEGER NOT NULL, coach_payout_cents INTEGER NOT NULL, currency TEXT DEFAULT 'USD', status TEXT DEFAULT 'pending', payment_method TEXT DEFAULT 'stripe', session_date TEXT, notes TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
     ];
     for (const sql of tables) {
       await env.DB.prepare(sql).run();
@@ -512,6 +514,9 @@ async function ensureFullSchema(env) {
       'CREATE INDEX IF NOT EXISTS idx_events_sport ON events(sport, event_date)',
       'CREATE INDEX IF NOT EXISTS idx_event_rsvps_event ON event_rsvps(event_id, status)',
       'CREATE INDEX IF NOT EXISTS idx_event_rsvps_user ON event_rsvps(user_id)',
+      // Coaching bookings indexes
+      'CREATE INDEX IF NOT EXISTS idx_coaching_bookings_coach ON coaching_bookings(coach_id, status)',
+      'CREATE INDEX IF NOT EXISTS idx_coaching_bookings_student ON coaching_bookings(student_id, status)',
     ];
     for (const sql of indexes) {
       try { await env.DB.prepare(sql).run(); } catch {}
@@ -527,6 +532,10 @@ async function ensureFullSchema(env) {
       'ALTER TABLE users ADD COLUMN emergency_contact_phone TEXT',
       'ALTER TABLE users ADD COLUMN emergency_contact_relation TEXT',
       'ALTER TABLE users ADD COLUMN content_policy_violations INTEGER NOT NULL DEFAULT 0',
+      // Stripe Connect columns
+      'ALTER TABLE users ADD COLUMN stripe_connect_id TEXT',
+      'ALTER TABLE users ADD COLUMN stripe_connect_onboarded INTEGER DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN stripe_connect_charges_enabled INTEGER DEFAULT 0',
       // QR Check-in columns
       'ALTER TABLE gyms ADD COLUMN checkin_code TEXT',
       'ALTER TABLE gyms ADD COLUMN checkin_radius_m INTEGER DEFAULT 200',
@@ -1350,7 +1359,14 @@ async function handleGetGyms(request, env) {
   if (city) { query += ' AND LOWER(city) LIKE ?'; params.push(`%${city.toLowerCase()}%`); }
   if (search) { query += ' AND (LOWER(name) LIKE ? OR LOWER(city) LIKE ?)'; params.push(`%${search.toLowerCase()}%`, `%${search.toLowerCase()}%`); }
 
-  query += ' ORDER BY rating DESC LIMIT ? OFFSET ?';
+  query += ` ORDER BY
+    CASE COALESCE(partnership_tier, 'free')
+      WHEN 'partner' THEN 1
+      WHEN 'featured' THEN 2
+      WHEN 'verified' THEN 3
+      ELSE 4
+    END,
+    rating DESC LIMIT ? OFFSET ?`;
   params.push(limit, offset);
 
   const results = await env.DB.prepare(query).bind(...params).all();
@@ -1373,6 +1389,10 @@ async function handleGetGyms(request, env) {
     rating: g.rating,
     review_count: g.review_count,
     price: g.price,
+    partnership_tier: g.partnership_tier || 'free',
+    logo_url: g.logo_url || null,
+    website_url: g.website_url || null,
+    claimed_by: g.claimed_by || null,
   }));
 
   if (sport && sport !== 'All') {
@@ -1422,6 +1442,12 @@ async function handleGetGymDetail(request, env, gymId) {
       rating: gym.rating,
       review_count: gym.review_count,
       price: gym.price,
+      partnership_tier: gym.partnership_tier || 'free',
+      logo_url: gym.logo_url || null,
+      website_url: gym.website_url || null,
+      lead_email: gym.lead_email || null,
+      lead_phone: gym.lead_phone || null,
+      claimed_by: gym.claimed_by || null,
       sessions: (sessions.results || []).map(s => ({
         id: s.id,
         day: s.day_of_week,
@@ -1851,6 +1877,11 @@ async function handleStripeWebhook(request, env) {
         UPDATE subscriptions SET plan = 'free', status = 'cancelled', updated_at = ?
         WHERE stripe_subscription_id = ?
       `).bind(now, sub.id).run();
+      // Also handle gym partnership subscription cancellation
+      await env.DB.prepare(`
+        UPDATE gyms SET partnership_tier = 'free', partnership_stripe_sub = NULL, partnership_end = ?
+        WHERE partnership_stripe_sub = ?
+      `).bind(now, sub.id).run();
       break;
     }
     case 'checkout.session.completed': {
@@ -1870,8 +1901,31 @@ async function handleStripeWebhook(request, env) {
           'UPDATE events SET is_promoted = 1, promotion_tier = ?, promotion_start = ?, promotion_end = ?, promotion_stripe_session = ? WHERE id = ?'
         ).bind(session.metadata.tier, promoNow, promoEnd, session.id, parseInt(session.metadata.event_id)).run();
       }
+      // Handle gym partnership checkout completions
+      if (session.metadata?.type === 'gym_partnership' && session.mode === 'subscription') {
+        const gymId = parseInt(session.metadata.gym_id);
+        const tier = session.metadata.tier;
+        const subscriptionId = session.subscription;
+        const partnerStart = new Date().toISOString();
+        const partnerEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        await env.DB.prepare(
+          'UPDATE gyms SET partnership_tier = ?, partnership_stripe_sub = ?, partnership_start = ?, partnership_end = ? WHERE id = ?'
+        ).bind(tier, subscriptionId || '', partnerStart, partnerEnd, gymId).run();
+      }
+      // Handle coaching booking checkout completions
+      if (session.mode === 'payment' && session.metadata?.type === 'coaching_booking') {
+        const bookingListingId = parseInt(session.metadata.listing_id);
+        const bookingCoachId = parseInt(session.metadata.coach_id);
+        const bookingStudentId = parseInt(session.metadata.student_id);
+        const paymentIntent = session.payment_intent;
+        // Update the booking that matches this checkout session
+        await env.DB.prepare(`
+          UPDATE coaching_bookings SET status = 'paid', stripe_payment_intent = ?, stripe_checkout_session = ?, updated_at = ?
+          WHERE stripe_checkout_session = ? AND listing_id = ? AND coach_id = ? AND student_id = ?
+        `).bind(paymentIntent || '', session.id, now, session.id, bookingListingId, bookingCoachId, bookingStudentId).run().catch(() => {});
+      }
       // Handle subscription checkout completions (mode === 'subscription')
-      if (session.mode === 'subscription') {
+      if (session.mode === 'subscription' && !session.metadata?.type) {
         const customerId = session.customer;
         const subscriptionId = session.subscription;
         const userId = session.metadata?.user_id;
@@ -1882,6 +1936,19 @@ async function handleStripeWebhook(request, env) {
             WHERE user_id = ?
           `).bind(plan, customerId || '', subscriptionId || '', now, parseInt(userId)).run();
         }
+      }
+      break;
+    }
+    case 'account.updated': {
+      // Handle Connect account status changes
+      const acct = event.data.object;
+      if (acct.id && acct.metadata?.user_id) {
+        const connectUserId = parseInt(acct.metadata.user_id);
+        const connectOnboarded = acct.details_submitted ? 1 : 0;
+        const connectChargesEnabled = acct.charges_enabled ? 1 : 0;
+        await env.DB.prepare(
+          'UPDATE users SET stripe_connect_onboarded = ?, stripe_connect_charges_enabled = ?, updated_at = ? WHERE id = ? AND stripe_connect_id = ?'
+        ).bind(connectOnboarded, connectChargesEnabled, now, connectUserId, acct.id).run().catch(() => {});
       }
       break;
     }
@@ -6708,6 +6775,709 @@ async function handleAdminResolveBadge(request, env, badgeId) {
 
 // ─── Observability ────────────────────────────────────────────────────────────
 
+// ─── Gym Partnership Tiers ───────────────────────────────────────────────────
+
+const GYM_TIER_PRICES = {
+  verified: { amount: 2900, name: 'Verified Gym', interval: 'month' },
+  featured: { amount: 9900, name: 'Featured Gym', interval: 'month' },
+  partner: { amount: 19900, name: 'Partner Gym', interval: 'month' },
+};
+
+const GYM_TIER_ORDER = { partner: 4, featured: 3, verified: 2, free: 1 };
+
+async function handleClaimGym(request, env, gymId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT * FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  if (gym.claimed_by) return corsJson({ ok: false, error: 'This gym has already been claimed' }, { status: 409 }, request, env);
+
+  const now = isoNow();
+  await env.DB.prepare(
+    'UPDATE gyms SET claimed_by = ?, claimed_at = ?, lead_email = ? WHERE id = ?'
+  ).bind(user.id, now, user.email, gymId).run();
+
+  return corsJson({ ok: true, message: 'Gym claimed successfully' }, {}, request, env);
+}
+
+async function handleUpgradeGym(request, env, gymId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const gym = await env.DB.prepare('SELECT * FROM gyms WHERE id = ?').bind(gymId).first();
+  if (!gym) return corsJson({ ok: false, error: 'Gym not found' }, { status: 404 }, request, env);
+  if (gym.claimed_by !== user.id) return corsJson({ ok: false, error: 'You must claim this gym first' }, { status: 403 }, request, env);
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const body = await readJson(request);
+  const tier = body?.tier;
+  if (!tier || !GYM_TIER_PRICES[tier]) {
+    return corsJson({ ok: false, error: 'Invalid tier. Must be verified, featured, or partner.' }, { status: 400 }, request, env);
+  }
+
+  const price = GYM_TIER_PRICES[tier];
+  const frontendUrl = env.FRONTEND_URL || FRONTEND_URL;
+
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'mode': 'subscription',
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][product_data][name]': `${price.name} - ${gym.name}`,
+      'line_items[0][price_data][unit_amount]': String(price.amount),
+      'line_items[0][price_data][recurring][interval]': price.interval,
+      'line_items[0][quantity]': '1',
+      'success_url': `${frontendUrl}/app/gyms/${gymId}?upgrade=success`,
+      'cancel_url': `${frontendUrl}/app/gyms/${gymId}?upgrade=cancelled`,
+      'customer_email': user.email,
+      'metadata[type]': 'gym_partnership',
+      'metadata[gym_id]': String(gymId),
+      'metadata[tier]': tier,
+      'metadata[user_id]': String(user.id),
+    }),
+  });
+
+  const session = await res.json();
+  if (!res.ok) {
+    return corsJson({ ok: false, error: session.error?.message || 'Stripe error' }, { status: 400 }, request, env);
+  }
+
+  return corsJson({ ok: true, url: session.url, session_id: session.id }, {}, request, env);
+}
+
+// ─── Coaching Marketplace ────────────────────────────────────────────────────
+
+async function handleCreateCoachingListing(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const allowed = await checkRateLimit(env, `coaching_create:${user.id}`, 5, 86400);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many listings created today. Try again tomorrow.' }, { status: 429 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const { sport, title, description, session_type, duration_minutes, price_cents, location, gym_id, max_students, experience_years, payment_methods } = body;
+
+  // Validation
+  if (!sport || !title || !description || !session_type || !price_cents) {
+    return corsJson({ ok: false, error: 'Missing required fields: sport, title, description, session_type, price_cents' }, { status: 400 }, request, env);
+  }
+  if (typeof title !== 'string' || title.length < 5 || title.length > 100) {
+    return corsJson({ ok: false, error: 'Title must be 5-100 characters' }, { status: 400 }, request, env);
+  }
+  if (typeof description !== 'string' || description.length < 20 || description.length > 1000) {
+    return corsJson({ ok: false, error: 'Description must be 20-1000 characters' }, { status: 400 }, request, env);
+  }
+  if (!['private', 'semi_private', 'group', 'online'].includes(session_type)) {
+    return corsJson({ ok: false, error: 'Invalid session_type' }, { status: 400 }, request, env);
+  }
+  if (typeof price_cents !== 'number' || price_cents <= 0) {
+    return corsJson({ ok: false, error: 'Price must be greater than 0' }, { status: 400 }, request, env);
+  }
+  const dur = duration_minutes || 60;
+  if (dur < 15 || dur > 480) {
+    return corsJson({ ok: false, error: 'Duration must be 15-480 minutes' }, { status: 400 }, request, env);
+  }
+
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO coaching_listings (coach_id, sport, title, description, session_type, duration_minutes, price_cents, currency, location, gym_id, max_students, experience_years, payment_methods, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'USD', ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    user.id, sport, title.trim(), description.trim(), session_type, dur, price_cents,
+    location || null, gym_id || null, max_students || 1, experience_years || null,
+    payment_methods || 'Contact coach directly', now, now
+  ).run();
+
+  return corsJson({ ok: true, listing_id: result.meta?.last_row_id, message: 'Coaching listing created' }, { status: 201 }, request, env);
+}
+
+async function handleGetCoachingListings(request, env) {
+  const url = new URL(request.url);
+  const sport = url.searchParams.get('sport');
+  const session_type = url.searchParams.get('session_type');
+  const min_price = parseInt(url.searchParams.get('min_price') || '0');
+  const max_price = parseInt(url.searchParams.get('max_price') || '0');
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+  const limit = 20;
+  const offset = (page - 1) * limit;
+
+  let query = `
+    SELECT cl.*, u.display_name as coach_name, u.avatar_url as coach_avatar,
+      u.role as coach_role,
+      (SELECT COUNT(*) FROM coaching_inquiries ci WHERE ci.listing_id = cl.id) as inquiry_count
+    FROM coaching_listings cl
+    JOIN users u ON cl.coach_id = u.id
+    WHERE cl.is_active = 1
+  `;
+  const params = [];
+
+  if (sport) { query += ' AND cl.sport = ?'; params.push(sport); }
+  if (session_type) { query += ' AND cl.session_type = ?'; params.push(session_type); }
+  if (min_price > 0) { query += ' AND cl.price_cents >= ?'; params.push(min_price); }
+  if (max_price > 0) { query += ' AND cl.price_cents <= ?'; params.push(max_price); }
+
+  query += ' ORDER BY cl.created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const results = await env.DB.prepare(query).bind(...params).all();
+
+  const listings = (results.results || []).map(l => ({
+    id: l.id,
+    coach_id: l.coach_id,
+    coach_name: l.coach_name,
+    coach_avatar: l.coach_avatar || '',
+    coach_role: l.coach_role,
+    sport: l.sport,
+    title: l.title,
+    description: l.description,
+    session_type: l.session_type,
+    duration_minutes: l.duration_minutes,
+    price_cents: l.price_cents,
+    currency: l.currency,
+    location: l.location,
+    gym_id: l.gym_id,
+    max_students: l.max_students,
+    experience_years: l.experience_years,
+    payment_methods: l.payment_methods,
+    inquiry_count: l.inquiry_count || 0,
+    created_at: l.created_at,
+  }));
+
+  return corsJson({ ok: true, listings, page, total: listings.length }, {}, request, env);
+}
+
+async function handleGetCoachingListing(request, env, listingId) {
+  const listing = await env.DB.prepare(`
+    SELECT cl.*, u.display_name as coach_name, u.avatar_url as coach_avatar,
+      u.role as coach_role, u.city as coach_city,
+      u.stripe_connect_charges_enabled as coach_connect_enabled,
+      (SELECT COUNT(*) FROM coaching_inquiries ci WHERE ci.listing_id = cl.id) as inquiry_count
+    FROM coaching_listings cl
+    JOIN users u ON cl.coach_id = u.id
+    WHERE cl.id = ?
+  `).bind(listingId).first();
+
+  if (!listing) return corsJson({ ok: false, error: 'Listing not found' }, { status: 404 }, request, env);
+
+  return corsJson({
+    ok: true,
+    listing: {
+      id: listing.id,
+      coach_id: listing.coach_id,
+      coach_name: listing.coach_name,
+      coach_avatar: listing.coach_avatar || '',
+      coach_role: listing.coach_role,
+      coach_city: listing.coach_city,
+      sport: listing.sport,
+      title: listing.title,
+      description: listing.description,
+      session_type: listing.session_type,
+      duration_minutes: listing.duration_minutes,
+      price_cents: listing.price_cents,
+      currency: listing.currency,
+      location: listing.location,
+      gym_id: listing.gym_id,
+      max_students: listing.max_students,
+      experience_years: listing.experience_years,
+      payment_methods: listing.payment_methods,
+      is_active: listing.is_active,
+      inquiry_count: listing.inquiry_count || 0,
+      coach_connect_enabled: !!(listing.coach_connect_enabled),
+      created_at: listing.created_at,
+      updated_at: listing.updated_at,
+    }
+  }, {}, request, env);
+}
+
+async function handleUpdateCoachingListing(request, env, listingId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const listing = await env.DB.prepare('SELECT * FROM coaching_listings WHERE id = ?').bind(listingId).first();
+  if (!listing) return corsJson({ ok: false, error: 'Listing not found' }, { status: 404 }, request, env);
+  if (listing.coach_id !== user.id) return corsJson({ ok: false, error: 'Not your listing' }, { status: 403 }, request, env);
+
+  const body = await readJson(request);
+  if (!body) return corsJson({ ok: false, error: 'Invalid JSON' }, { status: 400 }, request, env);
+
+  const updates = [];
+  const values = [];
+
+  if (body.title !== undefined) {
+    if (typeof body.title !== 'string' || body.title.length < 5 || body.title.length > 100) {
+      return corsJson({ ok: false, error: 'Title must be 5-100 characters' }, { status: 400 }, request, env);
+    }
+    updates.push('title = ?'); values.push(body.title.trim());
+  }
+  if (body.description !== undefined) {
+    if (typeof body.description !== 'string' || body.description.length < 20 || body.description.length > 1000) {
+      return corsJson({ ok: false, error: 'Description must be 20-1000 characters' }, { status: 400 }, request, env);
+    }
+    updates.push('description = ?'); values.push(body.description.trim());
+  }
+  if (body.sport !== undefined) { updates.push('sport = ?'); values.push(body.sport); }
+  if (body.session_type !== undefined) {
+    if (!['private', 'semi_private', 'group', 'online'].includes(body.session_type)) {
+      return corsJson({ ok: false, error: 'Invalid session_type' }, { status: 400 }, request, env);
+    }
+    updates.push('session_type = ?'); values.push(body.session_type);
+  }
+  if (body.duration_minutes !== undefined) {
+    if (body.duration_minutes < 15 || body.duration_minutes > 480) {
+      return corsJson({ ok: false, error: 'Duration must be 15-480 minutes' }, { status: 400 }, request, env);
+    }
+    updates.push('duration_minutes = ?'); values.push(body.duration_minutes);
+  }
+  if (body.price_cents !== undefined) {
+    if (typeof body.price_cents !== 'number' || body.price_cents <= 0) {
+      return corsJson({ ok: false, error: 'Price must be greater than 0' }, { status: 400 }, request, env);
+    }
+    updates.push('price_cents = ?'); values.push(body.price_cents);
+  }
+  if (body.location !== undefined) { updates.push('location = ?'); values.push(body.location); }
+  if (body.max_students !== undefined) { updates.push('max_students = ?'); values.push(body.max_students); }
+  if (body.experience_years !== undefined) { updates.push('experience_years = ?'); values.push(body.experience_years); }
+  if (body.payment_methods !== undefined) { updates.push('payment_methods = ?'); values.push(body.payment_methods); }
+  if (body.is_active !== undefined) { updates.push('is_active = ?'); values.push(body.is_active ? 1 : 0); }
+
+  if (updates.length === 0) return corsJson({ ok: false, error: 'No fields to update' }, { status: 400 }, request, env);
+
+  updates.push('updated_at = ?'); values.push(isoNow());
+  values.push(listingId);
+
+  await env.DB.prepare(`UPDATE coaching_listings SET ${updates.join(', ')} WHERE id = ?`).bind(...values).run();
+
+  return corsJson({ ok: true, message: 'Listing updated' }, {}, request, env);
+}
+
+async function handleDeleteCoachingListing(request, env, listingId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const listing = await env.DB.prepare('SELECT * FROM coaching_listings WHERE id = ?').bind(listingId).first();
+  if (!listing) return corsJson({ ok: false, error: 'Listing not found' }, { status: 404 }, request, env);
+  if (listing.coach_id !== user.id) return corsJson({ ok: false, error: 'Not your listing' }, { status: 403 }, request, env);
+
+  await env.DB.prepare('UPDATE coaching_listings SET is_active = 0, updated_at = ? WHERE id = ?').bind(isoNow(), listingId).run();
+
+  return corsJson({ ok: true, message: 'Listing deactivated' }, {}, request, env);
+}
+
+async function handleInquireCoachingListing(request, env, listingId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const allowed = await checkRateLimit(env, `coaching_inquire:${user.id}`, 10, 86400);
+  if (!allowed) return corsJson({ ok: false, error: 'Too many inquiries today. Try again tomorrow.' }, { status: 429 }, request, env);
+
+  const listing = await env.DB.prepare('SELECT * FROM coaching_listings WHERE id = ? AND is_active = 1').bind(listingId).first();
+  if (!listing) return corsJson({ ok: false, error: 'Listing not found or inactive' }, { status: 404 }, request, env);
+
+  if (listing.coach_id === user.id) return corsJson({ ok: false, error: 'Cannot inquire about your own listing' }, { status: 400 }, request, env);
+
+  const body = await readJson(request);
+  const message = body?.message;
+  if (!message || typeof message !== 'string' || message.length < 10 || message.length > 500) {
+    return corsJson({ ok: false, error: 'Message must be 10-500 characters' }, { status: 400 }, request, env);
+  }
+
+  // Check for duplicate inquiry
+  const existing = await env.DB.prepare(
+    'SELECT id FROM coaching_inquiries WHERE listing_id = ? AND student_id = ? AND status = ?'
+  ).bind(listingId, user.id, 'pending').first();
+  if (existing) return corsJson({ ok: false, error: 'You already have a pending inquiry for this listing' }, { status: 409 }, request, env);
+
+  await env.DB.prepare(
+    'INSERT INTO coaching_inquiries (listing_id, student_id, status, message, created_at) VALUES (?, ?, ?, ?, ?)'
+  ).bind(listingId, user.id, 'pending', message.trim(), isoNow()).run();
+
+  return corsJson({ ok: true, message: 'Inquiry sent to coach' }, { status: 201 }, request, env);
+}
+
+async function handleGetMyCoachingListings(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const results = await env.DB.prepare(`
+    SELECT cl.*,
+      (SELECT COUNT(*) FROM coaching_inquiries ci WHERE ci.listing_id = cl.id) as inquiry_count,
+      (SELECT COUNT(*) FROM coaching_inquiries ci WHERE ci.listing_id = cl.id AND ci.status = 'pending') as pending_inquiries
+    FROM coaching_listings cl
+    WHERE cl.coach_id = ?
+    ORDER BY cl.created_at DESC
+  `).bind(user.id).all();
+
+  const listings = (results.results || []).map(l => ({
+    id: l.id,
+    sport: l.sport,
+    title: l.title,
+    description: l.description,
+    session_type: l.session_type,
+    duration_minutes: l.duration_minutes,
+    price_cents: l.price_cents,
+    currency: l.currency,
+    location: l.location,
+    gym_id: l.gym_id,
+    is_active: l.is_active,
+    max_students: l.max_students,
+    experience_years: l.experience_years,
+    payment_methods: l.payment_methods,
+    inquiry_count: l.inquiry_count || 0,
+    pending_inquiries: l.pending_inquiries || 0,
+    created_at: l.created_at,
+    updated_at: l.updated_at,
+  }));
+
+  return corsJson({ ok: true, listings }, {}, request, env);
+}
+
+// ─── Stripe Connect for Coaching ─────────────────────────────────────────────
+
+async function handleConnectOnboard(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const frontendUrl = env.FRONTEND_URL || FRONTEND_URL;
+  let accountId = user.stripe_connect_id;
+
+  // Create Connect account if user doesn't have one yet
+  if (!accountId) {
+    const createRes = await fetch('https://api.stripe.com/v1/accounts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'type': 'express',
+        'country': 'US',
+        'email': user.email,
+        'capabilities[card_payments][requested]': 'true',
+        'capabilities[transfers][requested]': 'true',
+        'metadata[user_id]': String(user.id),
+      }),
+    });
+
+    const account = await createRes.json();
+    if (!createRes.ok) {
+      return corsJson({ ok: false, error: account.error?.message || 'Failed to create Connect account' }, { status: 400 }, request, env);
+    }
+
+    accountId = account.id;
+    await env.DB.prepare('UPDATE users SET stripe_connect_id = ? WHERE id = ?').bind(accountId, user.id).run();
+  }
+
+  // Create account link for onboarding
+  const linkRes = await fetch('https://api.stripe.com/v1/account_links', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'account': accountId,
+      'refresh_url': `${frontendUrl}/app/coaching/mine?connect=refresh`,
+      'return_url': `${frontendUrl}/app/coaching/mine?connect=complete`,
+      'type': 'account_onboarding',
+    }),
+  });
+
+  const accountLink = await linkRes.json();
+  if (!linkRes.ok) {
+    return corsJson({ ok: false, error: accountLink.error?.message || 'Failed to create onboarding link' }, { status: 400 }, request, env);
+  }
+
+  return corsJson({ ok: true, url: accountLink.url }, {}, request, env);
+}
+
+async function handleConnectStatus(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  if (!user.stripe_connect_id) {
+    return corsJson({ ok: true, connected: false, onboarded: false, charges_enabled: false }, {}, request, env);
+  }
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const res = await fetch(`https://api.stripe.com/v1/accounts/${user.stripe_connect_id}`, {
+    headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
+  });
+
+  const account = await res.json();
+  if (!res.ok) {
+    return corsJson({ ok: false, error: account.error?.message || 'Failed to retrieve account' }, { status: 400 }, request, env);
+  }
+
+  const onboarded = account.details_submitted ? 1 : 0;
+  const chargesEnabled = account.charges_enabled ? 1 : 0;
+
+  await env.DB.prepare(
+    'UPDATE users SET stripe_connect_onboarded = ?, stripe_connect_charges_enabled = ? WHERE id = ?'
+  ).bind(onboarded, chargesEnabled, user.id).run();
+
+  return corsJson({
+    ok: true,
+    connected: true,
+    onboarded: !!account.details_submitted,
+    charges_enabled: !!account.charges_enabled,
+  }, {}, request, env);
+}
+
+async function handleConnectDashboard(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  if (!user.stripe_connect_id) {
+    return corsJson({ ok: false, error: 'No Connect account found. Set up payments first.' }, { status: 400 }, request, env);
+  }
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const res = await fetch(`https://api.stripe.com/v1/accounts/${user.stripe_connect_id}/login_links`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+  });
+
+  const loginLink = await res.json();
+  if (!res.ok) {
+    return corsJson({ ok: false, error: loginLink.error?.message || 'Failed to create dashboard link' }, { status: 400 }, request, env);
+  }
+
+  return corsJson({ ok: true, url: loginLink.url }, {}, request, env);
+}
+
+async function handleBookCoachingSession(request, env, listingId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return corsJson({ ok: false, error: 'Stripe not configured' }, { status: 503 }, request, env);
+  }
+
+  const listing = await env.DB.prepare(`
+    SELECT cl.*, u.display_name as coach_name, u.stripe_connect_id, u.stripe_connect_charges_enabled
+    FROM coaching_listings cl
+    JOIN users u ON cl.coach_id = u.id
+    WHERE cl.id = ? AND cl.is_active = 1
+  `).bind(listingId).first();
+
+  if (!listing) return corsJson({ ok: false, error: 'Listing not found' }, { status: 404 }, request, env);
+  if (listing.coach_id === user.id) return corsJson({ ok: false, error: 'Cannot book your own listing' }, { status: 400 }, request, env);
+  if (!listing.stripe_connect_id || !listing.stripe_connect_charges_enabled) {
+    return corsJson({ ok: false, error: 'This coach has not set up in-app payments. Please arrange payment directly.' }, { status: 400 }, request, env);
+  }
+
+  const platformFee = Math.round(listing.price_cents * 0.15);
+  const coachPayout = listing.price_cents - platformFee;
+  const frontendUrl = env.FRONTEND_URL || FRONTEND_URL;
+
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      'mode': 'payment',
+      'payment_method_types[0]': 'card',
+      'line_items[0][price_data][currency]': 'usd',
+      'line_items[0][price_data][product_data][name]': listing.title,
+      'line_items[0][price_data][product_data][description]': `${listing.duration_minutes} min ${listing.session_type} session with ${listing.coach_name}`,
+      'line_items[0][price_data][unit_amount]': String(listing.price_cents),
+      'line_items[0][quantity]': '1',
+      'payment_intent_data[application_fee_amount]': String(platformFee),
+      'payment_intent_data[transfer_data][destination]': listing.stripe_connect_id,
+      'metadata[type]': 'coaching_booking',
+      'metadata[listing_id]': String(listingId),
+      'metadata[coach_id]': String(listing.coach_id),
+      'metadata[student_id]': String(user.id),
+      'success_url': `${frontendUrl}/app/coaching/${listingId}?booked=success`,
+      'cancel_url': `${frontendUrl}/app/coaching/${listingId}?booked=cancelled`,
+    }),
+  });
+
+  const session = await res.json();
+  if (!res.ok) {
+    return corsJson({ ok: false, error: session.error?.message || 'Stripe error' }, { status: 400 }, request, env);
+  }
+
+  const now = isoNow();
+  const bookingResult = await env.DB.prepare(`
+    INSERT INTO coaching_bookings (listing_id, coach_id, student_id, stripe_checkout_session, amount_cents, platform_fee_cents, coach_payout_cents, currency, status, payment_method, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'USD', 'pending', 'stripe', ?, ?)
+  `).bind(listingId, listing.coach_id, user.id, session.id, listing.price_cents, platformFee, coachPayout, now, now).run();
+
+  return corsJson({ ok: true, url: session.url, booking_id: bookingResult.meta?.last_row_id }, {}, request, env);
+}
+
+async function handleBookOffPlatform(request, env, listingId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const listing = await env.DB.prepare(`
+    SELECT cl.* FROM coaching_listings cl WHERE cl.id = ? AND cl.is_active = 1
+  `).bind(listingId).first();
+
+  if (!listing) return corsJson({ ok: false, error: 'Listing not found' }, { status: 404 }, request, env);
+  if (listing.coach_id === user.id) return corsJson({ ok: false, error: 'Cannot book your own listing' }, { status: 400 }, request, env);
+
+  const body = await readJson(request);
+  const sessionDate = body?.session_date || null;
+  const notes = body?.notes || null;
+
+  const now = isoNow();
+  const result = await env.DB.prepare(`
+    INSERT INTO coaching_bookings (listing_id, coach_id, student_id, amount_cents, platform_fee_cents, coach_payout_cents, currency, status, payment_method, session_date, notes, created_at, updated_at)
+    VALUES (?, ?, ?, ?, 0, ?, 'USD', 'pending', 'off_platform', ?, ?, ?, ?)
+  `).bind(listingId, listing.coach_id, user.id, listing.price_cents, listing.price_cents, sessionDate, notes, now, now).run();
+
+  return corsJson({
+    ok: true,
+    booking_id: result.meta?.last_row_id,
+    message: 'Off-platform booking recorded',
+    disclaimer: 'Off-platform payments are NOT covered by Training Partner Terms of Service. Training Partner cannot mediate disputes for off-platform transactions. We strongly recommend using in-app payments for protection.',
+  }, { status: 201 }, request, env);
+}
+
+async function handleGetCoachingBookings(request, env) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const url = new URL(request.url);
+  const role = url.searchParams.get('role') || 'student';
+
+  let query, params;
+  if (role === 'coach') {
+    query = `
+      SELECT cb.*, cl.title as listing_title, cl.session_type, cl.duration_minutes,
+        u.display_name as student_name, u.avatar_url as student_avatar
+      FROM coaching_bookings cb
+      JOIN coaching_listings cl ON cb.listing_id = cl.id
+      JOIN users u ON cb.student_id = u.id
+      WHERE cb.coach_id = ?
+      ORDER BY cb.created_at DESC
+      LIMIT 50
+    `;
+    params = [user.id];
+  } else {
+    query = `
+      SELECT cb.*, cl.title as listing_title, cl.session_type, cl.duration_minutes,
+        u.display_name as coach_name, u.avatar_url as coach_avatar
+      FROM coaching_bookings cb
+      JOIN coaching_listings cl ON cb.listing_id = cl.id
+      JOIN users u ON cb.coach_id = u.id
+      WHERE cb.student_id = ?
+      ORDER BY cb.created_at DESC
+      LIMIT 50
+    `;
+    params = [user.id];
+  }
+
+  const results = await env.DB.prepare(query).bind(...params).all();
+
+  return corsJson({ ok: true, bookings: results.results || [] }, {}, request, env);
+}
+
+async function handleUpdateCoachingBooking(request, env, bookingId) {
+  const user = await requireAuth(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const booking = await env.DB.prepare('SELECT * FROM coaching_bookings WHERE id = ?').bind(bookingId).first();
+  if (!booking) return corsJson({ ok: false, error: 'Booking not found' }, { status: 404 }, request, env);
+
+  const body = await readJson(request);
+  const newStatus = body?.status;
+
+  if (!newStatus) return corsJson({ ok: false, error: 'Status is required' }, { status: 400 }, request, env);
+
+  // Coach can mark as completed or cancelled
+  if (user.id === booking.coach_id) {
+    if (!['completed', 'cancelled'].includes(newStatus)) {
+      return corsJson({ ok: false, error: 'Coach can only mark bookings as completed or cancelled' }, { status: 400 }, request, env);
+    }
+  }
+  // Student can only cancel if still pending
+  else if (user.id === booking.student_id) {
+    if (newStatus !== 'cancelled') {
+      return corsJson({ ok: false, error: 'Student can only cancel bookings' }, { status: 400 }, request, env);
+    }
+    if (booking.status !== 'pending') {
+      return corsJson({ ok: false, error: 'Can only cancel pending bookings' }, { status: 400 }, request, env);
+    }
+  } else {
+    return corsJson({ ok: false, error: 'Not your booking' }, { status: 403 }, request, env);
+  }
+
+  await env.DB.prepare('UPDATE coaching_bookings SET status = ?, updated_at = ? WHERE id = ?')
+    .bind(newStatus, isoNow(), bookingId).run();
+
+  return corsJson({ ok: true, message: `Booking ${newStatus}` }, {}, request, env);
+}
+
+// ─── Affiliate Links ─────────────────────────────────────────────────────────
+
+async function handleGetAffiliateLinks(request, env) {
+  const url = new URL(request.url);
+  const category = url.searchParams.get('category');
+
+  let query = 'SELECT * FROM affiliate_links WHERE is_active = 1';
+  const params = [];
+  if (category) { query += ' AND category = ?'; params.push(category); }
+  query += ' ORDER BY category, name';
+
+  const results = await env.DB.prepare(query).bind(...params).all();
+  const links = results.results || [];
+
+  // Group by category
+  const grouped = {};
+  for (const link of links) {
+    if (!grouped[link.category]) grouped[link.category] = [];
+    grouped[link.category].push({
+      id: link.id,
+      name: link.name,
+      brand: link.brand,
+      url: link.url,
+      category: link.category,
+      clicks: link.clicks,
+    });
+  }
+
+  return corsJson({ ok: true, links, grouped }, {}, request, env);
+}
+
+async function handleAffiliateClick(request, env, linkId) {
+  const link = await env.DB.prepare('SELECT * FROM affiliate_links WHERE id = ? AND is_active = 1').bind(linkId).first();
+  if (!link) return corsJson({ ok: false, error: 'Link not found' }, { status: 404 }, request, env);
+
+  // Increment click count (non-blocking would be ideal but D1 doesn't support waitUntil writes well)
+  await env.DB.prepare('UPDATE affiliate_links SET clicks = clicks + 1 WHERE id = ?').bind(linkId).run();
+
+  return corsJson({ ok: true, url: link.url }, {}, request, env);
+}
+
 // Non-blocking request logger — uses waitUntil to avoid slowing responses
 function trackRequest(env, ctx, { method, path, status, durationMs, request }) {
   if (!env.DB || !ctx?.waitUntil) return;
@@ -7267,6 +8037,62 @@ export default {
       if (path.match(/^\/api\/admin\/badges\/(\d+)$/) && method === 'PATCH') {
         const id = parseInt(path.split('/')[4]);
         return handleAdminResolveBadge(request, env, id);
+      }
+
+      // Gym Partnership
+      if (path.match(/^\/api\/gyms\/(\d+)\/claim$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleClaimGym(request, env, id);
+      }
+      if (path.match(/^\/api\/gyms\/(\d+)\/upgrade$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleUpgradeGym(request, env, id);
+      }
+
+      // Coaching Marketplace
+      if (path === '/api/coaching/mine' && method === 'GET') return handleGetMyCoachingListings(request, env);
+      if (path === '/api/coaching' && method === 'POST') return handleCreateCoachingListing(request, env);
+      if (path === '/api/coaching' && method === 'GET') return handleGetCoachingListings(request, env);
+      if (path.match(/^\/api\/coaching\/(\d+)\/inquire$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleInquireCoachingListing(request, env, id);
+      }
+      if (path.match(/^\/api\/coaching\/(\d+)$/) && method === 'GET') {
+        const id = parseInt(path.split('/')[3]);
+        return handleGetCoachingListing(request, env, id);
+      }
+      if (path.match(/^\/api\/coaching\/(\d+)$/) && method === 'PATCH') {
+        const id = parseInt(path.split('/')[3]);
+        return handleUpdateCoachingListing(request, env, id);
+      }
+      if (path.match(/^\/api\/coaching\/(\d+)$/) && method === 'DELETE') {
+        const id = parseInt(path.split('/')[3]);
+        return handleDeleteCoachingListing(request, env, id);
+      }
+
+      // Stripe Connect for Coaching
+      if (path === '/api/connect/onboard' && method === 'POST') return handleConnectOnboard(request, env);
+      if (path === '/api/connect/status' && method === 'GET') return handleConnectStatus(request, env);
+      if (path === '/api/connect/dashboard' && method === 'POST') return handleConnectDashboard(request, env);
+      if (path.match(/^\/api\/coaching\/(\d+)\/book$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleBookCoachingSession(request, env, id);
+      }
+      if (path.match(/^\/api\/coaching\/(\d+)\/book-offplatform$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleBookOffPlatform(request, env, id);
+      }
+      if (path === '/api/coaching/bookings' && method === 'GET') return handleGetCoachingBookings(request, env);
+      if (path.match(/^\/api\/coaching\/bookings\/(\d+)$/) && method === 'PATCH') {
+        const id = parseInt(path.split('/')[4]);
+        return handleUpdateCoachingBooking(request, env, id);
+      }
+
+      // Affiliate Links
+      if (path === '/api/affiliates' && method === 'GET') return handleGetAffiliateLinks(request, env);
+      if (path.match(/^\/api\/affiliates\/(\d+)\/click$/) && method === 'POST') {
+        const id = parseInt(path.split('/')[3]);
+        return handleAffiliateClick(request, env, id);
       }
 
       // Fallback to static assets

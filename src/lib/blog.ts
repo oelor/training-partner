@@ -9,6 +9,7 @@ export interface BlogPost {
   sport: 'BJJ' | 'MMA' | 'Wrestling' | 'Boxing' | 'General'
   tags: string[]
   content: string
+  relatedGear?: number[]
 }
 
 const posts: BlogPost[] = [
@@ -22,6 +23,7 @@ const posts: BlogPost[] = [
     readTime: '9 min read',
     sport: 'BJJ',
     tags: ['bjj', 'training partners', 'sparring', 'beginner guide'],
+    relatedGear: [2, 6, 5],
     content: `## Why Training Partners Matter for BJJ Progression
 
 There is a saying in Brazilian Jiu-Jitsu that you cannot learn to swim on dry land. No matter how many instructional videos you watch, how many books you read, or how carefully you study technique breakdowns, your development as a grappler depends almost entirely on the people you train with.
@@ -118,6 +120,7 @@ Finding the right training partners transforms your BJJ journey from a solo grin
     readTime: '8 min read',
     sport: 'General',
     tags: ['open mat', 'etiquette', 'bjj', 'mma', 'gym culture'],
+    relatedGear: [2, 6, 5, 1],
     content: `## Why Open Mat Etiquette Matters
 
 Open mats are sacred ground in combat sports. Unlike structured classes where an instructor controls the pace, intensity, and pairings, open mats are self-governed spaces where practitioners from different gyms, skill levels, and backgrounds come together to train. The culture that makes these sessions work is maintained by a set of unwritten rules that every experienced martial artist follows instinctively.
@@ -212,6 +215,7 @@ If you are looking for open mat sessions, local gyms, or training partners in yo
     readTime: '10 min read',
     sport: 'MMA',
     tags: ['mma', 'sparring', 'safety', 'beginner guide', 'gear'],
+    relatedGear: [1, 3, 5, 8],
     content: `## Why Safety Is the Foundation of MMA Training
 
 Mixed martial arts is one of the most demanding combat sports in the world, combining striking, grappling, clinch work, and ground-and-pound into a single discipline. That complexity makes sparring essential for development but also introduces more variables that can lead to injury if participants are not careful.
@@ -346,6 +350,7 @@ For more on building safe, productive training relationships, read our guide on 
     readTime: '9 min read',
     sport: 'Wrestling',
     tags: ['wrestling', 'training partners', 'drilling', 'weight class'],
+    relatedGear: [7, 3, 5],
     content: `## Why Wrestling Partners Are Uniquely Important
 
 Wrestling is built on repetition. A wrestler might drill a single double-leg takedown ten thousand times before it becomes instinctive, and every one of those repetitions requires a partner. Unlike sports where you can practice alone with a heavy bag, a shadow routine, or a wall drill, wrestling technique development is almost entirely dependent on having another human body to work with.
@@ -456,6 +461,7 @@ Remember that training partnerships are mutual. You are not doing your partner a
     readTime: '10 min read',
     sport: 'General',
     tags: ['gym', 'beginner guide', 'bjj', 'mma', 'boxing', 'wrestling'],
+    relatedGear: [1, 2, 4, 5, 7],
     content: `## Why Your Gym Choice Matters More Than You Think
 
 Choosing a combat sports gym is one of the most impactful decisions you will make as a martial artist. The gym you select determines your coaches, your training partners, your exposure to techniques and styles, your injury risk, and ultimately your progression in the sport.

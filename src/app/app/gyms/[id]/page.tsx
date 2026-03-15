@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, MapPin, Clock, Shield, Phone, Mail, Calendar, Star,
   Lock, Loader2, CheckCircle, Dumbbell, Globe, ChevronDown, ChevronUp,
-  UserPlus, LogIn, Tag, Megaphone, Heart
+  UserPlus, LogIn, Tag, Megaphone, Heart, Crown, Award, ExternalLink
 } from 'lucide-react'
 import api, { GymDetail, GymSession, GymMembership, GymPromotion, isPremiumPlan } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
@@ -17,7 +17,7 @@ import ReportButton from '@/components/report-button'
 export default function GymDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const { subscription } = useAuth()
+  const { user, subscription } = useAuth()
   const toast = useToast()
   const [gym, setGym] = useState<GymDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -31,6 +31,8 @@ export default function GymDetailPage() {
   const [checkingIn, setCheckingIn] = useState(false)
   const [promotions, setPromotions] = useState<GymPromotion[]>([])
   const [isFavorited, setIsFavorited] = useState(false)
+  const [claimingGym, setClaimingGym] = useState(false)
+  const [upgrading, setUpgrading] = useState(false)
 
   const gymId = Number(params.id)
   const isPremium = isPremiumPlan(subscription?.plan)
@@ -181,7 +183,22 @@ export default function GymDetailPage() {
                 >
                   <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
                 </button>
-                {gym.verified && (
+                {gym.partnership_tier === 'partner' && (
+                  <span className="bg-purple-500/20 text-purple-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1">
+                    <Crown className="w-3 h-3" /> Partner
+                  </span>
+                )}
+                {gym.partnership_tier === 'featured' && (
+                  <span className="bg-yellow-500/20 text-yellow-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-current" /> Featured
+                  </span>
+                )}
+                {gym.partnership_tier === 'verified' && (
+                  <span className="bg-blue-500/20 text-blue-400 text-xs px-3 py-1.5 rounded-lg flex items-center gap-1">
+                    <Shield className="w-3 h-3" /> Verified
+                  </span>
+                )}
+                {gym.verified && !gym.partnership_tier?.match(/verified|featured|partner/) && (
                   <span className="bg-accent/20 text-accent text-xs px-3 py-1.5 rounded-lg flex items-center gap-1">
                     <Shield className="w-3 h-3" /> Verified
                   </span>
@@ -271,6 +288,139 @@ export default function GymDetailPage() {
           <Dumbbell className="w-4 h-4" /> Log Training
         </Link>
       </div>
+
+      {/* Gym Partnership - Claim / Upgrade */}
+      {user && !gym.claimed_by && (
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="font-heading text-lg text-white mb-2">Own this gym?</h3>
+          <p className="text-text-secondary text-sm mb-4">
+            Claim this listing to update information, respond to reviews, and access partnership features.
+          </p>
+          <button
+            onClick={async () => {
+              setClaimingGym(true)
+              try {
+                await api.claimGym(gymId)
+                toast.success('Gym claimed! You can now manage this listing.')
+                const data = await api.getGymDetail(gymId)
+                setGym(data.gym)
+              } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : 'Failed to claim gym'
+                toast.error(message)
+              } finally {
+                setClaimingGym(false)
+              }
+            }}
+            disabled={claimingGym}
+            className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-heading hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {claimingGym ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />}
+            {claimingGym ? 'Claiming...' : 'CLAIM THIS GYM'}
+          </button>
+        </div>
+      )}
+
+      {user && gym.claimed_by === user.id && gym.partnership_tier !== 'partner' && (
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="font-heading text-lg text-white mb-2">UPGRADE YOUR GYM</h3>
+          <p className="text-text-secondary text-sm mb-4">
+            Boost visibility and attract more members with a partnership tier.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {gym.partnership_tier !== 'verified' && gym.partnership_tier !== 'featured' && (
+              <button
+                onClick={async () => {
+                  setUpgrading(true)
+                  try {
+                    const data = await api.upgradeGym(gymId, 'verified')
+                    if (data.url) window.location.href = data.url
+                  } catch (err: unknown) {
+                    toast.error(err instanceof Error ? err.message : 'Failed')
+                  } finally { setUpgrading(false) }
+                }}
+                disabled={upgrading}
+                className="border border-blue-500/30 bg-blue-500/10 rounded-lg p-4 text-left hover:border-blue-500/60 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-4 h-4 text-blue-400" />
+                  <span className="text-blue-400 font-heading text-sm">VERIFIED</span>
+                </div>
+                <p className="text-white font-heading text-lg">$29/mo</p>
+                <p className="text-text-secondary text-xs mt-1">Blue badge, priority support</p>
+              </button>
+            )}
+            {gym.partnership_tier !== 'featured' && (
+              <button
+                onClick={async () => {
+                  setUpgrading(true)
+                  try {
+                    const data = await api.upgradeGym(gymId, 'featured')
+                    if (data.url) window.location.href = data.url
+                  } catch (err: unknown) {
+                    toast.error(err instanceof Error ? err.message : 'Failed')
+                  } finally { setUpgrading(false) }
+                }}
+                disabled={upgrading}
+                className="border border-yellow-500/30 bg-yellow-500/10 rounded-lg p-4 text-left hover:border-yellow-500/60 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                  <span className="text-yellow-400 font-heading text-sm">FEATURED</span>
+                </div>
+                <p className="text-white font-heading text-lg">$99/mo</p>
+                <p className="text-text-secondary text-xs mt-1">Gold badge, top placement</p>
+              </button>
+            )}
+            <button
+              onClick={async () => {
+                setUpgrading(true)
+                try {
+                  const data = await api.upgradeGym(gymId, 'partner')
+                  if (data.url) window.location.href = data.url
+                } catch (err: unknown) {
+                  toast.error(err instanceof Error ? err.message : 'Failed')
+                } finally { setUpgrading(false) }
+              }}
+              disabled={upgrading}
+              className="border border-purple-500/30 bg-purple-500/10 rounded-lg p-4 text-left hover:border-purple-500/60 transition-colors"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Crown className="w-4 h-4 text-purple-400" />
+                <span className="text-purple-400 font-heading text-sm">PARTNER</span>
+              </div>
+              <p className="text-white font-heading text-lg">$199/mo</p>
+              <p className="text-text-secondary text-xs mt-1">Purple badge, full features</p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Gym website & contact (for claimed gyms) */}
+      {(gym.website_url || gym.lead_email || gym.lead_phone || gym.logo_url) && (
+        <div className="bg-surface border border-border rounded-xl p-5">
+          <h3 className="text-text-secondary text-sm font-medium mb-3">GYM INFO</h3>
+          <div className="flex flex-wrap gap-4 text-sm">
+            {gym.website_url && (
+              <a href={gym.website_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
+                <ExternalLink className="w-4 h-4" />
+                Website
+              </a>
+            )}
+            {gym.lead_email && (
+              <a href={`mailto:${gym.lead_email}`} className="flex items-center gap-1.5 text-text-secondary hover:text-white">
+                <Mail className="w-4 h-4" />
+                {gym.lead_email}
+              </a>
+            )}
+            {gym.lead_phone && (
+              <a href={`tel:${gym.lead_phone}`} className="flex items-center gap-1.5 text-text-secondary hover:text-white">
+                <Phone className="w-4 h-4" />
+                {gym.lead_phone}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Active Promotions */}
       {promotions.length > 0 && (

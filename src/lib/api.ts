@@ -1002,6 +1002,109 @@ class ApiClient {
     return this.request<{ ok: boolean; badges: (UserBadge & { display_name: string; email: string })[] }>('/api/admin/badges');
   }
 
+  // Gym Partnership
+  async claimGym(gymId: number) {
+    return this.request<{ ok: boolean; message: string }>(`/api/gyms/${gymId}/claim`, { method: 'POST' });
+  }
+
+  async upgradeGym(gymId: number, tier: 'verified' | 'featured' | 'partner') {
+    return this.request<{ ok: boolean; url: string; session_id: string }>(`/api/gyms/${gymId}/upgrade`, {
+      method: 'POST',
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  // Coaching Marketplace
+  async createCoachingListing(data: CoachingListingCreate) {
+    return this.request<{ ok: boolean; listing_id: number; message: string }>('/api/coaching', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCoachingListings(params?: { sport?: string; session_type?: string; min_price?: number; max_price?: number; page?: number }) {
+    const query = new URLSearchParams();
+    if (params?.sport) query.set('sport', params.sport);
+    if (params?.session_type) query.set('session_type', params.session_type);
+    if (params?.min_price) query.set('min_price', String(params.min_price));
+    if (params?.max_price) query.set('max_price', String(params.max_price));
+    if (params?.page) query.set('page', String(params.page));
+    const qs = query.toString();
+    return this.request<{ ok: boolean; listings: CoachingListing[]; page: number; total: number }>(`/api/coaching${qs ? '?' + qs : ''}`);
+  }
+
+  async getCoachingListing(id: number) {
+    return this.request<{ ok: boolean; listing: CoachingListingDetail }>(`/api/coaching/${id}`);
+  }
+
+  async updateCoachingListing(id: number, data: Partial<CoachingListingCreate>) {
+    return this.request<{ ok: boolean; message: string }>(`/api/coaching/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCoachingListing(id: number) {
+    return this.request<{ ok: boolean; message: string }>(`/api/coaching/${id}`, { method: 'DELETE' });
+  }
+
+  async inquireCoachingListing(id: number, message: string) {
+    return this.request<{ ok: boolean; message: string }>(`/api/coaching/${id}/inquire`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  async getMyCoachingListings() {
+    return this.request<{ ok: boolean; listings: CoachingListingMine[] }>('/api/coaching/mine');
+  }
+
+  // Stripe Connect
+  async startConnectOnboarding() {
+    return this.request<{ ok: boolean; url: string }>('/api/connect/onboard', { method: 'POST' });
+  }
+
+  async getConnectStatus() {
+    return this.request<{ ok: boolean } & ConnectStatus>('/api/connect/status');
+  }
+
+  async getConnectDashboard() {
+    return this.request<{ ok: boolean; url: string }>('/api/connect/dashboard', { method: 'POST' });
+  }
+
+  // Coaching Bookings
+  async bookCoachingSession(listingId: number) {
+    return this.request<{ ok: boolean; url: string; booking_id: number }>(`/api/coaching/${listingId}/book`, { method: 'POST' });
+  }
+
+  async bookOffPlatform(listingId: number, data: { session_date?: string; notes?: string }) {
+    return this.request<{ ok: boolean; booking_id: number; message: string; disclaimer: string }>(`/api/coaching/${listingId}/book-offplatform`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMyBookings(role: 'student' | 'coach') {
+    return this.request<{ ok: boolean; bookings: CoachingBooking[] }>(`/api/coaching/bookings?role=${role}`);
+  }
+
+  async updateBooking(id: number, data: { status: string }) {
+    return this.request<{ ok: boolean; message: string }>(`/api/coaching/bookings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Affiliate Links
+  async getAffiliateLinks(category?: string) {
+    const qs = category ? `?category=${category}` : '';
+    return this.request<{ ok: boolean; links: AffiliateLink[]; grouped: Record<string, AffiliateLink[]> }>(`/api/affiliates${qs}`);
+  }
+
+  async trackAffiliateClick(id: number) {
+    return this.request<{ ok: boolean; url: string }>(`/api/affiliates/${id}/click`, { method: 'POST' });
+  }
+
   async adminResolveBadge(id: number, data: { status: 'verified' | 'rejected'; notes?: string }) {
     return this.request<{ ok: boolean; message: string }>(`/api/admin/badges/${id}`, {
       method: 'PATCH',
@@ -1121,6 +1224,12 @@ export interface Gym {
   rating: number;
   review_count: number;
   price: string;
+  partnership_tier?: string;
+  logo_url?: string | null;
+  website_url?: string | null;
+  lead_email?: string | null;
+  lead_phone?: string | null;
+  claimed_by?: number | null;
 }
 
 export interface GymSession {
@@ -1708,6 +1817,113 @@ export interface BadgeRequest {
   year?: number;
   evidence_url?: string;
   evidence_notes?: string;
+}
+
+// ─── Coaching & Affiliate Interfaces ─────────────────────────────────────────
+
+export interface CoachingListingCreate {
+  sport: string;
+  title: string;
+  description: string;
+  session_type: 'private' | 'semi_private' | 'group' | 'online';
+  duration_minutes?: number;
+  price_cents: number;
+  location?: string;
+  gym_id?: number;
+  max_students?: number;
+  experience_years?: number;
+  payment_methods?: string;
+}
+
+export interface CoachingListing {
+  id: number;
+  coach_id: number;
+  coach_name: string;
+  coach_avatar: string;
+  coach_role: string;
+  sport: string;
+  title: string;
+  description: string;
+  session_type: string;
+  duration_minutes: number;
+  price_cents: number;
+  currency: string;
+  location: string | null;
+  gym_id: number | null;
+  max_students: number;
+  experience_years: number | null;
+  payment_methods: string;
+  inquiry_count: number;
+  created_at: string;
+}
+
+export interface CoachingListingDetail extends CoachingListing {
+  coach_city: string;
+  coach_connect_enabled: boolean;
+  is_active: number;
+  updated_at: string;
+}
+
+export interface CoachingListingMine {
+  id: number;
+  sport: string;
+  title: string;
+  description: string;
+  session_type: string;
+  duration_minutes: number;
+  price_cents: number;
+  currency: string;
+  location: string | null;
+  gym_id: number | null;
+  is_active: number;
+  max_students: number;
+  experience_years: number | null;
+  payment_methods: string;
+  inquiry_count: number;
+  pending_inquiries: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConnectStatus {
+  connected: boolean;
+  onboarded: boolean;
+  charges_enabled: boolean;
+}
+
+export interface CoachingBooking {
+  id: number;
+  listing_id: number;
+  coach_id: number;
+  student_id: number;
+  listing_title: string;
+  session_type: string;
+  duration_minutes: number;
+  coach_name?: string;
+  coach_avatar?: string;
+  student_name?: string;
+  student_avatar?: string;
+  stripe_payment_intent: string | null;
+  stripe_checkout_session: string | null;
+  amount_cents: number;
+  platform_fee_cents: number;
+  coach_payout_cents: number;
+  currency: string;
+  status: 'pending' | 'paid' | 'completed' | 'cancelled' | 'refunded' | 'disputed';
+  payment_method: 'stripe' | 'off_platform';
+  session_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AffiliateLink {
+  id: number;
+  name: string;
+  brand: string;
+  url: string;
+  category: string;
+  clicks: number;
 }
 
 /** Check if a subscription plan grants premium access */

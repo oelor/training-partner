@@ -1,8 +1,10 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Users, Calendar, Clock, ChevronRight, ChevronLeft, Shield, BookOpen } from 'lucide-react'
+import { Users, Calendar, Clock, ChevronRight, ChevronLeft, Shield, BookOpen, ShoppingBag } from 'lucide-react'
 import { getAllPosts, getPostBySlug, type BlogPost } from '@/lib/blog'
+import { GearProductCard } from '@/app/gear/gear-product-card'
+import { getGearByIds } from '@/lib/gear-products'
 
 const SITE_URL = 'https://trainingpartner.app'
 
@@ -350,6 +352,27 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
                   </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Recommended Gear */}
+          {post.relatedGear && post.relatedGear.length > 0 && (
+            <div className="mt-12 pt-8 border-t border-border">
+              <h2 className="font-heading text-2xl text-white mb-2 flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-primary" />
+                RECOMMENDED GEAR
+              </h2>
+              <p className="text-text-secondary text-sm mb-6">
+                Equipment we recommend for the training discussed in this article.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {getGearByIds(post.relatedGear).map(product => (
+                  <GearProductCard key={product.id} product={product} />
+                ))}
+              </div>
+              <p className="text-text-secondary text-xs mt-4">
+                Training Partner earns a small commission on purchases made through these links.
+              </p>
             </div>
           )}
 
