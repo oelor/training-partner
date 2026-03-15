@@ -14,9 +14,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticPages = [
     { url: `${BASE_URL}`, lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 1 },
     { url: `${BASE_URL}/partners`, lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 0.9 },
+    { url: `${BASE_URL}/blog`, lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 0.8 },
+    { url: `${BASE_URL}/gyms`, lastModified: new Date(), changeFrequency: 'weekly' as const, priority: 0.8 },
     { url: `${BASE_URL}/contact`, lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.4 },
     { url: `${BASE_URL}/privacy`, lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.3 },
     { url: `${BASE_URL}/terms`, lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.3 },
+    { url: `${BASE_URL}/dmca`, lastModified: new Date(), changeFrequency: 'monthly' as const, priority: 0.3 },
     // Auth pages excluded — they have robots noindex metadata
   ]
 

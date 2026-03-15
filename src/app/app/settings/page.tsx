@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing } from 'lucide-react'
+import { User, Bell, Shield, CreditCard, HelpCircle, LogOut, Check, Crown, Mail, CheckCircle, Loader2, AlertTriangle, X, Instagram, ExternalLink, Upload, Phone, Heart, Ban, Link2, BellRing, Download } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import api, { isPremiumPlan, IdentityVerification, BlockedUser, IntegrationProvider } from '@/lib/api'
 import { useToast } from '@/components/toast'
@@ -52,6 +52,10 @@ export default function SettingsPage() {
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([])
   const [blocksLoading, setBlocksLoading] = useState(true)
   const [unblockingId, setUnblockingId] = useState<number | null>(null)
+
+  // Data Export state
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
 
   // Integrations state
   const [integrations, setIntegrations] = useState<IntegrationProvider[]>([])
@@ -209,6 +213,30 @@ export default function SettingsPage() {
       setDeleting(false)
     }
   }
+  const handleExportData = async () => {
+    setExporting(true)
+    setExportError('')
+    try {
+      const data = await api.exportMyData()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `training-partner-data-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast.success('Data exported successfully')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to export data'
+      setExportError(message)
+      toast.error(message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const [resendingVerification, setResendingVerification] = useState(false)
   const [verificationSent, setVerificationSent] = useState(false)
 
@@ -402,6 +430,23 @@ export default function SettingsPage() {
                     )}
                   </div>
                 </div>
+                <div className="flex items-center justify-between py-4 border-b border-border">
+                  <div>
+                    <div className="text-white font-medium">Download My Data</div>
+                    <div className="text-text-secondary text-sm">Export all your data as a JSON file (limit: once per 24 hours)</div>
+                  </div>
+                  <button
+                    onClick={handleExportData}
+                    disabled={exporting}
+                    className="inline-flex items-center gap-1.5 text-primary text-sm hover:underline disabled:opacity-50"
+                  >
+                    {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {exporting ? 'Exporting...' : 'Download'}
+                  </button>
+                </div>
+                {exportError && (
+                  <div className="text-red-400 text-sm py-1">{exportError}</div>
+                )}
                 <div className="flex items-center justify-between py-4">
                   <div>
                     <div className="text-white font-medium">Delete Account</div>

@@ -1,6 +1,6 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
-import { Users, MapPin, ArrowRight, Shield, Star, Zap, CheckCircle } from 'lucide-react'
+import { Users, MapPin, ArrowRight, Shield, Star, Zap, CheckCircle, HelpCircle } from 'lucide-react'
 
 const sports: Record<string, { name: string; description: string; benefits: string[] }> = {
   wrestling: {
@@ -234,6 +234,40 @@ const SPORT_CONTENT: Record<string, SportContent> = {
   },
 }
 
+const relatedSports: Record<string, string[]> = {
+  wrestling: ['bjj', 'mma', 'judo', 'sambo'],
+  mma: ['bjj', 'boxing', 'wrestling', 'muay-thai'],
+  bjj: ['wrestling', 'judo', 'mma', 'sambo'],
+  boxing: ['mma', 'kickboxing', 'muay-thai'],
+  kickboxing: ['boxing', 'muay-thai', 'mma', 'karate'],
+  'muay-thai': ['kickboxing', 'boxing', 'mma'],
+  judo: ['wrestling', 'bjj', 'sambo'],
+  karate: ['kickboxing', 'mma', 'judo'],
+  sambo: ['wrestling', 'bjj', 'judo', 'mma'],
+}
+
+function getSportFaqs(sportName: string): { question: string; answer: string }[] {
+  const sportLower = sportName.toLowerCase()
+  return [
+    {
+      question: `How do I find ${sportLower} training partners near me?`,
+      answer: `Create a free profile on Training Partner, select ${sportName} as your sport, and set your skill level and weight class. The matching algorithm will show you compatible ${sportLower} athletes in your area. You can message potential partners, coordinate schedules, and start training together — all for free.`,
+    },
+    {
+      question: `What skill level do I need to train ${sportLower}?`,
+      answer: `You can join Training Partner at any skill level, from complete beginner to professional competitor. The platform matches you with athletes at a similar experience level, so you will always find partners who are appropriate for your current abilities. Many gyms and training partners welcome beginners and enjoy helping new athletes develop their skills.`,
+    },
+    {
+      question: `Is Training Partner free for ${sportLower} athletes?`,
+      answer: `Yes, Training Partner is completely free to join and use. You can create a profile, browse matches, message training partners, and coordinate sessions at no cost. Optional premium features include verified badges, boosted profiles, and advanced filters, but the core functionality is free forever.`,
+    },
+    {
+      question: `How do I stay safe when meeting a new ${sportLower} training partner?`,
+      answer: `Always meet new training partners at a legitimate gym or training facility — never at a private location for your first session. Communicate about intensity levels, injuries, and expectations before training. Start with a lighter technical session to build trust. Training Partner also offers identity verification for premium members, adding an extra layer of security.`,
+    },
+  ]
+}
+
 const popularCities = [
   'new-york', 'los-angeles', 'chicago', 'houston', 'phoenix',
   'san-antonio', 'san-diego', 'dallas', 'san-francisco', 'austin',
@@ -273,18 +307,36 @@ export default async function SportPage({ params }: { params: Promise<{ sport: s
   const info = sports[sport]
   const content = SPORT_CONTENT[sport]
 
+  const faqs = info ? getSportFaqs(info.name) : []
+  const related = relatedSports[sport] || []
+
   const jsonLd = info ? {
     '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: `Find ${info.name} Training Partners`,
-    description: info.description,
-    url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'}/partners/${sport}`,
-    isPartOf: { '@id': `${process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'}/#website` },
-    about: {
-      '@type': 'SportsOrganization',
-      name: `${info.name} Training Partners`,
-      sport: info.name,
-    },
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: `Find ${info.name} Training Partners`,
+        description: info.description,
+        url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'}/partners/${sport}`,
+        isPartOf: { '@id': `${process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'}/#website` },
+        about: {
+          '@type': 'SportsOrganization',
+          name: `${info.name} Training Partners`,
+          sport: info.name,
+        },
+      },
+      {
+        '@type': 'FAQPage',
+        mainEntity: faqs.map(faq => ({
+          '@type': 'Question',
+          name: faq.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: faq.answer,
+          },
+        })),
+      },
+    ],
   } : null
 
   if (!info) {
@@ -440,6 +492,60 @@ export default async function SportPage({ params }: { params: Promise<{ sport: s
             </div>
           </div>
         </section>
+
+        {/* Related Sports */}
+        {related.length > 0 && (
+          <section className="py-16 px-6 bg-surface border-y border-border">
+            <div className="max-w-4xl mx-auto">
+              <h2 className="font-heading text-2xl text-white mb-8 text-center">
+                RELATED SPORTS
+              </h2>
+              <p className="text-text-secondary text-center mb-8">
+                Many {info.name.toLowerCase()} athletes cross-train in complementary combat sports. Find training partners across multiple disciplines.
+              </p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {related.map(key => {
+                  const relatedInfo = sports[key]
+                  if (!relatedInfo) return null
+                  return (
+                    <Link
+                      key={key}
+                      href={`/partners/${key}`}
+                      className="bg-background border border-border rounded-lg px-4 py-3 text-text-secondary hover:text-white hover:border-primary transition-colors text-sm flex items-center gap-2"
+                    >
+                      <Shield className="w-4 h-4 shrink-0 text-primary" />
+                      {relatedInfo.name}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* FAQs */}
+        {faqs.length > 0 && (
+          <section className="py-16 px-6">
+            <div className="max-w-4xl mx-auto">
+              <h2 className="font-heading text-2xl text-white mb-8 text-center">
+                FREQUENTLY ASKED QUESTIONS ABOUT {info.name.toUpperCase()} TRAINING
+              </h2>
+              <div className="space-y-6">
+                {faqs.map((faq, i) => (
+                  <div key={i} className="bg-surface border border-border rounded-xl p-6">
+                    <h3 className="flex items-start gap-3 text-white font-medium mb-3">
+                      <HelpCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      {faq.question}
+                    </h3>
+                    <p className="text-text-secondary leading-relaxed pl-8">
+                      {faq.answer}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* CTA */}
         <section className="py-16 px-6 bg-primary/10 border-t border-border">

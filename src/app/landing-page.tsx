@@ -162,7 +162,7 @@ export default function LandingPage() {
             </div>
 
             <h1 className="font-heading text-5xl sm:text-6xl lg:text-7xl text-white mb-6 animate-slide-up">
-              NEVER TRAIN <span className="gradient-text">ALONE</span> AGAIN
+              FIND YOUR PERFECT <span className="gradient-text">SPARRING PARTNER</span> NEAR YOU
             </h1>
 
             <p className="text-xl text-text-secondary max-w-2xl mx-auto mb-10 animate-slide-up delay-100">

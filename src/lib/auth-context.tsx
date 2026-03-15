@@ -26,7 +26,7 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>
-  register: (name: string, email: string, password: string, sport?: string, turnstileToken?: string) => Promise<void>
+  register: (name: string, email: string, password: string, sport?: string, turnstileToken?: string, dateOfBirth?: string) => Promise<void>
   googleLogin: (credential: string) => Promise<{ isNewUser: boolean }>
   logout: () => void
   refreshUser: () => Promise<void>
@@ -99,10 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const register = async (name: string, email: string, password: string, sport?: string, turnstileToken?: string) => {
+  const register = async (name: string, email: string, password: string, sport?: string, turnstileToken?: string, dateOfBirth?: string) => {
     setState(s => ({ ...s, loading: true, error: null }))
     try {
-      const data = await api.register({ name, email, password, sport, turnstile_token: turnstileToken })
+      const data = await api.register({ name, email, password, sport, turnstile_token: turnstileToken, date_of_birth: dateOfBirth })
       setAuthCookie()
       trackSignup('email', sport)
       setState({

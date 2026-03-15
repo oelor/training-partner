@@ -87,7 +87,7 @@ class ApiClient {
   }
 
   // Auth
-  async register(data: { name: string; email: string; password: string; sport?: string; turnstile_token?: string }) {
+  async register(data: { name: string; email: string; password: string; sport?: string; turnstile_token?: string; date_of_birth?: string }) {
     const res = await this.request<{ ok: boolean; token: string; user: User }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -148,6 +148,11 @@ class ApiClient {
 
   async resendVerification() {
     return this.request<{ ok: boolean }>('/api/auth/resend-verification', { method: 'POST' })
+  }
+
+  // Data Export
+  async exportMyData() {
+    return this.request<{ exported_at: string; user_id: number; data: Record<string, unknown> }>('/api/account/export')
   }
 
   // Account Deletion

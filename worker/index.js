@@ -99,6 +99,9 @@ function corsJson(data, init = {}, request, env) {
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   headers.set('X-XSS-Protection', '0');
+  headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://api.stripe.com https://*.posthog.com https://us.i.posthog.com; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'");
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self)');
   const cors = corsHeaders(origin, env);
   for (const [k, v] of Object.entries(cors)) headers.set(k, v);
   return new Response(JSON.stringify(data), { ...init, headers });
@@ -519,6 +522,7 @@ async function ensureFullSchema(env) {
       'ALTER TABLE users ADD COLUMN instagram_username TEXT',
       'ALTER TABLE users ADD COLUMN verified INTEGER NOT NULL DEFAULT 0',
       'ALTER TABLE users ADD COLUMN date_of_birth TEXT',
+      'ALTER TABLE users ADD COLUMN is_minor INTEGER DEFAULT 0',
       'ALTER TABLE users ADD COLUMN emergency_contact_name TEXT',
       'ALTER TABLE users ADD COLUMN emergency_contact_phone TEXT',
       'ALTER TABLE users ADD COLUMN emergency_contact_relation TEXT',
@@ -628,6 +632,7 @@ async function handleRegister(request, env) {
   }
 
   // Validate date of birth (age gate)
+  let isMinor = 0;
   if (dateOfBirth) {
     const dob = new Date(dateOfBirth);
     if (isNaN(dob.getTime())) {
@@ -638,7 +643,10 @@ async function handleRegister(request, env) {
     const monthDiff = now.getMonth() - dob.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dob.getDate())) age--;
     if (age < 13) {
-      return corsJson({ ok: false, error: 'You must be at least 13 years old' }, { status: 400 }, request, env);
+      return corsJson({ ok: false, error: 'You must be at least 13 years old to use Training Partner' }, { status: 400 }, request, env);
+    }
+    if (age >= 13 && age < 18) {
+      isMinor = 1;
     }
   }
 
@@ -694,10 +702,11 @@ async function handleRegister(request, env) {
     }
   }
 
-  // Check if email already exists
+  // Check if email already exists — return same response to prevent enumeration
   const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
   if (existing) {
-    return corsJson({ ok: false, error: 'Email already registered' }, { status: 409 }, request, env);
+    // Silently skip — do not reveal that the email is already registered
+    return corsJson({ ok: true, message: 'Check your email to complete registration.' }, { status: 200 }, request, env);
   }
 
   const salt = generateSalt();
@@ -706,9 +715,9 @@ async function handleRegister(request, env) {
   const verificationToken = crypto.randomUUID();
 
   const result = await env.DB.prepare(`
-    INSERT INTO users (email, password_hash, password_salt, display_name, city, role, email_verified, verification_token, date_of_birth, created_at, updated_at)
-    VALUES (?, ?, ?, ?, '', 'athlete', 0, ?, ?, ?, ?)
-  `).bind(email, passwordHash, salt, name, verificationToken, dateOfBirth, now, now).run();
+    INSERT INTO users (email, password_hash, password_salt, display_name, city, role, email_verified, verification_token, date_of_birth, is_minor, created_at, updated_at)
+    VALUES (?, ?, ?, ?, '', 'athlete', 0, ?, ?, ?, ?, ?)
+  `).bind(email, passwordHash, salt, name, verificationToken, dateOfBirth, isMinor, now, now).run();
 
   const userId = result.meta.last_row_id;
 
@@ -732,14 +741,8 @@ async function handleRegister(request, env) {
     html: verificationEmailHtml(verifyUrl),
   });
 
-  // Generate JWT
-  const token = await createJWT({ userId, email, role: 'athlete' }, env.JWT_SECRET);
-
-  return corsJson({
-    ok: true,
-    token,
-    user: { id: userId, email, display_name: name, role: 'athlete', city: '', avatar_url: '', email_verified: 0 }
-  }, { status: 201 }, request, env);
+  // Return generic success message (same as duplicate case) to prevent enumeration
+  return corsJson({ ok: true, message: 'Check your email to complete registration.' }, { status: 200 }, request, env);
 }
 
 async function handleGoogleAuth(request, env) {
@@ -2179,6 +2182,100 @@ async function handleDeleteAccount(request, env) {
   } catch (e) {
     console.error('Account deletion error:', e);
     return corsJson({ ok: false, error: 'Failed to delete account' }, { status: 500 }, request, env);
+  }
+}
+
+// ─── Data Export Route ────────────────────────────────────────────────────────
+
+async function handleExportData(request, env) {
+  const user = await getUser(request, env);
+  if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  const userId = user.id;
+
+  // Rate limit: 1 export per 24 hours per user
+  const allowed = await checkRateLimit(env, `export:${userId}`, 1, 86400);
+  if (!allowed) {
+    return corsJson({ ok: false, error: 'You can only export your data once every 24 hours' }, { status: 429 }, request, env);
+  }
+
+  try {
+    // Fetch user profile (exclude password hash/salt)
+    const profile = await env.DB.prepare(
+      'SELECT id, email, display_name, avatar_url, city, role, email_verified, date_of_birth, is_minor, instagram_username, verified, emergency_contact_name, emergency_contact_phone, emergency_contact_relation, created_at, updated_at FROM users WHERE id = ?'
+    ).bind(userId).first();
+
+    // Fetch user_profiles
+    const userProfile = await env.DB.prepare(
+      'SELECT * FROM user_profiles WHERE user_id = ?'
+    ).bind(userId).first();
+
+    // Fetch reviews (gym_reviews by user)
+    const reviews = await env.DB.prepare(
+      'SELECT * FROM gym_reviews WHERE user_id = ?'
+    ).bind(userId).all();
+
+    // Fetch events created by user
+    const events = await env.DB.prepare(
+      'SELECT * FROM events WHERE creator_id = ?'
+    ).bind(userId).all();
+
+    // Fetch bookings by user
+    const bookings = await env.DB.prepare(
+      'SELECT * FROM bookings WHERE user_id = ?'
+    ).bind(userId).all();
+
+    // Fetch messages sent by user
+    const messages = await env.DB.prepare(
+      'SELECT id, receiver_id, content, read, created_at FROM messages WHERE sender_id = ?'
+    ).bind(userId).all();
+
+    // Fetch check-ins by user
+    const checkIns = await env.DB.prepare(
+      'SELECT * FROM checkins WHERE user_id = ?'
+    ).bind(userId).all();
+
+    // Fetch connected accounts / integrations
+    let connectedAccounts = { results: [] };
+    try {
+      connectedAccounts = await env.DB.prepare(
+        'SELECT * FROM connected_accounts WHERE user_id = ?'
+      ).bind(userId).all();
+    } catch {
+      // Table may not exist yet
+    }
+
+    // Fetch training logs
+    const trainingLogs = await env.DB.prepare(
+      'SELECT * FROM training_logs WHERE user_id = ?'
+    ).bind(userId).all();
+
+    // Fetch session ratings given
+    const ratings = await env.DB.prepare(
+      'SELECT * FROM session_ratings WHERE rater_id = ?'
+    ).bind(userId).all();
+
+    const exportData = {
+      exported_at: isoNow(),
+      user_id: userId,
+      data: {
+        profile: profile || null,
+        user_profile: userProfile || null,
+        reviews: reviews.results || [],
+        events: events.results || [],
+        bookings: bookings.results || [],
+        messages: messages.results || [],
+        check_ins: checkIns.results || [],
+        connected_accounts: connectedAccounts.results || [],
+        training_logs: trainingLogs.results || [],
+        ratings: ratings.results || [],
+      },
+    };
+
+    return corsJson(exportData, {}, request, env);
+  } catch (e) {
+    console.error('Data export error:', e);
+    return corsJson({ ok: false, error: 'Failed to export data' }, { status: 500 }, request, env);
   }
 }
 
@@ -4566,6 +4663,17 @@ async function handleGetLeaderboard(request, env) {
 async function handleCreateEvent(request, env) {
   const user = await requireAuth(request, env);
   if (!user) return corsJson({ ok: false, error: 'Unauthorized' }, { status: 401 }, request, env);
+
+  // Rate limit event creation
+  const eventIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+  if (checkIpRateLimit(eventIp, 'create_event', 10, 3600000)) {
+    return corsJson({ ok: false, error: 'Too many events created. Try again later.' }, { status: 429 }, request, env);
+  }
+  const userAllowed = await checkRateLimit(env, 'event:' + user.id, 5, 3600);
+  if (!userAllowed) {
+    return corsJson({ ok: false, error: 'Too many events created. Try again later.' }, { status: 429 }, request, env);
+  }
+
   const body = await readJson(request);
   if (!body) return corsJson({ ok: false, error: 'Invalid request body' }, { status: 400 }, request, env);
 
@@ -5752,6 +5860,24 @@ export default {
     // Probabilistic cleanup of expired rate limit entries (~1% of requests)
     if (Math.random() < 0.01) cleanupIpRateLimits();
 
+    // ── CSRF Protection: verify Origin/Referer for state-changing methods ──
+    const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+    const CSRF_EXEMPT_PATHS = ['/api/webhooks/', '/api/stripe', '/api/subscriptions/webhook'];
+    if (STATE_CHANGING_METHODS.has(method)) {
+      const isExempt = CSRF_EXEMPT_PATHS.some(p => path.startsWith(p));
+      if (!isExempt) {
+        const origin = request.headers.get('Origin') || '';
+        const referer = request.headers.get('Referer') || '';
+        let refererOrigin = '';
+        try { refererOrigin = referer ? new URL(referer).origin : ''; } catch {}
+        const validOrigin = origin ? isAllowedOrigin(origin, env) : false;
+        const validReferer = refererOrigin ? isAllowedOrigin(refererOrigin, env) : false;
+        if (!validOrigin && !validReferer) {
+          return corsJson({ ok: false, error: 'Forbidden: invalid origin' }, { status: 403 }, request, env);
+        }
+      }
+    }
+
     let tracked = false;
     try {
       // Initialize schema on first request
@@ -5856,6 +5982,7 @@ export default {
       if (path === '/api/report' && method === 'POST') return handleReportUser(request, env);
       if (path === '/api/upload-avatar' && method === 'POST') return handleUploadAvatar(request, env);
       if (path === '/api/account/delete' && method === 'POST') return handleDeleteAccount(request, env);
+      if (path === '/api/account/export' && method === 'GET') return handleExportData(request, env);
 
       // R2 image serving
       if (method === 'GET' && path.startsWith('/api/images/')) {

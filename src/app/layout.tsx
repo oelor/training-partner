@@ -1,15 +1,16 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Providers } from './providers'
+import CookieConsent from '@/components/cookie-consent'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://trainingpartner.app'),
   title: {
-    default: 'Training Partner - Find Your Perfect Sparring Partner',
+    default: 'Find Sparring Partners & Training Buddies Near You | Training Partner',
     template: '%s | Training Partner',
   },
-  description: 'Connect with compatible training partners in your area. Match by skill level, weight class, and training goals. Plus access exclusive open mat hours at partner gyms.',
-  keywords: 'wrestling, MMA, BJJ, boxing, training partner, sparring, combat sports, gym, open mat',
+  description: 'Find local sparring partners and training buddies for BJJ, MMA, wrestling, boxing, Muay Thai, judo, kickboxing and 50+ combat sports. Match by skill level, weight class, and training goals. Free to join.',
+  keywords: 'sparring partners, training buddies, combat sports, BJJ, MMA, wrestling, boxing, Muay Thai, judo, kickboxing, training partner, gym, open mat, martial arts',
   icons: {
     icon: '/favicon.svg',
     apple: '/icon.svg',
@@ -60,7 +61,7 @@ const jsonLd = {
       url: SITE_URL,
       logo: `${SITE_URL}/icon.svg`,
       description: 'Connect with compatible training partners in your area for combat sports.',
-      sameAs: [],
+      sameAs: [] as string[],
     },
     {
       '@type': 'WebSite',
@@ -86,6 +87,18 @@ const jsonLd = {
         priceCurrency: 'USD',
       },
     },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Training Partner',
+      operatingSystem: 'Web',
+      applicationCategory: 'SportsApplication',
+      offers: {
+        '@type': 'Offer',
+        price: '0.00',
+        priceCurrency: 'USD',
+      },
+      description: 'Find local sparring partners and training buddies for BJJ, MMA, wrestling, boxing and 50+ combat sports.',
+    },
   ],
 }
 
@@ -109,6 +122,7 @@ export default function RootLayout({
         <Providers>
           {children}
         </Providers>
+        <CookieConsent />
         {/* Cloudflare Web Analytics — free, privacy-first, no cookies */}
         {process.env.NEXT_PUBLIC_CF_BEACON_TOKEN && (
           <script

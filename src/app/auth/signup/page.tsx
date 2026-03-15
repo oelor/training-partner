@@ -52,7 +52,7 @@ export default function SignUpPage() {
     setError('')
 
     try {
-      await register(formData.name, formData.email, formData.password, formData.sport, turnstileToken || undefined)
+      await register(formData.name, formData.email, formData.password, formData.sport, turnstileToken || undefined, formData.date_of_birth || undefined)
       toast.success('Account created! Welcome to Training Partner.')
       router.push('/onboarding')
     } catch (err: unknown) {
@@ -68,6 +68,21 @@ export default function SignUpPage() {
     'Wrestling', 'MMA', 'BJJ', 'Boxing',
     'Kickboxing', 'Judo', 'Muay Thai', 'Karate', 'Other'
   ]
+
+  const updateDobNotice = (val: string) => {
+    setDobNotice('')
+    if (!val || val.startsWith('0000')) return
+    const dob = new Date(val + 'T00:00:00')
+    const today = new Date()
+    let age = today.getFullYear() - dob.getFullYear()
+    const monthDiff = today.getMonth() - dob.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+      age--
+    }
+    if (age >= 13 && age < 18) {
+      setDobNotice('Users under 18 require parental consent. Some features will be restricted.')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background bg-pattern flex items-center justify-center px-4 py-12 relative overflow-hidden">
@@ -168,33 +183,78 @@ export default function SignUpPage() {
           </div>
 
           <div>
-            <label htmlFor="dob" className="block text-text-secondary text-sm mb-2">Date of Birth</label>
-            <div className="relative">
-              <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-text-secondary" />
-              <input
-                id="dob"
-                type="date"
-                value={formData.date_of_birth}
+            <label className="block text-text-secondary text-sm mb-2">Date of Birth</label>
+            <div className="grid grid-cols-3 gap-2">
+              <select
+                aria-label="Month"
+                value={formData.date_of_birth ? new Date(formData.date_of_birth + 'T00:00:00').getMonth() + 1 : ''}
                 onChange={(e) => {
-                  const val = e.target.value
-                  setFormData({ ...formData, date_of_birth: val })
-                  setDobNotice('')
-                  if (val) {
-                    const dob = new Date(val)
-                    const today = new Date()
-                    let age = today.getFullYear() - dob.getFullYear()
-                    const monthDiff = today.getMonth() - dob.getMonth()
-                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-                      age--
-                    }
-                    if (age >= 13 && age < 18) {
-                      setDobNotice('Some features are restricted for users under 18')
-                    }
+                  const month = e.target.value
+                  if (!month) { setFormData({ ...formData, date_of_birth: '' }); setDobNotice(''); return }
+                  const parts = formData.date_of_birth ? formData.date_of_birth.split('-') : ['', '', '']
+                  const y = parts[0] || ''
+                  const d = parts[2] || ''
+                  const m = month.padStart(2, '0')
+                  if (y && d) {
+                    const val = `${y}-${m}-${d}`
+                    setFormData({ ...formData, date_of_birth: val })
+                    updateDobNotice(val)
+                  } else {
+                    setFormData({ ...formData, date_of_birth: `${y || '0000'}-${m}-${d || '01'}` })
+                    setDobNotice('')
                   }
                 }}
-                className="w-full bg-surface border border-border rounded-lg py-3 pl-11 pr-4 text-white focus:border-primary transition-colors"
+                className="bg-surface border border-border rounded-lg py-3 px-3 text-white focus:border-primary transition-colors"
                 required
-              />
+              >
+                <option value="">Month</option>
+                {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Day"
+                value={formData.date_of_birth ? parseInt(formData.date_of_birth.split('-')[2] || '') || '' : ''}
+                onChange={(e) => {
+                  const day = e.target.value
+                  if (!day) { return }
+                  const parts = formData.date_of_birth ? formData.date_of_birth.split('-') : ['', '', '']
+                  const y = parts[0] || '0000'
+                  const m = parts[1] || '01'
+                  const d = day.padStart(2, '0')
+                  const val = `${y}-${m}-${d}`
+                  setFormData({ ...formData, date_of_birth: val })
+                  if (y !== '0000') updateDobNotice(val)
+                }}
+                className="bg-surface border border-border rounded-lg py-3 px-3 text-white focus:border-primary transition-colors"
+                required
+              >
+                <option value="">Day</option>
+                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Year"
+                value={formData.date_of_birth ? parseInt(formData.date_of_birth.split('-')[0] || '') || '' : ''}
+                onChange={(e) => {
+                  const year = e.target.value
+                  if (!year) { return }
+                  const parts = formData.date_of_birth ? formData.date_of_birth.split('-') : ['', '', '']
+                  const m = parts[1] || '01'
+                  const d = parts[2] || '01'
+                  const val = `${year}-${m}-${d}`
+                  setFormData({ ...formData, date_of_birth: val })
+                  updateDobNotice(val)
+                }}
+                className="bg-surface border border-border rounded-lg py-3 px-3 text-white focus:border-primary transition-colors"
+                required
+              >
+                <option value="">Year</option>
+                {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
             </div>
             {dobNotice && (
               <div className="flex items-center gap-2 mt-2 text-yellow-400 text-sm">
