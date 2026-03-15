@@ -149,31 +149,15 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden min-h-[90vh] flex items-center">
-        {/* Background — dark gradient with radial glow */}
+        {/* Hero background -- visible silhouette atmosphere from hero-banner.webp */}
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900" />
-          {/* Radial brand glow behind center */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/8 rounded-full blur-[120px]" />
-          <div className="absolute top-1/3 left-1/3 w-[400px] h-[400px] bg-accent/5 rounded-full blur-[100px]" />
+          <div
+            className="absolute inset-0 bg-cover bg-no-repeat opacity-[0.30]"
+            style={{ backgroundImage: `url(${heroSrc})`, backgroundPosition: 'center 65%' }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/40 to-background" />
+          <div className="absolute inset-0 bg-gradient-to-r from-background/50 via-transparent to-background/50" />
         </div>
-
-        {/* Floating silhouettes — decorative, semi-transparent */}
-        <MuayThaiSilhouette
-          className="silhouette absolute left-[5%] top-[20%] w-40 md:w-56 text-white/[0.05] animate-float-slow z-0"
-          aria-hidden="true"
-        />
-        <WrestlingSilhouette
-          className="silhouette absolute right-[8%] top-[15%] w-48 md:w-64 text-white/[0.07] animate-float z-0"
-          aria-hidden="true"
-        />
-        <BJJSilhouette
-          className="silhouette absolute left-[15%] bottom-[10%] w-36 md:w-48 text-white/[0.04] animate-float-fast z-0 hidden md:block"
-          aria-hidden="true"
-        />
-        <BoxingSilhouette
-          className="silhouette absolute right-[12%] bottom-[18%] w-32 md:w-44 text-primary/[0.06] animate-float-slow z-0 hidden lg:block"
-          aria-hidden="true"
-        />
 
         <div className="max-w-7xl mx-auto relative z-10 w-full">
           <div className="text-center">
@@ -268,7 +252,7 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-surface relative overflow-hidden">
-        <MuayThaiSilhouette className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] text-white/[0.15] z-0" />
+        <MuayThaiSilhouette glow className="silhouette hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] opacity-[0.15] z-0" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -317,8 +301,10 @@ export default function LandingPage() {
       </section>
 
       {/* How It Works — 3 bold steps */}
-      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <WrestlingSilhouette glow className="silhouette hidden md:block absolute right-[5%] top-1/2 -translate-y-1/2 w-[400px] opacity-[0.10] z-0" />
+        <KickboxingSilhouette glow className="silhouette hidden lg:block absolute left-[3%] top-1/3 w-[300px] opacity-[0.08] z-0" />
+        <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
               HOW IT <span className="gradient-text">WORKS</span>
@@ -540,8 +526,8 @@ export default function LandingPage() {
 
       {/* Built For Athletes — Visual showcase */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <JudoSilhouette className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-96 text-primary/[0.15] z-0 -rotate-3" />
-        <BoxingSilhouette className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-80 text-primary/[0.15] z-0 rotate-3" />
+        <JudoSilhouette glow className="silhouette hidden md:block absolute left-4 lg:left-12 top-1/3 w-72 lg:w-96 opacity-[0.15] z-0 -rotate-3" />
+        <BoxingSilhouette glow className="silhouette hidden md:block absolute right-4 lg:right-12 top-1/4 w-64 lg:w-80 opacity-[0.15] z-0 rotate-3" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="font-heading text-4xl sm:text-5xl text-white mb-4">
@@ -613,7 +599,7 @@ export default function LandingPage() {
 
       {/* CTA Section with app mockup */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 bg-surface overflow-hidden">
-        <MMASilhouette className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-[28rem] text-white/[0.12] z-0" />
+        <MMASilhouette glow className="silhouette hidden md:block absolute left-1/4 top-1/2 -translate-y-1/2 w-80 lg:w-[28rem] opacity-[0.12] z-0" />
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid md:grid-cols-2 gap-12 items-center">
             {/* App mockup — CSS phone */}

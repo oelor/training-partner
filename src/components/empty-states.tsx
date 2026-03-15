@@ -61,7 +61,7 @@ export function NoMatches({
       ctaHref={ctaHref}
       className={className}
     >
-      <svg viewBox="0 0 200 200" className="w-48 h-48 text-text-secondary" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="w-48 h-48" fill="#FF6B35" aria-hidden="true">
         {/* Person looking around / searching */}
         <ellipse cx="100" cy="52" rx="14" ry="16" opacity="0.3" />
         {/* Torso */}
@@ -75,8 +75,8 @@ export function NoMatches({
         <path d="M 90 114 L 82 134 L 76 154 L 72 168 Q 70 174 74 176 L 82 176 Q 84 174 80 172 L 76 172 L 80 156 L 86 138 L 92 120 Z" opacity="0.3" />
         <path d="M 110 114 L 118 134 L 124 154 L 128 168 Q 130 174 126 176 L 118 176 Q 116 174 120 172 L 124 172 L 120 156 L 114 138 L 108 120 Z" opacity="0.3" />
         {/* Search circle accent */}
-        <circle cx="148" cy="44" r="18" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.15" />
-        <line x1="160" y1="56" x2="172" y2="68" stroke="currentColor" strokeWidth="3" opacity="0.15" strokeLinecap="round" />
+        <circle cx="148" cy="44" r="18" fill="none" stroke="#FF6B35" strokeWidth="3" opacity="0.25" />
+        <line x1="160" y1="56" x2="172" y2="68" stroke="#FF6B35" strokeWidth="3" opacity="0.25" strokeLinecap="round" />
       </svg>
     </EmptyStateWrapper>
   )
@@ -102,7 +102,7 @@ export function NoMessages({
       ctaHref={ctaHref}
       className={className}
     >
-      <svg viewBox="0 0 200 200" className="w-48 h-48 text-text-secondary" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="w-48 h-48" fill="#FF6B35" aria-hidden="true">
         {/* Left figure — facing left */}
         <ellipse cx="70" cy="60" rx="12" ry="14" opacity="0.25" />
         <path d="M 62 72 L 78 72 L 82 90 L 82 108 L 76 114 L 62 114 L 56 108 L 58 90 Z" opacity="0.25" />
@@ -116,12 +116,12 @@ export function NoMessages({
         <path d="M 122 114 L 118 134 L 116 154 L 114 168 Q 112 174 116 176 L 124 176 Z" opacity="0.25" />
         <path d="M 136 114 L 140 134 L 144 154 L 146 168 Q 148 174 144 176 L 136 176 Z" opacity="0.25" />
         {/* Speech bubble dots */}
-        <circle cx="46" cy="46" r="3" opacity="0.15" />
-        <circle cx="38" cy="40" r="2.5" opacity="0.12" />
-        <circle cx="32" cy="35" r="2" opacity="0.08" />
-        <circle cx="154" cy="46" r="3" opacity="0.15" />
-        <circle cx="162" cy="40" r="2.5" opacity="0.12" />
-        <circle cx="168" cy="35" r="2" opacity="0.08" />
+        <circle cx="46" cy="46" r="3" opacity="0.2" />
+        <circle cx="38" cy="40" r="2.5" opacity="0.15" />
+        <circle cx="32" cy="35" r="2" opacity="0.1" />
+        <circle cx="154" cy="46" r="3" opacity="0.2" />
+        <circle cx="162" cy="40" r="2.5" opacity="0.15" />
+        <circle cx="168" cy="35" r="2" opacity="0.1" />
       </svg>
     </EmptyStateWrapper>
   )
@@ -147,24 +147,24 @@ export function NoEvents({
       ctaHref={ctaHref}
       className={className}
     >
-      <svg viewBox="0 0 200 200" className="w-48 h-48 text-text-secondary" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="w-48 h-48" fill="#FF6B35" aria-hidden="true">
         {/* Empty mat / ring shape */}
-        <ellipse cx="100" cy="130" rx="70" ry="25" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.15" />
-        <ellipse cx="100" cy="130" rx="55" ry="20" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.1" />
+        <ellipse cx="100" cy="130" rx="70" ry="25" fill="none" stroke="#FF6B35" strokeWidth="2" opacity="0.2" />
+        <ellipse cx="100" cy="130" rx="55" ry="20" fill="none" stroke="#FF6B35" strokeWidth="1.5" opacity="0.15" />
         {/* Corner posts */}
-        <rect x="32" y="100" width="4" height="35" rx="2" opacity="0.15" />
-        <rect x="164" y="100" width="4" height="35" rx="2" opacity="0.15" />
+        <rect x="32" y="100" width="4" height="35" rx="2" opacity="0.2" />
+        <rect x="164" y="100" width="4" height="35" rx="2" opacity="0.2" />
         {/* Ropes */}
-        <path d="M 36 108 Q 100 98 168 108" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.1" />
-        <path d="M 36 118 Q 100 108 168 118" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.1" />
+        <path d="M 36 108 Q 100 98 168 108" fill="none" stroke="#FF6B35" strokeWidth="1.5" opacity="0.15" />
+        <path d="M 36 118 Q 100 108 168 118" fill="none" stroke="#FF6B35" strokeWidth="1.5" opacity="0.15" />
         {/* Calendar icon floating above */}
-        <rect x="80" y="48" width="40" height="36" rx="4" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.2" />
-        <line x1="80" y1="58" x2="120" y2="58" stroke="currentColor" strokeWidth="2" opacity="0.2" />
-        <line x1="90" y1="44" x2="90" y2="52" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.2" />
-        <line x1="110" y1="44" x2="110" y2="52" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.2" />
+        <rect x="80" y="48" width="40" height="36" rx="4" fill="none" stroke="#FF6B35" strokeWidth="2" opacity="0.25" />
+        <line x1="80" y1="58" x2="120" y2="58" stroke="#FF6B35" strokeWidth="2" opacity="0.25" />
+        <line x1="90" y1="44" x2="90" y2="52" stroke="#FF6B35" strokeWidth="2" strokeLinecap="round" opacity="0.25" />
+        <line x1="110" y1="44" x2="110" y2="52" stroke="#FF6B35" strokeWidth="2" strokeLinecap="round" opacity="0.25" />
         {/* Calendar X */}
-        <line x1="92" y1="66" x2="108" y2="78" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.15" />
-        <line x1="108" y1="66" x2="92" y2="78" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.15" />
+        <line x1="92" y1="66" x2="108" y2="78" stroke="#FF6B35" strokeWidth="2" strokeLinecap="round" opacity="0.2" />
+        <line x1="108" y1="66" x2="92" y2="78" stroke="#FF6B35" strokeWidth="2" strokeLinecap="round" opacity="0.2" />
       </svg>
     </EmptyStateWrapper>
   )
@@ -190,26 +190,26 @@ export function NoBookings({
       ctaHref={ctaHref}
       className={className}
     >
-      <svg viewBox="0 0 200 200" className="w-48 h-48 text-text-secondary" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="w-48 h-48" fill="#FF6B35" aria-hidden="true">
         {/* Person silhouette */}
         <ellipse cx="80" cy="60" rx="12" ry="14" opacity="0.25" />
         <path d="M 72 72 L 88 72 L 92 90 L 92 108 L 86 114 L 72 114 L 66 108 L 68 90 Z" opacity="0.25" />
         <path d="M 72 114 L 66 134 L 62 154 L 60 168 Q 58 174 62 176 L 70 176 Z" opacity="0.25" />
         <path d="M 86 114 L 90 134 L 94 154 L 96 168 Q 98 174 94 176 L 86 176 Z" opacity="0.25" />
         {/* Calendar beside person */}
-        <rect x="110" y="55" width="50" height="45" rx="5" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.2" />
-        <line x1="110" y1="68" x2="160" y2="68" stroke="currentColor" strokeWidth="2" opacity="0.2" />
-        <line x1="122" y1="50" x2="122" y2="60" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity="0.2" />
-        <line x1="148" y1="50" x2="148" y2="60" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" opacity="0.2" />
+        <rect x="110" y="55" width="50" height="45" rx="5" fill="none" stroke="#FF6B35" strokeWidth="2" opacity="0.25" />
+        <line x1="110" y1="68" x2="160" y2="68" stroke="#FF6B35" strokeWidth="2" opacity="0.25" />
+        <line x1="122" y1="50" x2="122" y2="60" stroke="#FF6B35" strokeWidth="2.5" strokeLinecap="round" opacity="0.25" />
+        <line x1="148" y1="50" x2="148" y2="60" stroke="#FF6B35" strokeWidth="2.5" strokeLinecap="round" opacity="0.25" />
         {/* Empty calendar rows */}
-        <rect x="118" y="74" width="8" height="6" rx="1" opacity="0.1" />
-        <rect x="131" y="74" width="8" height="6" rx="1" opacity="0.1" />
-        <rect x="144" y="74" width="8" height="6" rx="1" opacity="0.1" />
-        <rect x="118" y="84" width="8" height="6" rx="1" opacity="0.1" />
-        <rect x="131" y="84" width="8" height="6" rx="1" opacity="0.1" />
-        <rect x="144" y="84" width="8" height="6" rx="1" opacity="0.1" />
+        <rect x="118" y="74" width="8" height="6" rx="1" opacity="0.15" />
+        <rect x="131" y="74" width="8" height="6" rx="1" opacity="0.15" />
+        <rect x="144" y="74" width="8" height="6" rx="1" opacity="0.15" />
+        <rect x="118" y="84" width="8" height="6" rx="1" opacity="0.15" />
+        <rect x="131" y="84" width="8" height="6" rx="1" opacity="0.15" />
+        <rect x="144" y="84" width="8" height="6" rx="1" opacity="0.15" />
         {/* Arrow connecting person to calendar */}
-        <path d="M 92 85 L 106 80" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.15" strokeDasharray="4 3" />
+        <path d="M 92 85 L 106 80" fill="none" stroke="#FF6B35" strokeWidth="1.5" opacity="0.2" strokeDasharray="4 3" />
       </svg>
     </EmptyStateWrapper>
   )
@@ -235,7 +235,7 @@ export function NoTeams({
       ctaHref={ctaHref}
       className={className}
     >
-      <svg viewBox="0 0 200 200" className="w-48 h-48 text-text-secondary" fill="currentColor" aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="w-48 h-48" fill="#FF6B35" aria-hidden="true">
         {/* Scattered small figures */}
         {/* Figure 1 - top left */}
         <ellipse cx="50" cy="55" rx="8" ry="9" opacity="0.2" />
@@ -264,10 +264,10 @@ export function NoTeams({
         <path d="M 135 112 L 145 112 L 147 123 L 147 133 L 143 136 L 137 136 L 133 133 L 134 123 Z" opacity="0.12" />
 
         {/* Dashed connection lines */}
-        <line x1="58" y1="70" x2="92" y2="85" stroke="currentColor" strokeWidth="1" opacity="0.08" strokeDasharray="4 4" />
-        <line x1="108" y1="85" x2="142" y2="65" stroke="currentColor" strokeWidth="1" opacity="0.08" strokeDasharray="4 4" />
-        <line x1="96" y1="110" x2="68" y2="115" stroke="currentColor" strokeWidth="1" opacity="0.08" strokeDasharray="4 4" />
-        <line x1="108" y1="110" x2="133" y2="112" stroke="currentColor" strokeWidth="1" opacity="0.08" strokeDasharray="4 4" />
+        <line x1="58" y1="70" x2="92" y2="85" stroke="#FF6B35" strokeWidth="1" opacity="0.12" strokeDasharray="4 4" />
+        <line x1="108" y1="85" x2="142" y2="65" stroke="#FF6B35" strokeWidth="1" opacity="0.12" strokeDasharray="4 4" />
+        <line x1="96" y1="110" x2="68" y2="115" stroke="#FF6B35" strokeWidth="1" opacity="0.12" strokeDasharray="4 4" />
+        <line x1="108" y1="110" x2="133" y2="112" stroke="#FF6B35" strokeWidth="1" opacity="0.12" strokeDasharray="4 4" />
       </svg>
     </EmptyStateWrapper>
   )

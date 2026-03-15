@@ -9,19 +9,35 @@ import React from 'react'
 interface SilhouetteProps extends React.SVGProps<SVGSVGElement> {
   color?: string
   size?: number
+  glow?: boolean
+}
+
+/** Neon glow filter style applied when glow={true} */
+const neonGlowStyle: React.CSSProperties = {
+  filter: 'drop-shadow(0 0 8px rgba(255, 107, 53, 0.6)) drop-shadow(0 0 20px rgba(255, 107, 53, 0.3))',
+}
+
+/** Resolve fill color and optional glow style */
+function useGlowProps(glow: boolean | undefined, color: string) {
+  if (glow) {
+    return { fill: '#FF6B35', style: neonGlowStyle }
+  }
+  return { fill: color, style: undefined }
 }
 
 // ============================================================
 // BJJ — Two figures in ground grappling (guard/mount position)
 // ============================================================
-export function BJJSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function BJJSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -53,14 +69,16 @@ export const BJJGuardSilhouette = BJJSilhouette
 // ============================================================
 // Wrestling — Two figures in standing clinch / body lock throw
 // ============================================================
-export function WrestlingSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function WrestlingSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -93,14 +111,16 @@ export const WrestlerSilhouette = WrestlingSilhouette
 // ============================================================
 // Boxing — Single figure throwing a cross, gloves up
 // ============================================================
-export function BoxingSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function BoxingSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -133,14 +153,16 @@ export const BoxerSilhouette = BoxingSilhouette
 // ============================================================
 // MMA — Fighter in stance, checking kick / ready position
 // ============================================================
-export function MMASilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function MMASilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -177,14 +199,16 @@ export const MMAFighterSilhouette = MMASilhouette
 // ============================================================
 // Muay Thai — Throwing a high roundhouse kick, arms in guard
 // ============================================================
-export function MuayThaiSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function MuayThaiSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -215,14 +239,16 @@ export const MuayThaiKickSilhouette = MuayThaiSilhouette
 // ============================================================
 // Judo — Two figures, one throwing (hip throw / seoi nage)
 // ============================================================
-export function JudoSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function JudoSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -253,14 +279,16 @@ export const JudoThrowSilhouette = JudoSilhouette
 // ============================================================
 // Kickboxing — Single figure throwing a side kick
 // ============================================================
-export function KickboxingSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function KickboxingSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -289,14 +317,16 @@ export function KickboxingSilhouette({ color = 'currentColor', size, className, 
 // ============================================================
 // Karate — Single figure in front kick pose (mae geri)
 // ============================================================
-export function KarateSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function KarateSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -326,14 +356,16 @@ export function KarateSilhouette({ color = 'currentColor', size, className, ...p
 // ============================================================
 // Taekwondo — Spinning back kick
 // ============================================================
-export function TaekwondoSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function TaekwondoSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -362,14 +394,16 @@ export function TaekwondoSilhouette({ color = 'currentColor', size, className, .
 // ============================================================
 // General Fitness — Dynamic explosive stance (burpee/plyo)
 // ============================================================
-export function GeneralFitnessSilhouette({ color = 'currentColor', size, className, ...props }: SilhouetteProps) {
+export function GeneralFitnessSilhouette({ color = 'currentColor', size, className, glow, ...props }: SilhouetteProps) {
+  const glowProps = useGlowProps(glow, color)
   return (
     <svg
       viewBox="0 0 200 200"
       width={size}
       height={size}
       className={className}
-      fill={color}
+      fill={glowProps.fill}
+      style={glowProps.style}
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       {...props}
@@ -419,8 +453,8 @@ const silhouetteMap: Record<string, React.FC<SilhouetteProps>> = {
   default: GeneralFitnessSilhouette,
 }
 
-export function SportSilhouette({ sport, ...props }: { sport: string } & SilhouetteProps) {
+export function SportSilhouette({ sport, glow, ...props }: { sport: string } & SilhouetteProps) {
   const normalized = sport.toLowerCase().replace(/[\s-]/g, '_')
   const Component = silhouetteMap[normalized] || silhouetteMap.default
-  return <Component {...props} />
+  return <Component glow={glow} {...props} />
 }
